@@ -2,16 +2,12 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#10b981">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e1a">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="J.D Ventas">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <title>J.D Ventas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -124,7 +120,7 @@
   .check-btn { background: transparent; border: none; padding: 0; flex-shrink: 0; font-size: 24px; }
   .cliente-info { flex: 1; min-width: 0; }
   .cliente-info .nombre { font-size: 14px; font-weight: 600; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cliente-tags { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .cliente-tags { display: flex; align-items: center; gap: 6px; margin-top: 2px; flex-wrap: wrap; }
   .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
   .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
   .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
@@ -231,6 +227,201 @@
   .servicio-bar-row .monto { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
   .servicio-bar-bg { height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
   .servicio-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease-out; }
+
+  /* Botón ir a hoy */
+  .ir-hoy-btn {
+    margin-top: 8px;
+    padding: 6px 12px;
+    background: rgba(16,185,129,0.1);
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 8px;
+    color: #10b981;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .mes-btn.es-hoy { font-weight: 700; }
+
+  /* Modal de confirmación */
+  .confirmar-box {
+    background: #0f1729;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 24px 20px;
+    max-width: 360px;
+    width: 100%;
+    text-align: center;
+    animation: slideUp 0.25s ease-out;
+  }
+  .confirmar-icon {
+    font-size: 40px;
+    margin-bottom: 12px;
+  }
+  .confirmar-titulo {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #f1f5f9;
+  }
+  .confirmar-mensaje {
+    font-size: 14px;
+    color: #94a3b8;
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .confirmar-botones {
+    display: flex;
+    gap: 8px;
+  }
+  .btn-cancelar, .btn-confirmar {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .btn-cancelar {
+    background: rgba(255,255,255,0.05);
+    color: #cbd5e1;
+  }
+  .btn-confirmar {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+  }
+
+  /* Botones de respaldo */
+  .backup-btn {
+    flex: 1;
+    padding: 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    color: #cbd5e1;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .backup-btn:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  /* Tamaño mínimo de fuente para evitar zoom automático en iOS */
+  input.input, input.precio-input, textarea.input {
+    font-size: 16px;
+  }
+
+  /* Alertas de vencimiento */
+  .alertas-container {
+    margin: 0 16px 16px;
+    background: linear-gradient(135deg, rgba(251,146,60,0.08), rgba(251,146,60,0.02));
+    border: 1px solid rgba(251,146,60,0.2);
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+  .alertas-header {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  }
+  .alertas-icon { font-size: 16px; }
+  .alertas-titulo {
+    font-size: 13px; font-weight: 700; color: #fb923c;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .alerta-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; margin-bottom: 6px;
+    background: rgba(0,0,0,0.2); border-radius: 10px;
+    border-left: 3px solid;
+    transition: transform 0.1s;
+  }
+  .alerta-row:active { transform: scale(0.98); }
+  .alerta-row:last-child { margin-bottom: 0; }
+  .alerta-vencido { border-left-color: #ef4444; }
+  .alerta-hoy { border-left-color: #f59e0b; }
+  .alerta-pronto { border-left-color: #fb923c; }
+  .alerta-info { flex: 1; min-width: 0; }
+  .alerta-nombre {
+    font-size: 14px; font-weight: 600; color: #f1f5f9;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .alerta-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .alerta-estado {
+    font-size: 12px; font-weight: 700;
+    padding: 4px 10px; border-radius: 8px;
+    flex-shrink: 0; margin-left: 10px;
+  }
+  .alerta-vencido .alerta-estado { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .alerta-hoy .alerta-estado { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .alerta-pronto .alerta-estado { background: rgba(251,146,60,0.15); color: #fb923c; }
+
+  /* Badge de vencimiento en cliente row */
+  .badge-venc {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .venc-rojo { background: rgba(239,68,68,0.15); color: #ef4444; }
+  .venc-naranja { background: rgba(251,146,60,0.15); color: #fb923c; }
+  .venc-ok { background: rgba(100,116,139,0.15); color: #94a3b8; }
+
+  /* Bloque info próximo pago en modal */
+  .info-proximo {
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 12px;
+    padding: 14px;
+    margin-top: 8px;
+  }
+
+  /* Fix para input type=date en dark mode */
+  input[type="date"] {
+    color-scheme: dark;
+  }
+
+  /* Banners de notificaciones / instalación */
+  .banner {
+    display: flex; align-items: center; gap: 12px;
+    margin: 0 16px 12px;
+    padding: 14px;
+    border-radius: 14px;
+    animation: slideUp 0.3s ease-out;
+  }
+  .banner-notif {
+    background: linear-gradient(135deg, rgba(6,182,212,0.12), rgba(6,182,212,0.03));
+    border: 1px solid rgba(6,182,212,0.25);
+  }
+  .banner-instalar {
+    background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(167,139,250,0.03));
+    border: 1px solid rgba(167,139,250,0.25);
+  }
+  .banner-icon { font-size: 24px; flex-shrink: 0; }
+  .banner-texto { flex: 1; min-width: 0; }
+  .banner-titulo { font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 2px; }
+  .banner-sub { font-size: 11px; color: #94a3b8; line-height: 1.3; }
+  .banner-acciones { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .banner-btn {
+    padding: 8px 14px;
+    border: none; border-radius: 10px;
+    font-size: 12px; font-weight: 700;
+    color: white;
+  }
+  .banner-notif .banner-btn { background: #06b6d4; }
+  .banner-instalar .banner-btn { background: #a78bfa; }
+  .banner-cerrar {
+    width: 28px; height: 28px;
+    background: rgba(255,255,255,0.05);
+    border: none; border-radius: 50%;
+    color: #94a3b8; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Estado de notificaciones en ajustes */
+  .notif-status {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+    font-size: 13px;
+  }
+  .notif-status.activas { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); }
+  .notif-status.denegadas { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
 </style>
 </head>
 <body>
@@ -261,7 +452,13 @@ let state = {
   editandoPrecio: null,
   precioTemp: '',
   modal: null,
-  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '' }
+  modalPago: null,
+  confirmar: null,
+  notifPermiso: 'default', // 'default' | 'granted' | 'denied'
+  pwaInstalable: false,
+  mostrarBannerInstalar: true,
+  mostrarBannerNotif: true,
+  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', fechaPago: '' }
 };
 
 // ============== HELPERS ==============
@@ -274,6 +471,204 @@ function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1)
 function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+// ============== FECHAS ==============
+function hoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function sumarMes(fechaISO) {
+  // Suma 1 mes exacto. Si el día no existe (ej. 31 ene + 1 mes), usa el último día del mes destino.
+  if (!fechaISO) return null;
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  const dest = new Date(y, m - 1 + 1, d);
+  // Si JS desbordó (ej. 31 ene -> 3 mar), ajustar al último día del mes destino
+  if (dest.getMonth() !== m % 12) {
+    dest.setDate(0); // último día del mes anterior (el correcto)
+  }
+  return `${dest.getFullYear()}-${String(dest.getMonth()+1).padStart(2,'0')}-${String(dest.getDate()).padStart(2,'0')}`;
+}
+function diasEntre(fechaISO) {
+  // Días desde hoy hasta fechaISO. Negativo = ya pasó.
+  if (!fechaISO) return null;
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  const destino = new Date(y, m-1, d);
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  destino.setHours(0,0,0,0);
+  return Math.round((destino - hoy) / (1000*60*60*24));
+}
+function formatoFecha(fechaISO) {
+  if (!fechaISO) return '—';
+  const [y, m, d] = fechaISO.split('-').map(Number);
+  return `${d} ${MESES_NOMBRES[m-1]}`;
+}
+function estadoVencimiento(fechaISO) {
+  // Devuelve: 'vencido', 'hoy', 'pronto', 'ok' o null
+  const dias = diasEntre(fechaISO);
+  if (dias === null) return null;
+  if (dias < 0) return 'vencido';
+  if (dias === 0) return 'hoy';
+  if (dias <= 3) return 'pronto';
+  return 'ok';
+}
+
+// ============== NOTIFICACIONES ==============
+let deferredInstallPrompt = null;
+
+function inicializarNotificaciones() {
+  // Estado actual de permisos
+  if ('Notification' in window) {
+    state.notifPermiso = Notification.permission;
+  }
+
+  // Capturar evento de instalación (Android/Chrome)
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    state.pwaInstalable = true;
+    render();
+  });
+
+  // Detectar cuando la app fue instalada
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    state.pwaInstalable = false;
+    localStorage.setItem('pwa-instalada', '1');
+    render();
+  });
+
+  // Restaurar preferencias de banners
+  if (localStorage.getItem('banner-instalar-cerrado') === '1') state.mostrarBannerInstalar = false;
+  if (localStorage.getItem('banner-notif-cerrado') === '1') state.mostrarBannerNotif = false;
+}
+
+async function pedirPermisoNotificaciones() {
+  if (!('Notification' in window)) {
+    alert('Tu navegador no soporta notificaciones.');
+    return;
+  }
+  try {
+    const permiso = await Notification.requestPermission();
+    state.notifPermiso = permiso;
+    if (permiso === 'granted') {
+      // Notificación de prueba
+      mostrarNotificacion('🎉 ¡Notificaciones activadas!', 'Te avisaremos cuando una membresía esté por vencer.');
+      // Programar la revisión periódica
+      programarRevisionPeriodica();
+    }
+    render();
+  } catch(e) {
+    console.error('Error pidiendo permiso:', e);
+  }
+}
+
+function mostrarNotificacion(titulo, cuerpo, opciones = {}) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    // Intentar con Service Worker primero (más confiable, especialmente para apps cerradas)
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.showNotification(titulo, {
+          body: cuerpo,
+          icon: ICON_DATA_URL,
+          badge: ICON_DATA_URL,
+          tag: opciones.tag || 'jd-ventas',
+          renotify: true,
+          requireInteraction: opciones.requireInteraction || false,
+          data: opciones.data || {}
+        });
+      }).catch(e => console.error('SW notif error:', e));
+    } else {
+      // Fallback: notificación directa
+      new Notification(titulo, { body: cuerpo, icon: ICON_DATA_URL });
+    }
+  } catch(e) {
+    console.error('Error mostrando notificación:', e);
+  }
+}
+
+function revisarYNotificar() {
+  if (Notification.permission !== 'granted') return;
+  const alertas = obtenerAlertas();
+  if (alertas.length === 0) return;
+
+  // Evitar duplicados: solo notificar una vez al día por cliente
+  const hoy = hoyISO();
+  const ultimasNotifs = JSON.parse(localStorage.getItem('ultimas-notifs') || '{}');
+  const nuevos = alertas.filter(a => ultimasNotifs[a.id] !== hoy);
+
+  if (nuevos.length === 0) return;
+
+  // Agrupar mensajes
+  if (nuevos.length === 1) {
+    const a = nuevos[0];
+    const servicio = SERVICIOS[a.servicio].nombre;
+    let titulo, cuerpo;
+    if (a.tipo === 'vencido') {
+      titulo = `⚠ ${a.nombre} - Membresía vencida`;
+      cuerpo = `${servicio} venció hace ${Math.abs(diasEntre(a.proximoPago))} día(s). Avísale para que renueve.`;
+    } else if (a.tipo === 'hoy') {
+      titulo = `🔔 ${a.nombre} - Vence hoy`;
+      cuerpo = `${servicio} vence hoy. ¡Recuérdale renovar!`;
+    } else {
+      titulo = `⏰ ${a.nombre} - Próximo vencimiento`;
+      cuerpo = `${servicio} vence en ${diasEntre(a.proximoPago)} día(s). Avísale para preparar el pago.`;
+    }
+    mostrarNotificacion(titulo, cuerpo, { tag: 'cliente-' + a.id, requireInteraction: true });
+  } else {
+    const vencidos = nuevos.filter(a => a.tipo === 'vencido').length;
+    const pronto = nuevos.length - vencidos;
+    let cuerpo = '';
+    if (vencidos > 0) cuerpo += `${vencidos} ya venció(eron). `;
+    if (pronto > 0) cuerpo += `${pronto} vence(n) pronto.`;
+    mostrarNotificacion(`🔔 ${nuevos.length} membresías requieren atención`, cuerpo.trim(), { tag: 'resumen-diario', requireInteraction: true });
+  }
+
+  // Marcar como notificadas hoy
+  nuevos.forEach(a => { ultimasNotifs[a.id] = hoy; });
+  localStorage.setItem('ultimas-notifs', JSON.stringify(ultimasNotifs));
+}
+
+function programarRevisionPeriodica() {
+  // Revisar cada hora mientras la app esté abierta
+  if (window.__revisorInterval) clearInterval(window.__revisorInterval);
+  window.__revisorInterval = setInterval(revisarYNotificar, 60 * 60 * 1000);
+
+  // Service Worker hace la revisión en segundo plano
+  if (navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: 'programar-revision' });
+  }
+}
+
+async function instalarPWA() {
+  if (!deferredInstallPrompt) {
+    alert('Para instalar la app:\n\n• Android: toca el menú ⋮ del navegador → "Instalar app" o "Agregar a pantalla de inicio"\n\n• iPhone: toca el botón compartir ⎋ → "Agregar a pantalla de inicio"');
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  const { outcome } = await deferredInstallPrompt.userChoice;
+  if (outcome === 'accepted') {
+    deferredInstallPrompt = null;
+    state.pwaInstalable = false;
+    render();
+  }
+}
+
+function cerrarBannerInstalar() {
+  state.mostrarBannerInstalar = false;
+  localStorage.setItem('banner-instalar-cerrado', '1');
+  render();
+}
+
+function cerrarBannerNotif() {
+  state.mostrarBannerNotif = false;
+  localStorage.setItem('banner-notif-cerrado', '1');
+  render();
+}
+
+// Icono SVG embebido como data URL para las notificaciones (badge)
+const ICON_DATA_URL = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="#10b981"/><text x="96" y="135" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="120" font-weight="900" fill="white">$</text></svg>`);
+
 // ============== PERSISTENCIA (localStorage) ==============
 function guardarLocal() {
   try {
@@ -285,9 +680,26 @@ function cargarLocal() {
   try {
     const d = localStorage.getItem('pagos-data');
     const p = localStorage.getItem('pagos-mes');
-    if (d) state.data = { ...state.data, ...JSON.parse(d) };
-    if (p) state.pagosMes = JSON.parse(p);
-  } catch(e) { console.error(e); }
+    if (d) {
+      const guardado = JSON.parse(d);
+      // Merge por servicio: conserva claves nuevas del código aunque no estén en localStorage
+      Object.keys(state.data).forEach(sk => {
+        if (guardado[sk]) {
+          // Asegurar que cada cliente tenga los campos nuevos (migración)
+          const clientes = Array.isArray(guardado[sk].clientes) ? guardado[sk].clientes : [];
+          clientes.forEach(c => {
+            if (c.fechaPago === undefined) c.fechaPago = null;
+            if (c.proximoPago === undefined) c.proximoPago = c.fechaPago ? sumarMes(c.fechaPago) : null;
+          });
+          state.data[sk] = {
+            precioReal: guardado[sk].precioReal || 0,
+            clientes: clientes
+          };
+        }
+      });
+    }
+    if (p) state.pagosMes = JSON.parse(p) || {};
+  } catch(e) { console.error('Error cargando datos:', e); }
 }
 
 // ============== ACCIONES ==============
@@ -299,7 +711,10 @@ function iniciarEditarPrecio(k) {
   state.editandoPrecio = k;
   state.precioTemp = String(state.data[k].precioReal || '');
   render();
-  setTimeout(() => document.getElementById('precio-input')?.focus(), 50);
+  requestAnimationFrame(() => {
+    const inp = document.getElementById('precio-input');
+    if (inp) { inp.focus(); inp.select(); }
+  });
 }
 function guardarPrecio(k) {
   state.data[k].precioReal = parseFloat(state.precioTemp) || 0;
@@ -310,11 +725,44 @@ function guardarPrecio(k) {
 }
 
 function togglePago(sk, cid) {
+  const yaPagado = estaPagado(sk, cid);
+  if (yaPagado) {
+    // Desmarcar: directo sin modal
+    if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
+    state.pagosMes[state.mesActual][sk+':'+cid] = false;
+    guardarLocal();
+    render();
+  } else {
+    // Marcar como pagado: abrir modal de fecha
+    state.modalPago = { servicio: sk, clienteId: cid, fecha: hoyISO() };
+    render();
+  }
+}
+
+function confirmarPago() {
+  if (!state.modalPago) return;
+  const { servicio, clienteId, fecha } = state.modalPago;
+  // Marcar como pagado en el mes
   if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
-  const k = sk+':'+cid;
-  state.pagosMes[state.mesActual][k] = !state.pagosMes[state.mesActual][k];
+  state.pagosMes[state.mesActual][servicio+':'+clienteId] = true;
+  // Actualizar fecha del cliente
+  const cliente = state.data[servicio].clientes.find(c => c.id === clienteId);
+  if (cliente) {
+    cliente.fechaPago = fecha;
+    cliente.proximoPago = sumarMes(fecha);
+  }
+  state.modalPago = null;
   guardarLocal();
   render();
+}
+
+function cancelarModalPago() {
+  state.modalPago = null;
+  render();
+}
+
+function actualizarFechaPago(valor) {
+  if (state.modalPago) state.modalPago.fecha = valor;
 }
 
 function abrirModal(servicio, clienteId) {
@@ -323,34 +771,39 @@ function abrirModal(servicio, clienteId) {
     nombre: cliente?.nombre || '',
     pago: cliente?.pago ? String(cliente.pago) : '',
     tipoPago: cliente?.tipoPago || 'mensual',
-    notas: cliente?.notas || ''
+    notas: cliente?.notas || '',
+    fechaPago: cliente?.fechaPago || ''
   };
   state.modal = { servicio, clienteId };
   render();
 }
 function cerrarModal() {
   state.modal = null;
-  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '' };
+  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', fechaPago: '' };
   render();
 }
 function actualizarForm(campo, valor) {
   state.formCliente[campo] = valor;
-  // Solo re-render para tipoPago (cambia visual). Para inputs no re-render para no perder focus
-  if (campo === 'tipoPago') render();
+  // Re-render para tipoPago (cambia visual) y fechaPago (muestra próximo pago calculado)
+  if (campo === 'tipoPago' || campo === 'fechaPago') render();
 }
 
 function guardarCliente() {
   if (!state.formCliente.nombre.trim()) return;
   const { servicio, clienteId } = state.modal;
+  const existente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
+  const fechaPago = state.formCliente.fechaPago || null;
   const nuevo = {
     id: clienteId || ('c_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
     nombre: state.formCliente.nombre.trim(),
     pago: parseFloat(state.formCliente.pago) || 0,
     tipoPago: state.formCliente.tipoPago,
     notas: state.formCliente.notas.trim(),
-    creado: clienteId ? state.data[servicio].clientes.find(c=>c.id===clienteId).creado : Date.now()
+    fechaPago: fechaPago,
+    proximoPago: fechaPago ? sumarMes(fechaPago) : null,
+    creado: existente?.creado || Date.now()
   };
-  if (clienteId) {
+  if (clienteId && existente) {
     state.data[servicio].clientes = state.data[servicio].clientes.map(c => c.id === clienteId ? nuevo : c);
   } else {
     state.data[servicio].clientes.push(nuevo);
@@ -360,10 +813,103 @@ function guardarCliente() {
 }
 
 function eliminarCliente(servicio, id) {
-  if (!confirm('¿Eliminar este cliente?')) return;
-  state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
-  guardarLocal();
+  const cliente = state.data[servicio].clientes.find(c => c.id === id);
+  if (!cliente) return;
+  state.confirmar = {
+    titulo: 'Eliminar cliente',
+    mensaje: `¿Seguro que quieres eliminar a "${cliente.nombre}"? Esta acción no se puede deshacer.`,
+    onConfirm: () => {
+      state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
+      // Limpiar pagos asociados en todos los meses
+      Object.keys(state.pagosMes).forEach(mk => {
+        delete state.pagosMes[mk][servicio+':'+id];
+      });
+      guardarLocal();
+      state.confirmar = null;
+      render();
+    }
+  };
   render();
+}
+
+function exportarDatos() {
+  try {
+    const datos = {
+      version: 1,
+      exportado: new Date().toISOString(),
+      data: state.data,
+      pagosMes: state.pagosMes
+    };
+    const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `jd-ventas-backup-${claveMes(new Date())}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch(e) {
+    console.error('Error exportando:', e);
+    alert('No se pudo exportar el archivo.');
+  }
+}
+
+function importarDatos(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const datos = JSON.parse(e.target.result);
+      if (!datos.data || typeof datos.data !== 'object') throw new Error('Formato inválido');
+      state.confirmar = {
+        titulo: 'Importar datos',
+        mensaje: 'Esto reemplazará TODOS tus datos actuales. ¿Continuar?',
+        onConfirm: () => {
+          Object.keys(state.data).forEach(sk => {
+            if (datos.data[sk]) {
+              state.data[sk] = {
+                precioReal: datos.data[sk].precioReal || 0,
+                clientes: Array.isArray(datos.data[sk].clientes) ? datos.data[sk].clientes : []
+              };
+            }
+          });
+          state.pagosMes = datos.pagosMes || {};
+          guardarLocal();
+          state.confirmar = null;
+          render();
+        }
+      };
+      render();
+    } catch(err) {
+      console.error('Error importando:', err);
+      alert('Archivo inválido. Asegúrate de usar un backup de J.D Ventas.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ============== ALERTAS DE VENCIMIENTO ==============
+function obtenerAlertas() {
+  const alertas = [];
+  Object.entries(state.data).forEach(([sk, s]) => {
+    s.clientes.forEach(c => {
+      if (c.tipoPago !== 'mensual' || !c.proximoPago) return;
+      const estado = estadoVencimiento(c.proximoPago);
+      const dias = diasEntre(c.proximoPago);
+      // Solo alertar si NO está marcado como pagado este mes y el vencimiento es relevante
+      const yaPago = estaPagado(sk, c.id);
+      if (estado === 'vencido' && !yaPago) {
+        alertas.push({ servicio: sk, id: c.id, nombre: c.nombre, proximoPago: c.proximoPago, tipo: 'vencido', texto: `Venció hace ${Math.abs(dias)}d`, orden: dias });
+      } else if (estado === 'hoy' && !yaPago) {
+        alertas.push({ servicio: sk, id: c.id, nombre: c.nombre, proximoPago: c.proximoPago, tipo: 'hoy', texto: 'Hoy', orden: 0 });
+      } else if (estado === 'pronto' && !yaPago) {
+        alertas.push({ servicio: sk, id: c.id, nombre: c.nombre, proximoPago: c.proximoPago, tipo: 'pronto', texto: `En ${dias}d`, orden: dias });
+      }
+    });
+  });
+  // Ordenar: más urgentes primero (vencidos arriba)
+  return alertas.sort((a, b) => a.orden - b.orden);
 }
 
 // ============== CÁLCULOS ==============
@@ -408,7 +954,7 @@ function calcularDatosMensuales() {
 // ============== RENDER ==============
 function render() {
   const app = document.getElementById('app');
-  app.innerHTML = renderHeader() + (state.vista === 'inicio' ? renderInicio() : renderDashboard()) + renderNav() + renderModal();
+  app.innerHTML = renderHeader() + (state.vista === 'inicio' ? renderInicio() : renderDashboard()) + renderNav() + renderModal() + renderModalPago() + renderConfirmar();
   bindEvents();
 }
 
@@ -429,19 +975,58 @@ function renderHeader() {
 
 function renderSelectorMes() {
   const hoy = new Date();
+  const hoyKey = claveMes(hoy);
   let html = '<div class="meses-scroll">';
   for (let i = -6; i <= 2; i++) {
     const d = new Date(hoy.getFullYear(), hoy.getMonth()+i, 1);
     const k = claveMes(d);
-    html += `<button class="mes-btn ${k===state.mesActual?'activo':''}" data-action="setMes" data-mes="${k}">${formatoMes(k)}</button>`;
+    const esHoy = k === hoyKey;
+    html += `<button class="mes-btn ${k===state.mesActual?'activo':''} ${esHoy?'es-hoy':''}" data-action="setMes" data-mes="${k}">${formatoMes(k)}${esHoy ? ' •' : ''}</button>`;
   }
   html += '</div>';
+  // Botón "ir a hoy" si no estamos en el mes actual
+  if (state.mesActual !== hoyKey) {
+    html += `<button class="ir-hoy-btn" data-action="irHoy">↻ Ir a hoy</button>`;
+  }
   return html;
 }
 
 function renderInicio() {
   const t = calcularTotalesMes();
+  const alertas = obtenerAlertas();
   let html = '<div class="fade-in">';
+
+  // Banner para activar notificaciones
+  if (state.mostrarBannerNotif && state.notifPermiso !== 'granted' && 'Notification' in window) {
+    html += `<div class="banner banner-notif">
+      <div class="banner-icon">🔔</div>
+      <div class="banner-texto">
+        <div class="banner-titulo">Activa las notificaciones</div>
+        <div class="banner-sub">Te avisamos cuando una membresía esté por vencer.</div>
+      </div>
+      <div class="banner-acciones">
+        <button class="banner-cerrar" data-action="cerrarBannerNotif">✕</button>
+        <button class="banner-btn" data-action="pedirNotif">Activar</button>
+      </div>
+    </div>`;
+  }
+
+  // Banner para instalar como app
+  const yaInstalada = (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) || localStorage.getItem('pwa-instalada') === '1';
+  if (state.mostrarBannerInstalar && !yaInstalada) {
+    html += `<div class="banner banner-instalar">
+      <div class="banner-icon">📱</div>
+      <div class="banner-texto">
+        <div class="banner-titulo">Instala la app</div>
+        <div class="banner-sub">Acceso rápido y notificaciones en segundo plano.</div>
+      </div>
+      <div class="banner-acciones">
+        <button class="banner-cerrar" data-action="cerrarBannerInstalar">✕</button>
+        <button class="banner-btn" data-action="instalar">Instalar</button>
+      </div>
+    </div>`;
+  }
+
   html += `
     <div class="resumen">
       <div class="resumen-card destacado">
@@ -462,6 +1047,24 @@ function renderInicio() {
       </div>
     </div>
   `;
+
+  if (alertas.length > 0) {
+    html += `<div class="alertas-container">
+      <div class="alertas-header">
+        <span class="alertas-icon">🔔</span>
+        <span class="alertas-titulo">Vencimientos próximos</span>
+      </div>
+      ${alertas.map(a => `
+        <div class="alerta-row alerta-${a.tipo}" data-action="abrirModal" data-servicio="${a.servicio}" data-cid="${a.id}" style="cursor:pointer">
+          <div class="alerta-info">
+            <div class="alerta-nombre">${esc(a.nombre)}</div>
+            <div class="alerta-sub">${SERVICIOS[a.servicio].nombre} · ${formatoFecha(a.proximoPago)}</div>
+          </div>
+          <div class="alerta-estado">${a.texto}</div>
+        </div>
+      `).join('')}
+    </div>`;
+  }
 
   html += '<div class="secciones">';
   Object.entries(SERVICIOS).forEach(([key, info]) => {
@@ -497,7 +1100,7 @@ function renderSeccion(key, info) {
         <span class="label">Precio real (lo que pagas)</span>
         ${editando ? `
           <div style="display:flex; gap:6px; align-items:center">
-            <input id="precio-input" type="number" inputmode="decimal" class="precio-input" value="${state.precioTemp}" data-action="changePrecio" style="border-color: ${info.color}40" />
+            <input id="precio-input" type="number" inputmode="decimal" class="precio-input" value="${state.precioTemp}" style="border-color: ${info.color}40" />
             <button class="save-btn" style="background: ${info.color}" data-action="guardarPrecio" data-key="${key}">✓</button>
           </div>
         ` : `
@@ -524,8 +1127,22 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
+  const estado = estadoVencimiento(c.proximoPago);
+  const dias = diasEntre(c.proximoPago);
+  let badgeVenc = '';
+  if (c.proximoPago && c.tipoPago === 'mensual') {
+    if (estado === 'vencido') {
+      badgeVenc = `<span class="badge-venc venc-rojo">⚠ Venció hace ${Math.abs(dias)} día${Math.abs(dias)!==1?'s':''}</span>`;
+    } else if (estado === 'hoy') {
+      badgeVenc = `<span class="badge-venc venc-naranja">🔔 Vence hoy</span>`;
+    } else if (estado === 'pronto') {
+      badgeVenc = `<span class="badge-venc venc-naranja">⏰ Vence en ${dias} día${dias!==1?'s':''}</span>`;
+    } else if (estado === 'ok') {
+      badgeVenc = `<span class="badge-venc venc-ok">📅 ${formatoFecha(c.proximoPago)}</span>`;
+    }
+  }
   return `
-    <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
+    <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''} ${(estado === 'vencido' || estado === 'hoy') && !pagado ? 'border-color: rgba(239,68,68,0.4);' : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
         ${pagado ? `<span style="color:${color}">✅</span>` : '<span style="color:#475569">⭕</span>'}
       </button>
@@ -533,8 +1150,9 @@ function renderClienteRow(servicioKey, c, color) {
         <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
         <div class="cliente-tags">
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
-          ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
+          ${badgeVenc}
         </div>
+        ${c.notas ? `<div class="cliente-notas" style="margin-top:4px">${esc(c.notas)}</div>` : ''}
       </div>
       <div class="cliente-pago">
         <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
@@ -549,11 +1167,13 @@ function renderClienteRow(servicioKey, c, color) {
 
 function renderDashboard() {
   const datos = calcularDatosMensuales();
-  const conDatos = datos.filter(m => m.ganancia !== 0);
+  const conDatos = datos.filter(m => m.cobrado !== 0 || m.costo !== 0);
   const totalAnual = conDatos.reduce((s,m)=>s+m.ganancia,0);
   const promedio = conDatos.length > 0 ? totalAnual / conDatos.length : 0;
-  const mejorMes = conDatos.reduce((max,m) => m.ganancia > (max?.ganancia || -Infinity) ? m : max, null);
-  const mesActual = datos[datos.length-1];
+  const mejorMes = conDatos.length > 0
+    ? conDatos.reduce((max,m) => m.ganancia > max.ganancia ? m : max, conDatos[0])
+    : null;
+  const mesActual = datos[datos.length-1] || { ganancia: 0, cobrado: 0, costo: 0 };
   const mesAnt = datos[datos.length-2];
   let cambio = 0;
   if (mesAnt && mesAnt.ganancia !== 0) cambio = ((mesActual.ganancia - mesAnt.ganancia) / Math.abs(mesAnt.ganancia)) * 100;
@@ -601,6 +1221,36 @@ function renderDashboard() {
     </div>
 
     <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#06b6d4">🔔</span> Notificaciones</div>
+      ${state.notifPermiso === 'granted' ? `
+        <div class="notif-status activas">
+          <span style="font-size:18px">✅</span>
+          <div style="flex:1">
+            <div style="font-weight:700; color:#10b981">Activas</div>
+            <div style="font-size:11px; color:#94a3b8">Te avisaremos 3 días antes de cada vencimiento.</div>
+          </div>
+        </div>
+      ` : state.notifPermiso === 'denied' ? `
+        <div class="notif-status denegadas">
+          <span style="font-size:18px">🚫</span>
+          <div style="flex:1">
+            <div style="font-weight:700; color:#ef4444">Bloqueadas</div>
+            <div style="font-size:11px; color:#94a3b8">Actívalas desde Ajustes del navegador.</div>
+          </div>
+        </div>
+      ` : `
+        <div class="notif-status">
+          <span style="font-size:18px">⚪</span>
+          <div style="flex:1">
+            <div style="font-weight:700">Desactivadas</div>
+            <div style="font-size:11px; color:#94a3b8; margin-bottom:8px">Recibe avisos automáticos de vencimientos.</div>
+            <button class="banner-btn" style="background:#06b6d4" data-action="pedirNotif">Activar</button>
+          </div>
+        </div>
+      `}
+    </div>
+
+    <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#a78bfa">📦</span> Por servicio (este mes)</div>
       ${porServicio.map(s => `
         <div class="servicio-bar">
@@ -613,6 +1263,16 @@ function renderDashboard() {
           </div>
         </div>
       `).join('')}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#06b6d4">💾</span> Respaldo de datos</div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Guarda tus datos en un archivo o restáuralos en otro dispositivo.</p>
+      <div style="display:flex; gap:8px">
+        <button class="backup-btn" data-action="exportar">📤 Exportar</button>
+        <button class="backup-btn" data-action="importar">📥 Importar</button>
+        <input type="file" id="archivo-importar" accept="application/json,.json" style="display:none" onchange="importarDatos(this.files[0]); this.value=''" />
+      </div>
     </div>
   </div>`;
 }
@@ -758,13 +1418,68 @@ function renderModal() {
       </div>
 
       <div class="campo">
+        <div class="campo-label"><label>Fecha del último pago</label><span class="hint">Para calcular vencimiento</span></div>
+        <input class="input" type="date" value="${esc(f.fechaPago)}" oninput="actualizarForm('fechaPago', this.value)" />
+        ${f.fechaPago ? `<div style="font-size:11px; color:#10b981; margin-top:6px">Próximo pago: ${formatoFecha(sumarMes(f.fechaPago))}</div>` : ''}
+      </div>
+
+      <div class="campo">
         <div class="campo-label"><label>Notas (opcional)</label></div>
-        <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Fecha de corte, detalles, etc." oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
+        <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Detalles, etc." oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
       </div>
 
       <button id="btn-guardar" class="guardar-btn" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarCliente">
         ✓ ${state.modal.clienteId ? 'Guardar cambios' : 'Agregar cliente'}
       </button>
+    </div>
+  </div>`;
+}
+
+function renderModalPago() {
+  if (!state.modalPago) return '';
+  const { servicio, clienteId, fecha } = state.modalPago;
+  const cliente = state.data[servicio]?.clientes.find(c => c.id === clienteId);
+  if (!cliente) return '';
+  const info = SERVICIOS[servicio];
+  const proxima = sumarMes(fecha);
+  return `<div class="modal-overlay" data-action="cancelarModalPago">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Registrar pago</h3>
+        <button class="close-btn" data-action="cancelarModalPago">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:${info.color}">${esc(cliente.nombre)} · ${info.nombre}</div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Fecha de pago <span class="required">*</span></label></div>
+        <input class="input" type="date" value="${esc(fecha)}" oninput="actualizarFechaPago(this.value)" />
+      </div>
+
+      <div class="info-proximo">
+        <div style="font-size:13px; color:#94a3b8; margin-bottom:4px">Próximo pago:</div>
+        <div style="font-size:18px; font-weight:700; color:#10b981">${formatoFecha(proxima)}</div>
+        <div style="font-size:11px; color:#64748b; margin-top:4px">Se te recordará 3 días antes.</div>
+      </div>
+
+      <button class="guardar-btn" data-action="confirmarPago" style="margin-top:16px">
+        ✓ Confirmar pago
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderConfirmar() {
+  if (!state.confirmar) return '';
+  const c = state.confirmar;
+  return `<div class="modal-overlay" data-action="cancelarConfirmar" style="align-items:center; padding: 20px">
+    <div class="confirmar-box" onclick="event.stopPropagation()">
+      <div class="confirmar-icon">⚠️</div>
+      <h3 class="confirmar-titulo">${esc(c.titulo)}</h3>
+      <p class="confirmar-mensaje">${esc(c.mensaje)}</p>
+      <div class="confirmar-botones">
+        <button class="btn-cancelar" data-action="cancelarConfirmar">Cancelar</button>
+        <button class="btn-confirmar" data-action="aceptarConfirmar">Eliminar</button>
+      </div>
     </div>
   </div>`;
 }
@@ -795,7 +1510,12 @@ function handleClick(e) {
     case 'togglePago': togglePago(d.servicio, d.cid); break;
     case 'abrirModal': abrirModal(d.servicio, d.cid); break;
     case 'cerrarModal':
-      if (e.target === e.currentTarget) cerrarModal();
+      // Cierra si se clickea el overlay o el botón X (no si se clickea contenido del modal)
+      if (e.currentTarget.classList.contains('modal-overlay')) {
+        if (e.target === e.currentTarget) cerrarModal();
+      } else {
+        cerrarModal();
+      }
       break;
     case 'setTipoPago': actualizarForm('tipoPago', d.tipo); break;
     case 'guardarCliente': guardarCliente(); break;
@@ -803,19 +1523,171 @@ function handleClick(e) {
       e.stopPropagation();
       eliminarCliente(d.servicio, d.cid);
       break;
+    case 'cancelarConfirmar':
+      // Cierra si se clickea el overlay o el botón cancelar
+      if (e.currentTarget.classList.contains('modal-overlay')) {
+        if (e.target === e.currentTarget) {
+          state.confirmar = null;
+          render();
+        }
+      } else {
+        state.confirmar = null;
+        render();
+      }
+      break;
+    case 'aceptarConfirmar':
+      if (state.confirmar?.onConfirm) state.confirmar.onConfirm();
+      break;
+    case 'cancelarModalPago':
+      // Cerrar si overlay o botón X
+      if (e.currentTarget.classList.contains('modal-overlay')) {
+        if (e.target === e.currentTarget) cancelarModalPago();
+      } else {
+        cancelarModalPago();
+      }
+      break;
+    case 'confirmarPago':
+      confirmarPago();
+      break;
+    case 'pedirNotif':
+      pedirPermisoNotificaciones();
+      break;
+    case 'cerrarBannerNotif':
+      cerrarBannerNotif();
+      break;
+    case 'cerrarBannerInstalar':
+      cerrarBannerInstalar();
+      break;
+    case 'instalar':
+      instalarPWA();
+      break;
+    case 'irHoy':
+      state.mesActual = claveMes(new Date());
+      render();
+      break;
+    case 'exportar':
+      exportarDatos();
+      break;
+    case 'importar':
+      document.getElementById('archivo-importar')?.click();
+      break;
   }
 }
 
 // ============== INIT ==============
 cargarLocal();
+inicializarNotificaciones();
 render();
 
-// ============== PWA: Service Worker ==============
+// Registrar Service Worker para notificaciones en segundo plano
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
-  });
+  const swCode = `
+    const REVISION_INTERVAL = 6 * 60 * 60 * 1000; // 6 horas
+    let revisionTimer = null;
+
+    self.addEventListener('install', (e) => {
+      self.skipWaiting();
+    });
+
+    self.addEventListener('activate', (e) => {
+      e.waitUntil(clients.claim());
+      programarRevision();
+    });
+
+    self.addEventListener('message', (e) => {
+      if (e.data?.type === 'programar-revision') programarRevision();
+    });
+
+    self.addEventListener('notificationclick', (e) => {
+      e.notification.close();
+      e.waitUntil(
+        clients.matchAll({ type: 'window' }).then(clientList => {
+          for (const c of clientList) {
+            if ('focus' in c) return c.focus();
+          }
+          if (clients.openWindow) return clients.openWindow('/');
+        })
+      );
+    });
+
+    function programarRevision() {
+      if (revisionTimer) clearTimeout(revisionTimer);
+      revisionTimer = setTimeout(revisarVencimientos, REVISION_INTERVAL);
+    }
+
+    async function revisarVencimientos() {
+      // El SW no tiene acceso directo a localStorage, así que pide datos al cliente
+      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+      if (clientList.length > 0) {
+        // Si hay ventana abierta, ella misma revisa
+        programarRevision();
+        return;
+      }
+      // Sin ventana: intentar usar Background Sync si está disponible
+      programarRevision();
+    }
+
+    // Periodic Background Sync (Chrome Android, requiere permiso especial)
+    self.addEventListener('periodicsync', (e) => {
+      if (e.tag === 'revisar-vencimientos') {
+        e.waitUntil(revisarVencimientos());
+      }
+    });
+  `;
+
+  const swBlob = new Blob([swCode], { type: 'application/javascript' });
+  const swUrl = URL.createObjectURL(swBlob);
+
+  navigator.serviceWorker.register(swUrl, { scope: './' }).then(reg => {
+    console.log('Service Worker registrado');
+    // Intentar registrar periodic sync si el navegador lo soporta
+    if ('periodicSync' in reg) {
+      navigator.permissions.query({ name: 'periodic-background-sync' }).then(status => {
+        if (status.state === 'granted') {
+          reg.periodicSync.register('revisar-vencimientos', {
+            minInterval: 6 * 60 * 60 * 1000 // 6 horas
+          }).catch(e => console.log('Periodic sync no disponible:', e.message));
+        }
+      }).catch(() => {});
+    }
+  }).catch(e => console.log('SW no registrado:', e.message));
 }
+
+// Cuando la app gana el foco, revisar vencimientos
+window.addEventListener('focus', () => {
+  if (state.notifPermiso === 'granted') {
+    setTimeout(revisarYNotificar, 1000);
+  }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.notifPermiso === 'granted') {
+    setTimeout(revisarYNotificar, 1000);
+  }
+});
+
+// Revisar al iniciar si las notificaciones están activadas
+if (state.notifPermiso === 'granted') {
+  setTimeout(() => {
+    revisarYNotificar();
+    programarRevisionPeriodica();
+  }, 2000);
+}
+
+// Tecla Escape cierra modales
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (state.confirmar) { state.confirmar = null; render(); }
+    else if (state.modalPago) { cancelarModalPago(); }
+    else if (state.modal) { cerrarModal(); }
+    else if (state.editandoPrecio) { state.editandoPrecio = null; state.precioTemp = ''; render(); }
+  }
+});
+
+// Exponer funciones que se llaman desde atributos inline (oninput, onchange)
+window.actualizarForm = actualizarForm;
+window.actualizarFechaPago = actualizarFechaPago;
+window.importarDatos = importarDatos;
 </script>
 </body>
 </html>
