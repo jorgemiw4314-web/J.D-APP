@@ -1,1693 +1,1233 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#0a0e1a">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="J.D Ventas">
-<meta name="mobile-web-app-capable" content="yes">
-<title>J.D Ventas</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; }
-  body {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-    background: linear-gradient(180deg, #0a0e1a 0%, #0f1729 100%);
-    color: #e4e7eb;
-    min-height: 100vh;
-    padding-bottom: 240px;
-    overflow-x: hidden;
-  }
-  input, button, select, textarea { font-family: inherit; }
-  input:focus, textarea:focus { outline: none; border-color: #10b981 !important; }
-  button { cursor: pointer; transition: transform 0.1s; }
-  button:active { transform: scale(0.97); }
-  .mono { font-family: 'JetBrains Mono', monospace; }
-  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-  .card { animation: slideUp 0.3s ease-out; }
-  .fade-in { animation: fadeIn 0.3s ease-out; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0a0a0a">
+    <title>KaizenAPP</title>
 
-  /* Header */
-  .header {
-    padding: 24px 20px 16px;
-    background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(6,182,212,0.04) 100%);
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .logo {
-    width: 42px; height: 42px; border-radius: 12px;
-    background: linear-gradient(135deg, #10b981, #06b6d4);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; font-weight: 800; color: white;
-  }
-  .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-  .header p { font-size: 12px; color: #94a3b8; }
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KaizenAPP">
+    <link rel="apple-touch-icon" href="Iconos/icon-192x192.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="Iconos/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="Iconos/icon-144x144.png">
+    <!-- Preconnect para carga más rápida -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <!-- Solo pesos usados: 400,500,600,700,900 -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;900&family=Bebas+Neue&family=Noto+Sans+JP:wght@900&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer>
+    </script>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --surface: #141414;
+            --surface2: #1e1e1e;
+            --border: #2a2a2a;
+            --text: #f5f5f5;
+            --text2: #a0a0a0;
+            --text3: #666;
+            --red: #cc0000;
+            --red-light: #ff2222;
+            --red-bg: rgba(204, 0, 0, 0.1);
+            --gold: #d4af37;
+            --green: #22c55e;
+            --green-bg: rgba(34, 197, 94, 0.08);
+            --orange: #f59e0b;
+            --orange-bg: rgba(245, 158, 11, 0.08);
+            --whatsapp: #25D366;
+            --whatsapp-bg: rgba(37, 211, 102, 0.1);
+            --purple: #8b5cf6;
+            --purple-bg: rgba(139, 92, 246, 0.1);
+            --blue: #3b82f6;
+            --blue-bg: rgba(59, 130, 246, 0.1);
+            --radius: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+            --st: env(safe-area-inset-top, 0px);
+            --sb: env(safe-area-inset-bottom, 0px);
+            --header-h: 52px;
+            --stats-h: 140px;
+            --tabs-h: 44px;
+        }
 
-  /* Selector mes */
-  .meses-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; margin-right: -20px; padding-right: 20px; }
-  .meses-scroll::-webkit-scrollbar { display: none; }
-  .mes-btn {
-    padding: 8px 14px; background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
-    color: #94a3b8; font-size: 13px; font-weight: 600;
-    white-space: nowrap; flex-shrink: 0;
-  }
-  .mes-btn.activo { background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; }
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
 
-  /* Resumen */
-  .resumen { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .resumen-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px; padding: 12px 14px;
-  }
-  .resumen-card.destacado { background: linear-gradient(135deg, rgba(16,185,129,0.13), rgba(16,185,129,0.03)); border-color: rgba(16,185,129,0.25); }
-  .resumen-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-  .resumen-value { font-size: 17px; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: #e4e7eb; }
-  .resumen-sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+        html,
+        body {
+            height: 100%;
+            font-family: 'Poppins', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            overscroll-behavior: none;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
 
-  /* Secciones */
-  .secciones { padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
-  .seccion {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 18px; overflow: hidden;
-  }
-  .seccion-header { padding: 16px; }
-  .seccion-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-  .chevron-btn { background: transparent; border: none; color: #94a3b8; padding: 0; display: flex; }
-  .seccion-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-  .seccion-info { flex: 1; }
-  .seccion-info h2 { font-size: 17px; font-weight: 700; }
-  .seccion-info p { font-size: 12px; color: #94a3b8; }
-  .seccion-ganancia { text-align: right; }
-  .seccion-ganancia .label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-  .seccion-ganancia .value { font-size: 16px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+        .login-container {
+            position: fixed; inset: 0;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+            display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+        .login-container.hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
 
-  .precio-real-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 12px; background: rgba(0,0,0,0.25); border-radius: 10px;
-  }
-  .precio-real-row .label { font-size: 12px; color: #94a3b8; font-weight: 600; }
-  .precio-real-row button { background: transparent; border: none; color: #e4e7eb; display: flex; align-items: center; gap: 6px; }
-  .precio-real-row .monto { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-  .precio-input {
-    width: 100px; padding: 6px 10px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 8px; color: #e4e7eb;
-    font-size: 14px; font-family: 'JetBrains Mono', monospace;
-    text-align: right;
-  }
-  .save-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; color: white; }
+        .login-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl);
+            padding: 40px 30px; width: 100%; max-width: 380px; box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.5s ease;
+        }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
 
-  .seccion-body { padding: 12px; }
-  .vacio { text-align: center; padding: 20px; color: #64748b; font-size: 13px; }
+        .login-logo { text-align: center; margin-bottom: 30px; }
+        .login-logo-icon {
+            width: 80px; height: 80px; background: linear-gradient(135deg, #cc0000, #ff2222); border-radius: 20px;
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Noto Sans JP', sans-serif; font-weight: 900; font-size: 36px; color: #fff;
+            margin: 0 auto 12px; box-shadow: 0 0 40px rgba(204, 0, 0, 0.4);
+        }
+        .login-logo-text { font-family: 'Noto Sans JP', sans-serif; font-weight: 900; font-size: 24px; color: #fff; letter-spacing: 0.04em; }
+        .login-logo-sub { font-family: 'Bebas Neue', sans-serif; font-size: 14px; color: var(--red); letter-spacing: 0.3em; }
+        .login-field { margin-bottom: 20px; }
+        .login-label { display: block; font-size: 10px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+        .login-input { width: 100%; padding: 14px 16px; border: 2px solid var(--border); border-radius: var(--radius); font-size: 15px; color: #fff; background: var(--surface2); font-family: 'Poppins', sans-serif; transition: all 0.3s; }
+        .login-input:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 4px rgba(204, 0, 0, 0.1); }
+        .login-input.error { border-color: #ef4444; animation: shake 0.5s; }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-10px)} 75%{transform:translateX(10px)} }
+        .login-error { color: #ef4444; font-size: 11px; margin-top: 5px; min-height: 18px; font-weight: 500; }
+        .login-btn { width: 100%; padding: 15px; background: linear-gradient(135deg, var(--red), #ff3333); color: #fff; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 700; font-family: 'Poppins', sans-serif; cursor: pointer; transition: all 0.3s; letter-spacing: 0.02em; box-shadow: 0 8px 25px rgba(204, 0, 0, 0.3); margin-top: 10px; }
+        .login-btn:active { transform: scale(0.97); box-shadow: 0 4px 15px rgba(204, 0, 0, 0.2); }
+        .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .login-attempts { text-align: center; font-size: 10px; color: var(--text3); margin-top: 15px; }
+        .login-attempts.warning { color: var(--orange); }
+        .login-attempts.danger { color: #ef4444; }
 
-  /* Cliente row */
-  .cliente {
-    display: flex; align-items: center; gap: 10px; padding: 12px;
-    background: rgba(255,255,255,0.02); border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.04);
-    margin-bottom: 8px;
-    transition: all 0.2s;
-  }
-  .check-btn { background: transparent; border: none; padding: 0; flex-shrink: 0; font-size: 24px; }
-  .cliente-info { flex: 1; min-width: 0; }
-  .cliente-info .nombre { font-size: 14px; font-weight: 600; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cliente-tags { display: flex; align-items: center; gap: 6px; margin-top: 2px; flex-wrap: wrap; }
-  .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
-  .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
-  .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
-  .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cliente-pago { text-align: right; flex-shrink: 0; }
-  .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
-  .cliente-acciones { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
-  .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .icon-btn.edit { background: rgba(255,255,255,0.04); color: #94a3b8; }
-  .icon-btn.delete { background: rgba(239,68,68,0.08); color: #ef4444; }
+        .change-password-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(5px); }
+        .change-password-modal.show { display: flex; }
+        .change-password-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 30px; width: 100%; max-width: 380px; animation: slideUp 0.3s ease; }
+        .change-password-title { font-family: 'Bebas Neue', sans-serif; font-size: 22px; margin-bottom: 5px; letter-spacing: 0.04em; }
+        .change-password-sub { font-size: 11px; color: var(--text3); margin-bottom: 20px; }
 
-  .add-cliente-btn {
-    width: 100%; padding: 16px;
-    border-radius: 10px;
-    font-weight: 600; font-size: 15px;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    position: relative; z-index: 10;
-  }
+        .app-container { display: none; height: 100%; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+        .app-container.show { display: block; }
 
-  /* Modal */
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-    z-index: 200; display: flex; align-items: flex-end;
-    backdrop-filter: blur(8px);
-  }
-  .modal {
-    background: #0f1729; width: 100%;
-    border-radius: 24px 24px 0 0; padding: 24px 20px;
-    max-height: 90vh; overflow-y: auto;
-    border: 1px solid rgba(255,255,255,0.08);
-    animation: slideUp 0.3s ease-out;
-  }
-  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .modal-header h3 { font-size: 20px; font-weight: 700; }
-  .modal-subtitle { font-size: 13px; font-weight: 600; margin-bottom: 20px; }
-  .close-btn {
-    background: rgba(255,255,255,0.05); border: none;
-    width: 36px; height: 36px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #94a3b8; font-size: 18px;
-  }
-  .campo { margin-bottom: 16px; }
-  .campo-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-  .campo-label label { font-size: 13px; font-weight: 600; color: #cbd5e1; }
-  .campo-label .hint { font-size: 11px; color: #64748b; }
-  .required { color: #10b981; }
-  .input {
-    width: 100%; padding: 14px 16px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px; color: #e4e7eb;
-    font-size: 15px;
-  }
-  .tipo-pago-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .tipo-btn {
-    padding: 12px; background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
-    color: #94a3b8; font-weight: 600; font-size: 14px;
-  }
-  .tipo-btn.activo { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
-  .guardar-btn {
-    width: 100%; padding: 16px; border: none; border-radius: 14px;
-    font-size: 16px; font-weight: 700; color: white;
-    margin-top: 8px;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    background: linear-gradient(135deg, #10b981, #059669);
-  }
-  .guardar-btn:disabled { background: rgba(255,255,255,0.05); cursor: not-allowed; }
+        .hdr { background: linear-gradient(180deg, #111 0%, var(--bg) 100%); padding: calc(6px + var(--st)) 14px 6px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid var(--border); min-height: var(--header-h); }
+        .hdr-inner { display: flex; align-items: center; justify-content: space-between; }
+        .logo-wrap { display: flex; align-items: center; gap: 8px; }
+        .logo-icon { width: 34px; height: 34px; background: var(--red); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: 'Noto Sans JP', sans-serif; font-weight: 900; font-size: 17px; color: #fff; box-shadow: 0 0 16px rgba(204, 0, 0, 0.4); }
+        .logo-text { font-family: 'Noto Sans JP', sans-serif; font-weight: 900; font-size: 14px; color: #fff; letter-spacing: 0.04em; line-height: 1; }
+        .logo-sub { font-family: 'Bebas Neue', sans-serif; font-size: 10px; color: var(--red); letter-spacing: 0.25em; display: block; }
+        .hdr-right { display: flex; align-items: center; gap: 6px; }
+        .hdr-date { font-size: 8px; color: var(--text3); text-align: right; line-height: 1.2; }
+        .logout-btn,.change-pass-btn { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); padding: 4px 10px; border-radius: 6px; font-size: 9px; cursor: pointer; font-family: 'Poppins', sans-serif; transition: all 0.3s; }
+        .logout-btn:hover { background: #2a2a2a; color: #ef4444; }
+        .change-pass-btn:hover { background: #2a2a2a; color: var(--gold); }
+        .alert-badge { background: #ef4444; color: #fff; padding: 3px 8px; border-radius: 50px; font-size: 8px; font-weight: 700; cursor: pointer; display: none; align-items: center; gap: 3px; border: none; font-family: 'Poppins', sans-serif; animation: pulse-badge 2s infinite; }
+        .alert-badge.show { display: flex; }
+        @keyframes pulse-badge { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.5)} 50%{box-shadow:0 0 0 10px rgba(239,68,68,0)} }
 
-  /* Bottom Nav */
-  .nav-bottom {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: rgba(10,14,26,0.95);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255,255,255,0.08);
-    padding: 12px 20px 20px;
-    display: flex; gap: 8px; z-index: 50;
-  }
-  .nav-btn {
-    flex: 1; padding: 10px; background: transparent;
-    border: none; border-radius: 12px; color: #64748b;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    font-size: 11px; font-weight: 600;
-  }
-  .nav-btn.activo { background: rgba(16,185,129,0.15); color: #10b981; }
-  .nav-btn .icon { font-size: 20px; }
 
-  /* Dashboard */
-  .dashboard-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 16px; padding: 16px;
-    margin-bottom: 16px;
-  }
-  .dashboard-title { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 15px; font-weight: 700; }
+        .sbar { padding: 6px 14px; display: flex; flex-direction: column; gap: 6px; position: sticky; top: var(--header-h); z-index: 99; background: var(--bg); padding-bottom: 4px; border-bottom: 1px solid rgba(42,42,42,0.4); }
+        .stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 5px; }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px 5px; text-align: center; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; user-select: none; }
+        .stat-card:hover { border-color: #444; }
+        .stat-card:active { transform: scale(0.95); box-shadow: 0 0 0 2px var(--red); }
+        .stat-icon { font-size: 15px; margin-bottom: 1px; }
+        .stat-value { font-family: 'Bebas Neue', sans-serif; font-size: 17px; font-weight: 700; color: #fff; }
+        .stat-label { font-size: 7px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-card.highlight { border-color: rgba(204,0,0,0.3); background: var(--red-bg); }
+        .stat-card.highlight .stat-value { color: var(--red-light); }
+        .clean-box { background: linear-gradient(135deg, #0f2a1a 0%, #0a1a10 100%); border: 2px solid rgba(34,197,94,0.3); border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; }
+        .clean-label { font-size: 9px; color: var(--green); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+        .clean-value { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--green); letter-spacing: 0.02em; }
 
-  /* Charts */
-  .chart-container { width: 100%; }
-  .chart-svg { width: 100%; display: block; }
+        .tabs-wrap { padding: 0 14px; position: sticky; top: calc(var(--header-h) + var(--stats-h)); z-index: 98; background: var(--bg); padding-top: 4px; padding-bottom: 2px; }
+        .tabs { display: flex; background: var(--surface2); border-radius: 10px; padding: 3px; gap: 3px; }
+        .tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 9px; font-weight: 600; border: none; background: none; cursor: pointer; border-radius: 8px; color: var(--text2); transition: all 0.25s; font-family: 'Poppins', sans-serif; display: flex; align-items: center; justify-content: center; gap: 3px; }
+        .tab-btn.active { background: var(--red); color: #fff; box-shadow: 0 4px 12px rgba(204,0,0,0.3); }
 
-  .servicio-bar { margin-bottom: 12px; }
-  .servicio-bar-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
-  .servicio-bar-row .nombre { color: #cbd5e1; font-weight: 600; }
-  .servicio-bar-row .monto { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
-  .servicio-bar-bg { height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
-  .servicio-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease-out; }
+        .page { display: none; padding: 6px 14px calc(30px + var(--sb)); animation: fadeUp 0.3s ease; }
+        .page.active { display: block; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-  /* Botón ir a hoy */
-  .ir-hoy-btn {
-    margin-top: 8px;
-    padding: 6px 12px;
-    background: rgba(16,185,129,0.1);
-    border: 1px solid rgba(16,185,129,0.3);
-    border-radius: 8px;
-    color: #10b981;
-    font-size: 12px;
-    font-weight: 600;
-  }
-  .mes-btn.es-hoy { font-weight: 700; }
+        .dash-grid { display: grid; gap: 10px; }
+        .dash-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; }
+        .dash-title { font-family: 'Bebas Neue', sans-serif; font-size: 17px; letter-spacing: 0.04em; margin-bottom: 3px; }
+        .dash-sub { font-size: 9px; color: var(--text3); margin-bottom: 12px; }
+        .dash-mini-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .dash-mini { background: var(--surface2); border-radius: var(--radius); padding: 12px; text-align: center; border: 1px solid var(--border); }
+        .dash-mini-icon { font-size: 20px; margin-bottom: 4px; }
+        .dash-mini-val { font-family: 'Bebas Neue', sans-serif; font-size: 18px; }
+        .dash-mini-lbl { font-size: 8px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+        .chart-container { position: relative; width: 100%; height: 260px; }
+        .chart-container canvas { width: 100% !important; }
+        .chart-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; justify-content: center; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 8px; color: var(--text2); }
+        .legend-dot { width: 8px; height: 8px; border-radius: 3px; }
 
-  /* Modal de confirmación */
-  .confirmar-box {
-    background: #0f1729;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px;
-    padding: 24px 20px;
-    max-width: 360px;
-    width: 100%;
-    text-align: center;
-    animation: slideUp 0.25s ease-out;
-  }
-  .confirmar-icon {
-    font-size: 40px;
-    margin-bottom: 12px;
-  }
-  .confirmar-titulo {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    color: #f1f5f9;
-  }
-  .confirmar-mensaje {
-    font-size: 14px;
-    color: #94a3b8;
-    margin-bottom: 20px;
-    line-height: 1.5;
-  }
-  .confirmar-botones {
-    display: flex;
-    gap: 8px;
-  }
-  .btn-cancelar, .btn-confirmar {
-    flex: 1;
-    padding: 12px;
-    border: none;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 700;
-  }
-  .btn-cancelar {
-    background: rgba(255,255,255,0.05);
-    color: #cbd5e1;
-  }
-  .btn-confirmar {
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-    color: white;
-  }
+        .form-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); padding: 18px; }
+        .form-title { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 0.04em; margin-bottom: 2px; }
+        .form-sub { font-size: 10px; color: var(--text3); margin-bottom: 16px; }
+        .field-group { margin-bottom: 12px; }
+        .field-label { display: block; font-size: 9px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        input,select,textarea { width: 100%; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: var(--radius); font-size: 13px; color: #fff; background: var(--surface2); font-family: 'Poppins', sans-serif; transition: all 0.2s; -webkit-appearance: none; appearance: none; resize: vertical; }
+        textarea { min-height: 60px; }
+        input:focus,select:focus,textarea:focus { outline: none; border-color: var(--red); box-shadow: 0 0 0 3px rgba(204,0,0,0.12); }
+        input.err { border-color: #ef4444; }
+        .err-msg { display: block; margin-top: 2px; font-size: 9px; color: #ef4444; font-weight: 500; min-height: 12px; }
+        select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }
+        .input-with-prefix { display: flex; align-items: center; border: 1.5px solid var(--border); border-radius: var(--radius); background: var(--surface2); overflow: hidden; }
+        .input-with-prefix:focus-within { border-color: var(--red); box-shadow: 0 0 0 3px rgba(204,0,0,0.12); }
+        .prefix { padding: 10px 11px; background: rgba(204,0,0,0.15); color: var(--red-light); font-weight: 700; font-size: 13px; border-right: 1.5px solid var(--border); }
+        .input-with-prefix input { border: none; border-radius: 0; background: transparent; flex: 1; }
+        .input-with-prefix input:focus { box-shadow: none; }
+        .date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .plan-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .plan-card { background: var(--surface2); border: 2px solid var(--border); border-radius: var(--radius); padding: 12px 8px; text-align: center; cursor: pointer; transition: all 0.25s; position: relative; }
+        .plan-card:hover { border-color: #555; }
+        .plan-card.selected { border-color: var(--red); background: var(--red-bg); box-shadow: 0 0 16px rgba(204,0,0,0.2); }
+        .plan-card.selected::after { content: '✓'; position: absolute; top: 6px; right: 8px; color: var(--red); font-weight: 700; font-size: 10px; }
+        .plan-name { font-weight: 700; font-size: 12px; color: #fff; margin-bottom: 1px; }
+        .plan-duration { font-size: 8px; color: var(--text3); margin-bottom: 4px; }
+        .plan-price { font-family: 'Bebas Neue', sans-serif; font-size: 22px; color: var(--red-light); letter-spacing: 0.02em; }
+        .plan-price span { font-size: 10px; color: var(--text3); font-family: 'Poppins', sans-serif; }
+        .price-preview { background: var(--red-bg); border: 1.5px solid rgba(204,0,0,0.3); border-radius: var(--radius); padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .price-preview-label { font-size: 10px; color: var(--red-light); font-weight: 600; }
+        .price-preview-value { font-family: 'Bebas Neue', sans-serif; font-size: 20px; color: #fff; }
+        .btn-primary { width: 100%; padding: 12px; background: var(--red); color: #fff; border: none; border-radius: var(--radius); font-size: 13px; font-weight: 700; font-family: 'Poppins', sans-serif; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; letter-spacing: 0.02em; box-shadow: 0 4px 16px rgba(204,0,0,0.3); }
+        .btn-primary:active { transform: scale(0.98); box-shadow: 0 2px 8px rgba(204,0,0,0.2); }
+        .btn-sm { padding: 6px 12px; border-radius: 7px; font-size: 9px; font-weight: 700; cursor: pointer; border: none; font-family: 'Poppins', sans-serif; transition: all 0.2s; }
+        .btn-sm.renew { background: var(--red); color: #fff; }
+        .btn-sm.pay { background: var(--green); color: #fff; }
+        .btn-sm.whatsapp { background: var(--whatsapp); color: #fff; }
+        .btn-sm.pause { background: var(--purple); color: #fff; }
+        .btn-sm.resume { background: #10b981; color: #fff; }
+        .btn-sm:active { transform: scale(0.95); }
 
-  /* Botones de respaldo */
-  .backup-btn {
-    flex: 1;
-    padding: 12px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px;
-    color: #cbd5e1;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  .backup-btn:hover {
-    background: rgba(255,255,255,0.06);
-  }
+        .filtro-miembros { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+        .filtro-btn { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface2); color: var(--text2); font-size: 9px; cursor: pointer; font-family: 'Poppins', sans-serif; font-weight: 600; transition: all 0.2s; }
+        .filtro-btn.active { background: var(--red); color: #fff; border-color: var(--red); }
+        .filtro-btn:active { transform: scale(0.95); }
+        .filtro-btn:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+        .member-list { display: flex; flex-direction: column; gap: 7px; }
+        .member-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; display: flex; flex-direction: column; gap: 8px; animation: fadeUp 0.3s ease; position: relative; }
+        .member-card.pausada { border-color: rgba(139,92,246,0.4); background: rgba(139,92,246,0.03); }
+        .member-card.pausada::before { content: '⏸️ PAUSADA'; position: absolute; top: 8px; right: 10px; z-index: 1; font-size: 7px; font-weight: 700; color: var(--purple); background: var(--purple-bg); padding: 2px 8px; border-radius: 20px; letter-spacing: 0.05em; }
+        .member-top { display: flex; align-items: center; gap: 10px; }
+        .member-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--surface2); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+        .member-avatar.pausada { border-color: var(--purple); opacity: 0.6; }
+        .member-info { flex: 1; min-width: 0; padding-right: 5px; }
+        .member-name { font-weight: 600; font-size: 13px; color: #fff; }
+        .member-phone { font-size: 10px; color: var(--text3); }
+        .member-plan-badge { display: inline-block; font-size: 8px; font-weight: 600; padding: 2px 8px; border-radius: 20px; margin-top: 3px; background: var(--red-bg); color: var(--red-light); }
+        .member-plan-badge.pausada { background: var(--purple-bg); color: var(--purple); }
+        .member-status { text-align: right; flex-shrink: 0; }
+        .member-days { font-family: 'Bebas Neue', sans-serif; font-size: 16px; }
+        .member-days.active { color: var(--green); }
+        .member-days.warning { color: var(--orange); }
+        .member-days.expired { color: #ef4444; }
+        .member-days.pausada { color: var(--purple); }
+        .member-status-label { font-size: 7px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+        .member-actions { display: flex; gap: 5px; flex-wrap: wrap; padding-right: 5px; }
+        .member-card.pausada .member-actions { padding-right: 55px; }
+        .delete-btn { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 13px; padding: 3px 6px; transition: color 0.2s; }
+        .delete-btn:hover { color: #ef4444; }
+        .pagos-list { background: var(--surface2); border-radius: var(--radius); padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; max-height: 130px; overflow-y: auto; }
+        .pago-row { display: flex; justify-content: space-between; align-items: center; font-size: 10px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .pago-row:last-child { border-bottom: none; }
+        .pago-fecha { color: var(--text3); font-size: 8px; }
+        .pago-monto { font-weight: 600; color: var(--green); font-family: 'Bebas Neue', sans-serif; font-size: 12px; }
+        .pago-plan { font-size: 8px; color: var(--text2); }
+        .no-pagos { text-align: center; color: var(--text3); font-size: 9px; padding: 6px; }
+        .dias-guardados-info { background: var(--purple-bg); border: 1px solid rgba(139,92,246,0.3); border-radius: var(--radius); padding: 6px 10px; font-size: 9px; color: var(--purple); text-align: center; font-weight: 600; }
+        .gasto-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; background: var(--surface2); border-radius: 8px; border: 1px solid var(--border); margin-bottom: 5px; }
+        .gasto-info { flex: 1; min-width: 0; }
+        .gasto-categoria { font-size: 8px; color: var(--orange); font-weight: 600; text-transform: uppercase; }
+        .gasto-desc { font-size: 10px; color: #fff; font-weight: 500; }
+        .gasto-fecha { font-size: 7px; color: var(--text3); }
+        .gasto-monto { font-family: 'Bebas Neue', sans-serif; font-size: 14px; color: #ef4444; margin-right: 6px; }
+        .gasto-del { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 11px; padding: 3px; }
+        .notif-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 7px; display: flex; align-items: center; gap: 10px; }
+        .notif-card.urgent { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.05); }
+        .notif-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--surface2); display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; }
+        .notif-info { flex: 1; min-width: 0; }
+        .notif-name { font-weight: 600; font-size: 12px; color: #fff; }
+        .notif-detail { font-size: 9px; color: var(--text3); }
+        .notif-days { font-family: 'Bebas Neue', sans-serif; font-size: 14px; text-align: right; }
+        .notif-days.urgent { color: #ef4444; }
+        .notif-days.warning { color: var(--orange); }
+        .checkbox-custom { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: 5px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; background: var(--surface2); }
+        .checkbox-custom.checked { background: var(--green); border-color: var(--green); }
+        .checkbox-custom.checked::after { content: '✓'; color: #fff; font-size: 11px; font-weight: 700; }
+        .empty-state { text-align: center; padding: 30px 20px; }
+        .empty-icon { font-size: 40px; display: block; margin-bottom: 8px; }
+        .empty-title { font-weight: 600; font-size: 14px; color: #fff; margin-bottom: 3px; }
+        .empty-desc { font-size: 10px; color: var(--text3); }
+        .toast { position: fixed; bottom: calc(20px + var(--sb, 0px)); left: 50%; transform: translateX(-50%) translateY(100px); background: #fff; color: #0a0a0a; padding: 8px 16px; border-radius: 50px; font-size: 11px; font-weight: 600; z-index: 999; box-shadow: 0 8px 30px rgba(0,0,0,0.4); transition: transform 0.4s cubic-bezier(.16,1,.3,1), opacity 0.4s; opacity: 0; white-space: nowrap; }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.3s; backdrop-filter: blur(3px); }
+        .modal-overlay.show { opacity: 1; pointer-events: all; }
+        .modal-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: #181818; border-radius: 24px 24px 0 0; z-index: 201; padding: 0 0 calc(24px + var(--sb, 0px)); transform: translateY(100%); transition: transform 0.35s cubic-bezier(.16,1,.3,1); max-height: 82vh; display: flex; flex-direction: column; }
+        .modal-sheet.show { transform: translateY(0); }
+        .modal-handle { width: 40px; height: 4px; background: #444; border-radius: 4px; margin: 12px auto 0; flex-shrink: 0; }
+        .modal-header { padding: 14px 18px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+        .modal-icon { font-size: 22px; }
+        .modal-title { font-family: 'Bebas Neue', sans-serif; font-size: 20px; letter-spacing: 0.04em; }
+        .modal-subtitle { font-size: 9px; color: var(--text3); }
+        .modal-body { overflow-y: auto; padding: 12px 14px; flex: 1; }
+        .modal-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--surface2); border-radius: 10px; margin-bottom: 6px; border: 1px solid var(--border); gap: 8px; }
+        .modal-row-left { flex: 1; min-width: 0; }
+        .modal-row-name { font-weight: 600; font-size: 12px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .modal-row-detail { font-size: 9px; color: var(--text3); margin-top: 1px; }
+        .modal-row-badge { font-family: 'Bebas Neue', sans-serif; font-size: 15px; flex-shrink: 0; }
+        .modal-empty { text-align: center; padding: 25px 0; color: var(--text3); font-size: 12px; }
+        .modal-empty-icon { font-size: 36px; display: block; margin-bottom: 6px; }
+        .modal-summary-bar { display: flex; gap: 6px; margin-bottom: 12px; }
+        .modal-summary-pill { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 6px; text-align: center; }
+        .modal-summary-pill-val { font-family: 'Bebas Neue', sans-serif; font-size: 16px; }
+        .modal-summary-pill-lbl { font-size: 7px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+        .sticky-off .sbar { position: relative; top: 0 !important; }
+        .sticky-off .tabs-wrap { position: relative; top: 0 !important; }
+        @supports (padding-bottom: env(safe-area-inset-bottom)) {
+            .page { padding-bottom: calc(30px + env(safe-area-inset-bottom)); }
+            .toast { bottom: calc(20px + env(safe-area-inset-bottom)); }
+            .modal-sheet { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+        }
+        @media (max-width: 360px) {
+            .member-card.pausada .member-actions { padding-right: 40px; }
+        }
+        ::-webkit-scrollbar { width: 3px; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        @media (max-width: 400px) {
+            .stat-row { grid-template-columns: 1fr 1fr; }
+            .tabs { flex-wrap: wrap; }
+            .tab-btn { flex: 1 1 40%; font-size: 8px; padding: 7px 3px; }
+        }
+        /* Utilidades */
+        .flex-gap { display:flex; gap:10px; }
+        .btn-cancel { flex:1; background:var(--surface2) !important; color:var(--text2) !important; box-shadow:none !important; }
+        .text-hint { font-size:7px; color:var(--text3); margin-top:3px; display:block; }
+        .text-optional { color:var(--text3); font-weight:400; }
+        .text-green { color:var(--green); }
+        .mb-14 { margin-bottom:14px; }
+    </style>
 
-  /* Tamaño mínimo de fuente para evitar zoom automático en iOS */
-  input.input, input.precio-input, textarea.input {
-    font-size: 16px;
-  }
 
-  /* Alertas de vencimiento */
-  .alertas-container {
-    margin: 0 16px 16px;
-    background: linear-gradient(135deg, rgba(251,146,60,0.08), rgba(251,146,60,0.02));
-    border: 1px solid rgba(251,146,60,0.2);
-    border-radius: 14px;
-    padding: 12px 14px;
-  }
-  .alertas-header {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
-  }
-  .alertas-icon { font-size: 16px; }
-  .alertas-titulo {
-    font-size: 13px; font-weight: 700; color: #fb923c;
-    text-transform: uppercase; letter-spacing: 0.05em;
-  }
-  .alerta-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 12px; margin-bottom: 6px;
-    background: rgba(0,0,0,0.2); border-radius: 10px;
-    border-left: 3px solid;
-    transition: transform 0.1s;
-  }
-  .alerta-row:active { transform: scale(0.98); }
-  .alerta-row:last-child { margin-bottom: 0; }
-  .alerta-vencido { border-left-color: #ef4444; }
-  .alerta-hoy { border-left-color: #f59e0b; }
-  .alerta-pronto { border-left-color: #fb923c; }
-  .alerta-info { flex: 1; min-width: 0; }
-  .alerta-nombre {
-    font-size: 14px; font-weight: 600; color: #f1f5f9;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .alerta-sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
-  .alerta-estado {
-    font-size: 12px; font-weight: 700;
-    padding: 4px 10px; border-radius: 8px;
-    flex-shrink: 0; margin-left: 10px;
-  }
-  .alerta-vencido .alerta-estado { background: rgba(239,68,68,0.15); color: #ef4444; }
-  .alerta-hoy .alerta-estado { background: rgba(245,158,11,0.15); color: #f59e0b; }
-  .alerta-pronto .alerta-estado { background: rgba(251,146,60,0.15); color: #fb923c; }
-
-  /* Badge de vencimiento en cliente row */
-  .badge-venc {
-    font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600;
-    white-space: nowrap;
-  }
-  .venc-rojo { background: rgba(239,68,68,0.15); color: #ef4444; }
-  .venc-naranja { background: rgba(251,146,60,0.15); color: #fb923c; }
-  .venc-ok { background: rgba(100,116,139,0.15); color: #94a3b8; }
-
-  /* Bloque info próximo pago en modal */
-  .info-proximo {
-    background: rgba(16,185,129,0.08);
-    border: 1px solid rgba(16,185,129,0.2);
-    border-radius: 12px;
-    padding: 14px;
-    margin-top: 8px;
-  }
-
-  /* Fix para input type=date en dark mode */
-  input[type="date"] {
-    color-scheme: dark;
-  }
-
-  /* Banners de notificaciones / instalación */
-  .banner {
-    display: flex; align-items: center; gap: 12px;
-    margin: 0 16px 12px;
-    padding: 14px;
-    border-radius: 14px;
-    animation: slideUp 0.3s ease-out;
-  }
-  .banner-notif {
-    background: linear-gradient(135deg, rgba(6,182,212,0.12), rgba(6,182,212,0.03));
-    border: 1px solid rgba(6,182,212,0.25);
-  }
-  .banner-instalar {
-    background: linear-gradient(135deg, rgba(167,139,250,0.12), rgba(167,139,250,0.03));
-    border: 1px solid rgba(167,139,250,0.25);
-  }
-  .banner-icon { font-size: 24px; flex-shrink: 0; }
-  .banner-texto { flex: 1; min-width: 0; }
-  .banner-titulo { font-size: 14px; font-weight: 700; color: #f1f5f9; margin-bottom: 2px; }
-  .banner-sub { font-size: 11px; color: #94a3b8; line-height: 1.3; }
-  .banner-acciones { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-  .banner-btn {
-    padding: 8px 14px;
-    border: none; border-radius: 10px;
-    font-size: 12px; font-weight: 700;
-    color: white;
-  }
-  .banner-notif .banner-btn { background: #06b6d4; }
-  .banner-instalar .banner-btn { background: #a78bfa; }
-  .banner-cerrar {
-    width: 28px; height: 28px;
-    background: rgba(255,255,255,0.05);
-    border: none; border-radius: 50%;
-    color: #94a3b8; font-size: 12px;
-    display: flex; align-items: center; justify-content: center;
-  }
-
-  /* Estado de notificaciones en ajustes */
-  .notif-status {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 14px;
-    background: rgba(255,255,255,0.03);
-    border-radius: 12px;
-    font-size: 13px;
-  }
-  .notif-status.activas { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); }
-  .notif-status.denegadas { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); }
-</style>
 </head>
 <body>
 
-<div id="app"></div>
+    <div class="login-container" id="loginContainer">
+        <div class="login-card">
+            <div class="login-logo"><div class="login-logo-icon">改</div><div class="login-logo-text">KAIZEN</div><div class="login-logo-sub">FITNESS ADMIN</div></div>
+            <div class="login-field"><label class="login-label">👤 Usuario</label><input type="text" id="loginUser" class="login-input" placeholder="Tu usuario" autocomplete="off" aria-label="Usuario" onkeypress="if(event.key==='Enter')document.getElementById('loginPass').focus()"><div class="login-error" id="loginUserError"></div></div>
+            <div class="login-field"><label class="login-label">🔒 Contraseña</label><input type="password" id="loginPass" class="login-input" placeholder="••••••••" aria-label="Contraseña" onkeypress="if(event.key==='Enter')login()"><div class="login-error" id="loginPassError"></div></div>
+            <button class="login-btn" id="loginBtn" onclick="login()">🔐 Iniciar Sesión</button>
+            <div class="login-attempts" id="loginAttempts"></div>
+        </div>
+    </div>
 
-<script>
-// ============== ESTADO ==============
-const SERVICIOS = {
-  internet: { nombre: 'Internet', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>', color: '#06b6d4', gradient: 'linear-gradient(135deg, #06b6d4, #0891b2)' },
-  netflix: { nombre: 'Netflix', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>', color: '#ef4444', gradient: 'linear-gradient(135deg, #ef4444, #dc2626)' },
-  spotify: { nombre: 'Spotify', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
-  otros: { nombre: 'Otros', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', color: '#a78bfa', gradient: 'linear-gradient(135deg, #a78bfa, #8b5cf6)' }
-};
-const MESES_NOMBRES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    <div class="change-password-modal" id="changePasswordModal">
+        <div class="change-password-card">
+            <div class="change-password-title">⚙️ Cambiar Credenciales</div><div class="change-password-sub">Administrador de Kaizen Fitness</div>
+            <div class="login-field"><label class="login-label">Contraseña Actual</label><input type="password" id="currentPass" class="login-input" placeholder="••••••••"><div class="login-error" id="currentPassError"></div></div>
+            <div class="login-field"><label class="login-label">Nuevo Usuario (opcional)</label><input type="text" id="newUsername" class="login-input" placeholder="Dejar vacío para no cambiar" autocomplete="off"></div>
+            <div class="login-field"><label class="login-label">Nueva Contraseña (opcional)</label><input type="password" id="newPass" class="login-input" placeholder="Dejar vacío para no cambiar"><div class="login-error" id="newPassError"></div></div>
+            <div class="login-field"><label class="login-label">Confirmar Nueva Contraseña</label><input type="password" id="confirmPass" class="login-input" placeholder="Repite la nueva contraseña"><div class="login-error" id="confirmPassError"></div></div>
+            <div class="flex-gap"><button class="btn-primary" onclick="cambiarCredenciales()" style="flex:1">✅ Guardar</button><button class="btn-primary" onclick="cerrarCambioPassword()" class="btn-primary btn-cancel">❌ Cancelar</button></div>
+        </div>
+    </div>
 
-let state = {
-  data: {
-    internet: { precioReal: 0, clientes: [] },
-    netflix: { precioReal: 0, clientes: [] },
-    spotify: { precioReal: 0, clientes: [] },
-    otros: { precioReal: 0, clientes: [] }
-  },
-  pagosMes: {},
-  vista: 'inicio',
-  mesActual: claveMes(new Date()),
-  expandido: { internet: true, netflix: true, spotify: true, otros: true },
-  editandoPrecio: null,
-  precioTemp: '',
-  modal: null,
-  modalPago: null,
-  confirmar: null,
-  notifPermiso: 'default', // 'default' | 'granted' | 'denied'
-  pwaInstalable: false,
-  mostrarBannerInstalar: true,
-  mostrarBannerNotif: true,
-  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', fechaPago: '' }
-};
+    <div class="app-container" id="appContainer">
+        <div class="hdr"><div class="hdr-inner"><div class="logo-wrap"><div class="logo-icon">改</div><div><div class="logo-text">KAIZEN</div><div class="logo-sub">FITNESS</div></div></div><div class="hdr-right"><button class="change-pass-btn" onclick="abrirCambioPassword()" title="Cambiar contraseña">🔑</button><button class="logout-btn" onclick="logout()" title="Cerrar sesión">🚪 Salir</button><button class="alert-badge" id="alertBadge" onclick="showTab('notificaciones', document.querySelectorAll('.tab-btn')[3])">🔔 <span id="alertCount">0</span></button><div class="hdr-date" id="hdrDate"></div></div></div></div>
 
-// ============== HELPERS ==============
-function claveMes(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
-function parseMes(k) { const [y,m] = k.split('-'); return { year: +y, month: +m-1 }; }
-function formatoMes(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${year}`; }
-function formatoMesCorto(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${String(year).slice(2)}`; }
-function fmt(n) { return '$' + (n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k'; return '$' + Math.round(n); }
-function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
-function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+        <div class="sbar">
+            <div class="stat-row">
+                <div class="stat-card highlight" onclick="abrirModalStat('miembros')"><div class="stat-icon">👥</div><div class="stat-value" id="st-total">0</div><div class="stat-label">Miembros</div></div>
+                <div class="stat-card" onclick="abrirModalStat('activos')"><div class="stat-icon">✅</div><div class="stat-value" id="st-activos">0</div><div class="stat-label">Activos</div></div>
+                <div class="stat-card" onclick="abrirModalStat('ingresos')"><div class="stat-icon">💰</div><div class="stat-value" id="st-ingresos">$0</div><div class="stat-label">Ingresos Mes</div></div>
+                <div class="stat-card" onclick="abrirModalStat('porVencer')"><div class="stat-icon">⚠️</div><div class="stat-value" id="st-porVencer">0</div><div class="stat-label">Por vencer</div></div>
+            </div>
+            <div class="clean-box"><div><div class="clean-label">🏦 Ganancia Limpia (Ingresos - Gastos)</div><div style="font-size:7px;color:var(--text3);margin-top:1px" id="quincelaLabel">Quincena actual</div></div><div class="clean-value" id="gananciaLimpia">$0</div></div>
+            <div class="clean-box" style="cursor:pointer;margin-top:8px" onclick="abrirCapitalModal()"><div><div class="clean-label">💰 Capital</div><div style="font-size:7px;color:var(--text3);margin-top:1px">Toca para editar capital inicial</div></div><div class="clean-value" id="capitalTotal" style="color:var(--gold)">$0</div></div>
+        </div>
 
-// ============== FECHAS ==============
-function hoyISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function sumarMes(fechaISO) {
-  // Suma 1 mes exacto. Si el día no existe (ej. 31 ene + 1 mes), usa el último día del mes destino.
-  if (!fechaISO) return null;
-  const [y, m, d] = fechaISO.split('-').map(Number);
-  const dest = new Date(y, m - 1 + 1, d);
-  // Si JS desbordó (ej. 31 ene -> 3 mar), ajustar al último día del mes destino
-  if (dest.getMonth() !== m % 12) {
-    dest.setDate(0); // último día del mes anterior (el correcto)
-  }
-  return `${dest.getFullYear()}-${String(dest.getMonth()+1).padStart(2,'0')}-${String(dest.getDate()).padStart(2,'0')}`;
-}
-function diasEntre(fechaISO) {
-  // Días desde hoy hasta fechaISO. Negativo = ya pasó.
-  if (!fechaISO) return null;
-  const [y, m, d] = fechaISO.split('-').map(Number);
-  const destino = new Date(y, m-1, d);
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
-  destino.setHours(0,0,0,0);
-  return Math.round((destino - hoy) / (1000*60*60*24));
-}
-function formatoFecha(fechaISO) {
-  if (!fechaISO) return '—';
-  const [y, m, d] = fechaISO.split('-').map(Number);
-  return `${d} ${MESES_NOMBRES[m-1]}`;
-}
-function estadoVencimiento(fechaISO) {
-  // Devuelve: 'vencido', 'hoy', 'pronto', 'ok' o null
-  const dias = diasEntre(fechaISO);
-  if (dias === null) return null;
-  if (dias < 0) return 'vencido';
-  if (dias === 0) return 'hoy';
-  if (dias <= 3) return 'pronto';
-  return 'ok';
-}
+        <div class="tabs-wrap"><div class="tabs">
+            <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard', this)">📊 Inicio</button>
+            <button class="tab-btn" data-tab="miembros" onclick="showTab('miembros', this)">👥 Miembros</button>
+            <button class="tab-btn" data-tab="gastos" onclick="showTab('gastos', this)">💸 Gastos</button>
+            <button class="tab-btn" data-tab="notificaciones" onclick="showTab('notificaciones', this)">🔔 Recordatorios</button>
+        </div></div>
 
-// ============== NOTIFICACIONES ==============
-let deferredInstallPrompt = null;
+        <div class="page active" id="page-dashboard">
+            <div class="dash-grid">
+                <div class="dash-card"><div class="dash-title">📈 Ganancias vs Gastos</div><div class="dash-sub">Últimos 12 meses</div><div class="chart-container"><canvas id="gananciasChart"></canvas></div><div class="chart-legend"><div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Ingresos</div><div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> Gastos</div><div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div> Ganancia Neta</div></div></div>
+                <div class="dash-card"><div class="dash-title">🏋️ Resumen del Gimnasio</div><div class="dash-sub">Vistazo rápido de Kaizen Fitness</div><div class="dash-mini-row" id="dashResumen"></div></div>
+                <div class="dash-card"><div class="dash-title">📅 Próximos Vencimientos</div><div class="dash-sub">Miembros que vencen en los próximos 5 días</div><div id="dashVencimientos"></div></div>
+            </div>
+        </div>
 
-function inicializarNotificaciones() {
-  // Estado actual de permisos
-  if ('Notification' in window) {
-    state.notifPermiso = Notification.permission;
-  }
+        <div class="page" id="page-miembros">
+            <div class="form-card" style="margin-bottom:14px">
+                <div class="form-title">➕ Nuevo Miembro</div><div class="form-sub">Registra un nuevo integrante del gym</div>
+                <div class="field-group"><label class="field-label">👤 Nombre completo</label><input type="text" id="m-nombre" placeholder="Ej. Carlos Ramírez" autocomplete="off" aria-label="Nombre completo del miembro" oninput="clearErr('m-nombre')" maxlength="60"><span class="err-msg" id="err-m-nombre"></span></div>
+                <div class="field-group"><label class="field-label" id="telefonoLabel">📱 Teléfono (WhatsApp)</label><input type="tel" id="m-telefono" placeholder="Ej. 5215512345678" autocomplete="off" aria-label="Teléfono con código de país" oninput="clearErr('m-telefono')" maxlength="15"><span class="err-msg" id="err-m-telefono"></span><span style="font-size:7px;color:var(--text3);margin-top:1px;display:block" id="telefonoHint">Incluye código de país: 52 + número</span></div>
+                <div class="field-group"><label class="field-label">💪 Membresía</label><div class="plan-cards" id="planCards">
+                    <div class="plan-card" data-plan="Día" data-precio="50" data-dias="1" data-tipo="dias" onclick="seleccionarPlan(this)"><div class="plan-name">🏃 Día</div><div class="plan-duration">1 día</div><div class="plan-price">$50<span> MXN</span></div></div>
+                    <div class="plan-card" data-plan="Semana" data-precio="150" data-dias="7" data-tipo="dias" onclick="seleccionarPlan(this)"><div class="plan-name">📅 Semana</div><div class="plan-duration">7 días</div><div class="plan-price">$150<span> MXN</span></div></div>
+                    <div class="plan-card selected" data-plan="Mes" data-precio="500" data-dias="1" data-tipo="meses" onclick="seleccionarPlan(this)"><div class="plan-name">📆 Mes</div><div class="plan-duration">30 días</div><div class="plan-price">$500<span> MXN</span></div></div>
+                    <div class="plan-card" data-plan="Pareja" data-precio="900" data-dias="1" data-tipo="meses" onclick="seleccionarPlan(this)"><div class="plan-name">💑 Pareja</div><div class="plan-duration">30 días · 2 personas</div><div class="plan-price">$900<span> MXN</span></div></div>
+                </div></div>
+                <div class="price-preview"><span class="price-preview-label">💰 Total a pagar</span><span class="price-preview-value" id="precioPreview">$500 MXN</span></div>
+                <div class="field-group"><label class="field-label">📅 Fechas</label><div class="date-grid"><div><label style="font-size:7px;color:var(--text3);display:block;margin-bottom:2px">Inicio</label><input type="date" id="m-inicio" aria-label="Fecha de inicio" oninput="actualizarVencimiento()"></div><div><label style="font-size:7px;color:var(--text3);display:block;margin-bottom:2px">Vencimiento</label><input type="date" id="m-vencimiento" readonly style="opacity:0.7" aria-label="Fecha de vencimiento"></div></div></div>
+                <div class="field-group"><label class="field-label">⏳ Días ya usados <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="number" id="m-dias-usados" placeholder="0" min="0" value="0" style="width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:var(--radius);font-size:15px;color:#fff;background:var(--surface2);font-family:'Poppins',sans-serif" oninput="actualizarVencimiento()"><span style="font-size:9px;color:var(--text3);margin-top:3px;display:block">Si el miembro ya lleva días, ponlos aquí y el sistema descontará automáticamente</span></div>
+                <button class="btn-primary" onclick="registrarMiembro()">✅ Registrar miembro</button>
+            </div>
+            <div class="filtro-miembros" id="filtroMiembros">
+                <button class="filtro-btn active" data-filtro="todos" onclick="cambiarFiltro('todos', this)">👥 Todos</button>
+                <button class="filtro-btn" data-filtro="activos" onclick="cambiarFiltro('activos', this)">✅ Activos</button>
+                <button class="filtro-btn" data-filtro="pausados" onclick="cambiarFiltro('pausados', this)">⏸️ Pausados</button>
+                <button class="filtro-btn" data-filtro="vencidos" onclick="cambiarFiltro('vencidos', this)">❌ Vencidos</button>
+            </div>
 
-  // Capturar evento de instalación (Android/Chrome)
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    state.pwaInstalable = true;
-    render();
-  });
+            <!-- Modal Capital -->
+            <div class="change-password-modal" id="capitalModal">
+                <div class="change-password-card">
+                    <div class="change-password-title">💰 Capital</div>
+                    <div class="change-password-sub">Ingresa el capital que tenías antes de usar la app</div>
+                    <div class="login-field">
+                        <label class="login-label">Capital inicial ($)</label>
+                        <input type="number" id="capitalInicialInput" class="login-input" placeholder="0" min="0" style="font-size:18px">
+                    </div>
+                    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">El sistema sumará automáticamente todos los pagos registrados en la app</div>
+                    <div class="flex-gap">
+                        <button class="btn-primary" onclick="guardarCapital()" style="flex:1">✅ Guardar</button>
+                        <button class="btn-primary" onclick="cerrarCapitalModal()" class="btn-primary btn-cancel">❌ Cancelar</button>
+                    </div>
+                </div>
+            </div>
 
-  // Detectar cuando la app fue instalada
-  window.addEventListener('appinstalled', () => {
-    deferredInstallPrompt = null;
-    state.pwaInstalable = false;
-    localStorage.setItem('pwa-instalada', '1');
-    render();
-  });
+            <div class="member-list" id="memberList"></div>
+        </div>
 
-  // Restaurar preferencias de banners
-  if (localStorage.getItem('banner-instalar-cerrado') === '1') state.mostrarBannerInstalar = false;
-  if (localStorage.getItem('banner-notif-cerrado') === '1') state.mostrarBannerNotif = false;
-}
+        <div class="page" id="page-gastos">
+            <div class="form-card" style="margin-bottom:14px">
+                <div class="form-title">💸 Registrar Gasto</div><div class="form-sub">Sueldos, equipo, mantenimiento y más</div>
+                <div class="field-group"><label class="field-label">📂 Categoría</label><select id="g-categoria" aria-label="Categoría del gasto"><option value="Sueldo">💵 Sueldo</option><option value="Equipo">🏋️ Equipo</option><option value="Mantenimiento">🔧 Mantenimiento</option><option value="Renta">🏠 Renta</option><option value="Servicios">💡 Servicios</option><option value="Publicidad">📢 Publicidad</option><option value="Limpieza">🧹 Limpieza</option><option value="Otro">📦 Otro</option></select></div>
+                <div class="field-group"><label class="field-label">💳 Descontar de</label><select id="g-tipo" aria-label="Tipo de gasto"><option value="ganancia">📊 Ganancias del mes</option><option value="capital">💰 Capital</option></select><span style="font-size:9px;color:var(--text3);margin-top:3px;display:block">Ganancias del mes = gasto operativo · Capital = inversión o gasto mayor</span></div>
+                <div class="field-group"><label class="field-label">📝 Descripción</label><input type="text" id="g-descripcion" placeholder="Ej. Pago quincenal instructor" autocomplete="off" aria-label="Descripción del gasto" maxlength="100"><span class="err-msg" id="err-g-descripcion"></span></div>
+                <div class="field-group"><label class="field-label">💲 Monto</label><div class="input-with-prefix"><span class="prefix">$</span><input type="number" id="g-monto" placeholder="0.00" min="0" step="0.01" aria-label="Monto del gasto"></div><span class="err-msg" id="err-g-monto"></span></div>
+                <div class="field-group"><label class="field-label">📅 Fecha</label><input type="date" id="g-fecha" aria-label="Fecha del gasto"></div>
+                <button class="btn-primary" onclick="registrarGasto()">💸 Registrar gasto</button>
+            </div>
+            <div class="dash-card"><div class="dash-title">📋 Gastos del Mes</div><div class="dash-sub" id="gastosTotalMes">Total: $0</div><div id="gastosList"></div></div>
+        </div>
 
-async function pedirPermisoNotificaciones() {
-  if (!('Notification' in window)) {
-    alert('Tu navegador no soporta notificaciones.');
-    return;
-  }
-  try {
-    const permiso = await Notification.requestPermission();
-    state.notifPermiso = permiso;
-    if (permiso === 'granted') {
-      // Notificación de prueba
-      mostrarNotificacion('🎉 ¡Notificaciones activadas!', 'Te avisaremos cuando una membresía esté por vencer.');
-      // Programar la revisión periódica
-      programarRevisionPeriodica();
-    }
-    render();
-  } catch(e) {
-    console.error('Error pidiendo permiso:', e);
-  }
-}
+        <div class="page" id="page-notificaciones">
+            <div class="dash-card" style="margin-bottom:14px"><div class="dash-title">🔔 Recordatorios de Vencimiento</div><div class="dash-sub">Miembros que vencen pronto (solo activos)</div><div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap"><button class="btn-sm" style="background:var(--green);color:#fff" onclick="seleccionarTodos()">✅ Todos</button><button class="btn-sm" style="background:var(--text3);color:#fff" onclick="deseleccionarTodos()">⬜ Ninguno</button><button class="btn-sm whatsapp" onclick="enviarNotificaciones()">📱 Enviar WhatsApp</button></div><div id="notifList"></div></div>
+            <div class="dash-card"><div class="dash-title">📋 Historial</div><div class="dash-sub">Últimos recordatorios enviados</div><div id="historialNotif"></div></div>
+        </div>
+    </div>
 
-function mostrarNotificacion(titulo, cuerpo, opciones = {}) {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  try {
-    // Intentar con Service Worker primero (más confiable, especialmente para apps cerradas)
-    if (navigator.serviceWorker?.controller) {
-      navigator.serviceWorker.ready.then(reg => {
-        reg.showNotification(titulo, {
-          body: cuerpo,
-          icon: ICON_DATA_URL,
-          badge: ICON_DATA_URL,
-          tag: opciones.tag || 'jd-ventas',
-          renotify: true,
-          requireInteraction: opciones.requireInteraction || false,
-          data: opciones.data || {}
-        });
-      }).catch(e => console.error('SW notif error:', e));
-    } else {
-      // Fallback: notificación directa
-      new Notification(titulo, { body: cuerpo, icon: ICON_DATA_URL });
-    }
-  } catch(e) {
-    console.error('Error mostrando notificación:', e);
-  }
-}
+    <div class="modal-overlay" id="modalOverlay" onclick="cerrarModal()"></div>
+    <div class="modal-sheet" id="modalSheet"><div class="modal-handle"></div><div class="modal-header"><div class="modal-icon" id="modalIcon"></div><div><div class="modal-title" id="modalTitle"></div><div class="modal-subtitle" id="modalSubtitle"></div></div></div><div class="modal-body" id="modalBody"></div></div>
+    <div class="toast" id="toast">✅ <span id="toastMsg"></span></div>
 
-function revisarYNotificar() {
-  if (Notification.permission !== 'granted') return;
-  const alertas = obtenerAlertas();
-  if (alertas.length === 0) return;
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyDhAhX_YO9zvsNHsRTvMZbFZBwO99-RpVA",
+            authDomain: "kaizen-app-3cafa.firebaseapp.com",
+            projectId: "kaizen-app-3cafa",
+            storageBucket: "kaizen-app-3cafa.firebasestorage.app",
+            messagingSenderId: "908935621626",
+            appId: "1:908935621626:web:7616b46b642195f61c5243",
+            measurementId: "G-VBDDVZ0R7L"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const _db = firebase.firestore();
+        window._fb = {
+            db: _db,
+            doc: (db, col, id) => db.collection(col).doc(id),
+            setDoc: (ref, data) => ref.set(data),
+            onSnapshot: (ref, cb, err) => ref.onSnapshot(cb, err)
+        };
+    </script>
 
-  // Evitar duplicados: solo notificar una vez al día por cliente
-  const hoy = hoyISO();
-  const ultimasNotifs = JSON.parse(localStorage.getItem('ultimas-notifs') || '{}');
-  const nuevos = alertas.filter(a => ultimasNotifs[a.id] !== hoy);
+    <script>
+        const DEFAULT_USER = 'admin';
+        const DEFAULT_PASS = 'kaizen2024';
+        const MAX_ATTEMPTS = 3;
+        const BLOCK_TIME = 300000;
+        let loginAttempts = 0;
+        let blockUntil = null;
 
-  if (nuevos.length === 0) return;
+        function getStoredUser() { return localStorage.getItem('kaizen-user') || DEFAULT_USER; }
+        function getStoredPassword() { return localStorage.getItem('kaizen-password') || DEFAULT_PASS; }
+        function isLoggedIn() { return sessionStorage.getItem('kaizen-auth') === 'true'; }
 
-  // Agrupar mensajes
-  if (nuevos.length === 1) {
-    const a = nuevos[0];
-    const servicio = SERVICIOS[a.servicio].nombre;
-    let titulo, cuerpo;
-    if (a.tipo === 'vencido') {
-      titulo = `⚠ ${a.nombre} - Membresía vencida`;
-      cuerpo = `${servicio} venció hace ${Math.abs(diasEntre(a.proximoPago))} día(s). Avísale para que renueve.`;
-    } else if (a.tipo === 'hoy') {
-      titulo = `🔔 ${a.nombre} - Vence hoy`;
-      cuerpo = `${servicio} vence hoy. ¡Recuérdale renovar!`;
-    } else {
-      titulo = `⏰ ${a.nombre} - Próximo vencimiento`;
-      cuerpo = `${servicio} vence en ${diasEntre(a.proximoPago)} día(s). Avísale para preparar el pago.`;
-    }
-    mostrarNotificacion(titulo, cuerpo, { tag: 'cliente-' + a.id, requireInteraction: true });
-  } else {
-    const vencidos = nuevos.filter(a => a.tipo === 'vencido').length;
-    const pronto = nuevos.length - vencidos;
-    let cuerpo = '';
-    if (vencidos > 0) cuerpo += `${vencidos} ya venció(eron). `;
-    if (pronto > 0) cuerpo += `${pronto} vence(n) pronto.`;
-    mostrarNotificacion(`🔔 ${nuevos.length} membresías requieren atención`, cuerpo.trim(), { tag: 'resumen-diario', requireInteraction: true });
-  }
+        function login() {
+            const userInput = document.getElementById('loginUser');
+            const passInput = document.getElementById('loginPass');
+            const userError = document.getElementById('loginUserError');
+            const passError = document.getElementById('loginPassError');
+            const attemptsDiv = document.getElementById('loginAttempts');
+            const loginBtn = document.getElementById('loginBtn');
+            userError.textContent = ''; passError.textContent = '';
+            userInput.classList.remove('error'); passInput.classList.remove('error');
 
-  // Marcar como notificadas hoy
-  nuevos.forEach(a => { ultimasNotifs[a.id] = hoy; });
-  localStorage.setItem('ultimas-notifs', JSON.stringify(ultimasNotifs));
-}
-
-function programarRevisionPeriodica() {
-  // Revisar cada hora mientras la app esté abierta
-  if (window.__revisorInterval) clearInterval(window.__revisorInterval);
-  window.__revisorInterval = setInterval(revisarYNotificar, 60 * 60 * 1000);
-
-  // Service Worker hace la revisión en segundo plano
-  if (navigator.serviceWorker?.controller) {
-    navigator.serviceWorker.controller.postMessage({ type: 'programar-revision' });
-  }
-}
-
-async function instalarPWA() {
-  if (!deferredInstallPrompt) {
-    alert('Para instalar la app:\n\n• Android: toca el menú ⋮ del navegador → "Instalar app" o "Agregar a pantalla de inicio"\n\n• iPhone: toca el botón compartir ⎋ → "Agregar a pantalla de inicio"');
-    return;
-  }
-  deferredInstallPrompt.prompt();
-  const { outcome } = await deferredInstallPrompt.userChoice;
-  if (outcome === 'accepted') {
-    deferredInstallPrompt = null;
-    state.pwaInstalable = false;
-    render();
-  }
-}
-
-function cerrarBannerInstalar() {
-  state.mostrarBannerInstalar = false;
-  localStorage.setItem('banner-instalar-cerrado', '1');
-  render();
-}
-
-function cerrarBannerNotif() {
-  state.mostrarBannerNotif = false;
-  localStorage.setItem('banner-notif-cerrado', '1');
-  render();
-}
-
-// Icono SVG embebido como data URL para las notificaciones (badge)
-const ICON_DATA_URL = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="#10b981"/><text x="96" y="135" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="120" font-weight="900" fill="white">$</text></svg>`);
-
-// ============== PERSISTENCIA (localStorage) ==============
-function guardarLocal() {
-  try {
-    localStorage.setItem('pagos-data', JSON.stringify(state.data));
-    localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
-  } catch(e) { console.error(e); }
-}
-function cargarLocal() {
-  try {
-    const d = localStorage.getItem('pagos-data');
-    const p = localStorage.getItem('pagos-mes');
-    if (d) {
-      const guardado = JSON.parse(d);
-      // Merge por servicio: conserva claves nuevas del código aunque no estén en localStorage
-      Object.keys(state.data).forEach(sk => {
-        if (guardado[sk]) {
-          // Asegurar que cada cliente tenga los campos nuevos (migración)
-          const clientes = Array.isArray(guardado[sk].clientes) ? guardado[sk].clientes : [];
-          clientes.forEach(c => {
-            if (c.fechaPago === undefined) c.fechaPago = null;
-            if (c.proximoPago === undefined) c.proximoPago = c.fechaPago ? sumarMes(c.fechaPago) : null;
-          });
-          state.data[sk] = {
-            precioReal: guardado[sk].precioReal || 0,
-            clientes: clientes
-          };
-        }
-      });
-    }
-    if (p) state.pagosMes = JSON.parse(p) || {};
-  } catch(e) { console.error('Error cargando datos:', e); }
-}
-
-// ============== ACCIONES ==============
-function setVista(v) { state.vista = v; render(); }
-function setMes(m) { state.mesActual = m; render(); }
-function toggleExpandido(k) { state.expandido[k] = !state.expandido[k]; render(); }
-
-function iniciarEditarPrecio(k) {
-  state.editandoPrecio = k;
-  state.precioTemp = String(state.data[k].precioReal || '');
-  render();
-  requestAnimationFrame(() => {
-    const inp = document.getElementById('precio-input');
-    if (inp) { inp.focus(); inp.select(); }
-  });
-}
-function guardarPrecio(k) {
-  state.data[k].precioReal = parseFloat(state.precioTemp) || 0;
-  state.editandoPrecio = null;
-  state.precioTemp = '';
-  guardarLocal();
-  render();
-}
-
-function togglePago(sk, cid) {
-  const yaPagado = estaPagado(sk, cid);
-  if (yaPagado) {
-    // Desmarcar: directo sin modal
-    if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
-    state.pagosMes[state.mesActual][sk+':'+cid] = false;
-    guardarLocal();
-    render();
-  } else {
-    // Marcar como pagado: abrir modal de fecha
-    state.modalPago = { servicio: sk, clienteId: cid, fecha: hoyISO() };
-    render();
-  }
-}
-
-function confirmarPago() {
-  if (!state.modalPago) return;
-  const { servicio, clienteId, fecha } = state.modalPago;
-  // Marcar como pagado en el mes
-  if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
-  state.pagosMes[state.mesActual][servicio+':'+clienteId] = true;
-  // Actualizar fecha del cliente
-  const cliente = state.data[servicio].clientes.find(c => c.id === clienteId);
-  if (cliente) {
-    cliente.fechaPago = fecha;
-    cliente.proximoPago = sumarMes(fecha);
-  }
-  state.modalPago = null;
-  guardarLocal();
-  render();
-}
-
-function cancelarModalPago() {
-  state.modalPago = null;
-  render();
-}
-
-function actualizarFechaPago(valor) {
-  if (state.modalPago) state.modalPago.fecha = valor;
-}
-
-function abrirModal(servicio, clienteId) {
-  const cliente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
-  state.formCliente = {
-    nombre: cliente?.nombre || '',
-    pago: cliente?.pago ? String(cliente.pago) : '',
-    tipoPago: cliente?.tipoPago || 'mensual',
-    notas: cliente?.notas || '',
-    fechaPago: cliente?.fechaPago || ''
-  };
-  state.modal = { servicio, clienteId };
-  render();
-}
-function cerrarModal() {
-  state.modal = null;
-  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', fechaPago: '' };
-  render();
-}
-function actualizarForm(campo, valor) {
-  state.formCliente[campo] = valor;
-  // Re-render para tipoPago (cambia visual) y fechaPago (muestra próximo pago calculado)
-  if (campo === 'tipoPago' || campo === 'fechaPago') render();
-}
-
-function guardarCliente() {
-  if (!state.formCliente.nombre.trim()) return;
-  const { servicio, clienteId } = state.modal;
-  const existente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
-  const fechaPago = state.formCliente.fechaPago || null;
-  const nuevo = {
-    id: clienteId || ('c_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
-    nombre: state.formCliente.nombre.trim(),
-    pago: parseFloat(state.formCliente.pago) || 0,
-    tipoPago: state.formCliente.tipoPago,
-    notas: state.formCliente.notas.trim(),
-    fechaPago: fechaPago,
-    proximoPago: fechaPago ? sumarMes(fechaPago) : null,
-    creado: existente?.creado || Date.now()
-  };
-  if (clienteId && existente) {
-    state.data[servicio].clientes = state.data[servicio].clientes.map(c => c.id === clienteId ? nuevo : c);
-  } else {
-    state.data[servicio].clientes.push(nuevo);
-  }
-  guardarLocal();
-  cerrarModal();
-}
-
-function eliminarCliente(servicio, id) {
-  const cliente = state.data[servicio].clientes.find(c => c.id === id);
-  if (!cliente) return;
-  state.confirmar = {
-    titulo: 'Eliminar cliente',
-    mensaje: `¿Seguro que quieres eliminar a "${cliente.nombre}"? Esta acción no se puede deshacer.`,
-    onConfirm: () => {
-      state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
-      // Limpiar pagos asociados en todos los meses
-      Object.keys(state.pagosMes).forEach(mk => {
-        delete state.pagosMes[mk][servicio+':'+id];
-      });
-      guardarLocal();
-      state.confirmar = null;
-      render();
-    }
-  };
-  render();
-}
-
-function exportarDatos() {
-  try {
-    const datos = {
-      version: 1,
-      exportado: new Date().toISOString(),
-      data: state.data,
-      pagosMes: state.pagosMes
-    };
-    const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `jd-ventas-backup-${claveMes(new Date())}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch(e) {
-    console.error('Error exportando:', e);
-    alert('No se pudo exportar el archivo.');
-  }
-}
-
-function importarDatos(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const datos = JSON.parse(e.target.result);
-      if (!datos.data || typeof datos.data !== 'object') throw new Error('Formato inválido');
-      state.confirmar = {
-        titulo: 'Importar datos',
-        mensaje: 'Esto reemplazará TODOS tus datos actuales. ¿Continuar?',
-        onConfirm: () => {
-          Object.keys(state.data).forEach(sk => {
-            if (datos.data[sk]) {
-              state.data[sk] = {
-                precioReal: datos.data[sk].precioReal || 0,
-                clientes: Array.isArray(datos.data[sk].clientes) ? datos.data[sk].clientes : []
-              };
+            if (blockUntil && Date.now() < blockUntil) {
+                const remaining = Math.ceil((blockUntil - Date.now()) / 60000);
+                attemptsDiv.textContent = `⛔ Cuenta bloqueada. Espera ${remaining} minuto(s)`;
+                attemptsDiv.className = 'login-attempts danger'; return;
+            } else if (blockUntil && Date.now() >= blockUntil) {
+                loginAttempts = 0; blockUntil = null; attemptsDiv.textContent = ''; attemptsDiv.className = 'login-attempts';
             }
-          });
-          state.pagosMes = datos.pagosMes || {};
-          guardarLocal();
-          state.confirmar = null;
-          render();
+
+            const user = userInput.value.trim();
+            const pass = passInput.value.trim();
+            if (!user) { userError.textContent = 'Ingresa tu usuario'; userInput.classList.add('error'); return; }
+            if (!pass) { passError.textContent = 'Ingresa la contraseña'; passInput.classList.add('error'); return; }
+
+            if (user === getStoredUser() && pass === getStoredPassword()) {
+                loginAttempts = 0; blockUntil = null;
+                sessionStorage.setItem('kaizen-auth', 'true');
+                document.getElementById('loginContainer').classList.add('hidden');
+                document.getElementById('appContainer').classList.add('show');
+                userInput.value = ''; passInput.value = '';
+                attemptsDiv.textContent = ''; attemptsDiv.className = 'login-attempts';
+                init(); showToast(`✅ Bienvenido, ${getStoredUser()}`);
+            } else {
+                loginAttempts++;
+                const remaining = MAX_ATTEMPTS - loginAttempts;
+                if (user !== getStoredUser()) { userError.textContent = 'Usuario incorrecto'; userInput.classList.add('error'); }
+                if (pass !== getStoredPassword()) { passError.textContent = 'Contraseña incorrecta'; passInput.classList.add('error'); }
+                if (loginAttempts >= MAX_ATTEMPTS) {
+                    blockUntil = Date.now() + BLOCK_TIME;
+                    attemptsDiv.textContent = '⛔ Demasiados intentos. Bloqueado por 5 minutos';
+                    attemptsDiv.className = 'login-attempts danger'; loginBtn.disabled = true;
+                    setTimeout(() => { loginBtn.disabled = false; loginAttempts = 0; blockUntil = null; attemptsDiv.textContent = ''; attemptsDiv.className = 'login-attempts'; }, BLOCK_TIME);
+                } else if (remaining <= 2) {
+                    attemptsDiv.textContent = `⚠️ ${remaining} intento(s) restante(s)`;
+                    attemptsDiv.className = 'login-attempts warning';
+                }
+            }
         }
-      };
-      render();
-    } catch(err) {
-      console.error('Error importando:', err);
-      alert('Archivo inválido. Asegúrate de usar un backup de J.D Ventas.');
-    }
-  };
-  reader.readAsText(file);
-}
 
-// ============== ALERTAS DE VENCIMIENTO ==============
-function obtenerAlertas() {
-  const alertas = [];
-  Object.entries(state.data).forEach(([sk, s]) => {
-    s.clientes.forEach(c => {
-      if (c.tipoPago !== 'mensual' || !c.proximoPago) return;
-      const estado = estadoVencimiento(c.proximoPago);
-      const dias = diasEntre(c.proximoPago);
-      // Solo alertar si NO está marcado como pagado este mes y el vencimiento es relevante
-      const yaPago = estaPagado(sk, c.id);
-      if (estado === 'vencido' && !yaPago) {
-        alertas.push({ servicio: sk, id: c.id, nombre: c.nombre, proximoPago: c.proximoPago, tipo: 'vencido', texto: `Venció hace ${Math.abs(dias)}d`, orden: dias });
-      } else if (estado === 'hoy' && !yaPago) {
-        alertas.push({ servicio: sk, id: c.id, nombre: c.nombre, proximoPago: c.proximoPago, tipo: 'hoy', texto: 'Hoy', orden: 0 });
-      } else if (estado === 'pronto' && !yaPago) {
-        alertas.push({ servicio: sk, id: c.id, nombre: c.nombre, proximoPago: c.proximoPago, tipo: 'pronto', texto: `En ${dias}d`, orden: dias });
-      }
-    });
-  });
-  // Ordenar: más urgentes primero (vencidos arriba)
-  return alertas.sort((a, b) => a.orden - b.orden);
-}
-
-// ============== CÁLCULOS ==============
-function calcularTotalesMes() {
-  let cobrado = 0, costoReal = 0, mensual = 0;
-  Object.entries(state.data).forEach(([sk, s]) => {
-    let huboPagos = false;
-    s.clientes.forEach(c => {
-      if (c.tipoPago === 'mensual') mensual += c.pago;
-      if (estaPagado(sk, c.id)) { cobrado += c.pago; huboPagos = true; }
-    });
-    if (huboPagos) costoReal += s.precioReal;
-  });
-  return { cobrado, costoReal, ganancia: cobrado - costoReal, mensualEsperado: mensual };
-}
-
-function calcularDatosMensuales() {
-  const hoy = new Date();
-  const meses = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-    const key = claveMes(d);
-    const pagos = state.pagosMes[key] || {};
-    let cobrado = 0, costo = 0;
-    Object.entries(state.data).forEach(([sk, s]) => {
-      let hubo = false;
-      s.clientes.forEach(c => {
-        if (pagos[sk+':'+c.id]) { cobrado += c.pago; hubo = true; }
-      });
-      if (hubo) costo += s.precioReal;
-    });
-    meses.push({
-      mes: formatoMesCorto(key),
-      cobrado: Math.round(cobrado*100)/100,
-      costo: Math.round(costo*100)/100,
-      ganancia: Math.round((cobrado-costo)*100)/100
-    });
-  }
-  return meses;
-}
-
-// ============== RENDER ==============
-function render() {
-  const app = document.getElementById('app');
-  app.innerHTML = renderHeader() + (state.vista === 'inicio' ? renderInicio() : renderDashboard()) + renderNav() + renderModal() + renderModalPago() + renderConfirmar();
-  bindEvents();
-}
-
-function renderHeader() {
-  return `
-    <div class="header">
-      <div class="header-top">
-        <div class="logo">$</div>
-        <div style="flex:1">
-          <h1>J.D Ventas</h1>
-          <p>${state.vista === 'inicio' ? 'Control por servicio' : 'Ganancias mes a mes'}</p>
-        </div>
-      </div>
-      ${state.vista === 'inicio' ? renderSelectorMes() : ''}
-    </div>
-  `;
-}
-
-function renderSelectorMes() {
-  const hoy = new Date();
-  const hoyKey = claveMes(hoy);
-  let html = '<div class="meses-scroll">';
-  for (let i = -6; i <= 2; i++) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth()+i, 1);
-    const k = claveMes(d);
-    const esHoy = k === hoyKey;
-    html += `<button class="mes-btn ${k===state.mesActual?'activo':''} ${esHoy?'es-hoy':''}" data-action="setMes" data-mes="${k}">${formatoMes(k)}${esHoy ? ' •' : ''}</button>`;
-  }
-  html += '</div>';
-  // Botón "ir a hoy" si no estamos en el mes actual
-  if (state.mesActual !== hoyKey) {
-    html += `<button class="ir-hoy-btn" data-action="irHoy">↻ Ir a hoy</button>`;
-  }
-  return html;
-}
-
-function renderInicio() {
-  const t = calcularTotalesMes();
-  const alertas = obtenerAlertas();
-  let html = '<div class="fade-in">';
-
-  // Banner para activar notificaciones
-  if (state.mostrarBannerNotif && state.notifPermiso !== 'granted' && 'Notification' in window) {
-    html += `<div class="banner banner-notif">
-      <div class="banner-icon">🔔</div>
-      <div class="banner-texto">
-        <div class="banner-titulo">Activa las notificaciones</div>
-        <div class="banner-sub">Te avisamos cuando una membresía esté por vencer.</div>
-      </div>
-      <div class="banner-acciones">
-        <button class="banner-cerrar" data-action="cerrarBannerNotif">✕</button>
-        <button class="banner-btn" data-action="pedirNotif">Activar</button>
-      </div>
-    </div>`;
-  }
-
-  // Banner para instalar como app
-  const yaInstalada = (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) || localStorage.getItem('pwa-instalada') === '1';
-  if (state.mostrarBannerInstalar && !yaInstalada) {
-    html += `<div class="banner banner-instalar">
-      <div class="banner-icon">📱</div>
-      <div class="banner-texto">
-        <div class="banner-titulo">Instala la app</div>
-        <div class="banner-sub">Acceso rápido y notificaciones en segundo plano.</div>
-      </div>
-      <div class="banner-acciones">
-        <button class="banner-cerrar" data-action="cerrarBannerInstalar">✕</button>
-        <button class="banner-btn" data-action="instalar">Instalar</button>
-      </div>
-    </div>`;
-  }
-
-  html += `
-    <div class="resumen">
-      <div class="resumen-card destacado">
-        <div class="resumen-label" style="color:#10b981">Ganancia del mes</div>
-        <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#06b6d4">Cobrado</div>
-        <div class="resumen-value">${fmt(t.cobrado)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#94a3b8">Costo real</div>
-        <div class="resumen-value">${fmt(t.costoReal)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#a78bfa">Esperado mensual</div>
-        <div class="resumen-value">${fmt(t.mensualEsperado)}</div>
-      </div>
-    </div>
-  `;
-
-  if (alertas.length > 0) {
-    html += `<div class="alertas-container">
-      <div class="alertas-header">
-        <span class="alertas-icon">🔔</span>
-        <span class="alertas-titulo">Vencimientos próximos</span>
-      </div>
-      ${alertas.map(a => `
-        <div class="alerta-row alerta-${a.tipo}" data-action="abrirModal" data-servicio="${a.servicio}" data-cid="${a.id}" style="cursor:pointer">
-          <div class="alerta-info">
-            <div class="alerta-nombre">${esc(a.nombre)}</div>
-            <div class="alerta-sub">${SERVICIOS[a.servicio].nombre} · ${formatoFecha(a.proximoPago)}</div>
-          </div>
-          <div class="alerta-estado">${a.texto}</div>
-        </div>
-      `).join('')}
-    </div>`;
-  }
-
-  html += '<div class="secciones">';
-  Object.entries(SERVICIOS).forEach(([key, info]) => {
-    html += renderSeccion(key, info);
-  });
-  html += '</div><div style="height:120px"></div></div>';
-  return html;
-}
-
-function renderSeccion(key, info) {
-  const s = state.data[key];
-  const cobrado = s.clientes.reduce((sum, c) => sum + (estaPagado(key, c.id) ? c.pago : 0), 0);
-  const ganancia = cobrado - s.precioReal;
-  const pagados = s.clientes.filter(c => estaPagado(key, c.id)).length;
-  const editando = state.editandoPrecio === key;
-  const expandido = state.expandido[key];
-
-  let html = `<div class="seccion">
-    <div class="seccion-header" style="background: linear-gradient(135deg, ${info.color}15, ${info.color}05); ${expandido ? `border-bottom: 1px solid ${info.color}20;` : ''}">
-      <div class="seccion-top" data-action="toggleExp" data-key="${key}" style="cursor:pointer">
-        <span class="chevron-btn" style="font-size:14px">${expandido ? '▼' : '▶'}</span>
-        <div class="seccion-icon" style="background: ${info.gradient}">${info.icon}</div>
-        <div class="seccion-info">
-          <h2>${info.nombre}</h2>
-          <p>${pagados}/${s.clientes.length} pagaron</p>
-        </div>
-        <div class="seccion-ganancia">
-          <div class="label">Ganancia</div>
-          <div class="value" style="color: ${ganancia >= 0 ? info.color : '#ef4444'}">${fmt(ganancia)}</div>
-        </div>
-      </div>
-      <div class="precio-real-row">
-        <span class="label">Precio real (lo que pagas)</span>
-        ${editando ? `
-          <div style="display:flex; gap:6px; align-items:center">
-            <input id="precio-input" type="number" inputmode="decimal" class="precio-input" value="${state.precioTemp}" style="border-color: ${info.color}40" />
-            <button class="save-btn" style="background: ${info.color}" data-action="guardarPrecio" data-key="${key}">✓</button>
-          </div>
-        ` : `
-          <button data-action="iniciarPrecio" data-key="${key}">
-            <span class="monto">${fmt(s.precioReal)}</span>
-            <span style="color:#64748b; font-size:12px">✎</span>
-          </button>
-        `}
-      </div>
-    </div>
-    ${expandido ? `
-      <div class="seccion-body">
-        ${s.clientes.length === 0 ? `<div class="vacio">Sin clientes en ${info.nombre}</div>` :
-          s.clientes.map(c => renderClienteRow(key, c, info.color)).join('')
+        function logout() {
+            if (confirm('¿Cerrar sesión como administrador?')) {
+                sessionStorage.removeItem('kaizen-auth');
+                document.getElementById('appContainer').classList.remove('show');
+                document.getElementById('loginContainer').classList.remove('hidden');
+                showToast('👋 Sesión cerrada');
+            }
         }
-        <button class="add-cliente-btn" style="background: ${info.color}15; color: ${info.color}; border: 1px dashed ${info.color}40" data-action="abrirModal" data-servicio="${key}">
-          + Agregar cliente
-        </button>
-      </div>
-    ` : ''}
-  </div>`;
-  return html;
-}
 
-function renderClienteRow(servicioKey, c, color) {
-  const pagado = estaPagado(servicioKey, c.id);
-  const estado = estadoVencimiento(c.proximoPago);
-  const dias = diasEntre(c.proximoPago);
-  let badgeVenc = '';
-  if (c.proximoPago && c.tipoPago === 'mensual') {
-    if (estado === 'vencido') {
-      badgeVenc = `<span class="badge-venc venc-rojo">⚠ Venció hace ${Math.abs(dias)} día${Math.abs(dias)!==1?'s':''}</span>`;
-    } else if (estado === 'hoy') {
-      badgeVenc = `<span class="badge-venc venc-naranja">🔔 Vence hoy</span>`;
-    } else if (estado === 'pronto') {
-      badgeVenc = `<span class="badge-venc venc-naranja">⏰ Vence en ${dias} día${dias!==1?'s':''}</span>`;
-    } else if (estado === 'ok') {
-      badgeVenc = `<span class="badge-venc venc-ok">📅 ${formatoFecha(c.proximoPago)}</span>`;
-    }
-  }
-  return `
-    <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''} ${(estado === 'vencido' || estado === 'hoy') && !pagado ? 'border-color: rgba(239,68,68,0.4);' : ''}">
-      <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
-        ${pagado ? `<span style="color:${color}">✅</span>` : '<span style="color:#475569">⭕</span>'}
-      </button>
-      <div class="cliente-info">
-        <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
-        <div class="cliente-tags">
-          <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
-          ${badgeVenc}
-        </div>
-        ${c.notas ? `<div class="cliente-notas" style="margin-top:4px">${esc(c.notas)}</div>` : ''}
-      </div>
-      <div class="cliente-pago">
-        <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
-      </div>
-      <div class="cliente-acciones">
-        <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
-        <button class="icon-btn delete" data-action="eliminarCliente" data-servicio="${servicioKey}" data-cid="${c.id}">🗑</button>
-      </div>
-    </div>
-  `;
-}
-
-function renderDashboard() {
-  const datos = calcularDatosMensuales();
-  const conDatos = datos.filter(m => m.cobrado !== 0 || m.costo !== 0);
-  const totalAnual = conDatos.reduce((s,m)=>s+m.ganancia,0);
-  const promedio = conDatos.length > 0 ? totalAnual / conDatos.length : 0;
-  const mejorMes = conDatos.length > 0
-    ? conDatos.reduce((max,m) => m.ganancia > max.ganancia ? m : max, conDatos[0])
-    : null;
-  const mesActual = datos[datos.length-1] || { ganancia: 0, cobrado: 0, costo: 0 };
-  const mesAnt = datos[datos.length-2];
-  let cambio = 0;
-  if (mesAnt && mesAnt.ganancia !== 0) cambio = ((mesActual.ganancia - mesAnt.ganancia) / Math.abs(mesAnt.ganancia)) * 100;
-
-  // Por servicio mes actual
-  const mesK = claveMes(new Date());
-  const pagosM = state.pagosMes[mesK] || {};
-  const porServicio = Object.entries(SERVICIOS).map(([sk, info]) => {
-    const s = state.data[sk];
-    const cob = s.clientes.reduce((sum,c) => sum + (pagosM[sk+':'+c.id] ? c.pago : 0), 0);
-    return { nombre: info.nombre, ganancia: Math.round((cob - s.precioReal)*100)/100, color: info.color };
-  });
-  const maxAbs = Math.max(...porServicio.map(p => Math.abs(p.ganancia)), 1);
-
-  return `<div class="fade-in" style="padding: 16px 20px">
-    <div class="resumen" style="padding: 0; margin-bottom: 20px">
-      <div class="resumen-card destacado">
-        <div class="resumen-label" style="color:#10b981">Total 12 meses</div>
-        <div class="resumen-value" style="color:#10b981">${fmt(totalAnual)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#06b6d4">Promedio mensual</div>
-        <div class="resumen-value">${fmt(promedio)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:${cambio >= 0 ? '#10b981' : '#ef4444'}">Mes actual</div>
-        <div class="resumen-value">${fmt(mesActual?.ganancia || 0)}</div>
-        ${cambio !== 0 ? `<div class="resumen-sub">${cambio >= 0 ? '↑' : '↓'} ${Math.abs(cambio).toFixed(0)}% vs mes anterior</div>` : '<div class="resumen-sub">sin datos previos</div>'}
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#a78bfa">Mejor mes</div>
-        <div class="resumen-value">${mejorMes ? fmt(mejorMes.ganancia) : '—'}</div>
-        ${mejorMes ? `<div class="resumen-sub">${mejorMes.mes}</div>` : ''}
-      </div>
-    </div>
-
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#10b981">📈</span> Ganancia mensual</div>
-      ${renderLineChart(datos)}
-    </div>
-
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#06b6d4">📊</span> Cobrado vs Costo (6 meses)</div>
-      ${renderBarChart(datos.slice(-6))}
-    </div>
-
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#06b6d4">🔔</span> Notificaciones</div>
-      ${state.notifPermiso === 'granted' ? `
-        <div class="notif-status activas">
-          <span style="font-size:18px">✅</span>
-          <div style="flex:1">
-            <div style="font-weight:700; color:#10b981">Activas</div>
-            <div style="font-size:11px; color:#94a3b8">Te avisaremos 3 días antes de cada vencimiento.</div>
-          </div>
-        </div>
-      ` : state.notifPermiso === 'denied' ? `
-        <div class="notif-status denegadas">
-          <span style="font-size:18px">🚫</span>
-          <div style="flex:1">
-            <div style="font-weight:700; color:#ef4444">Bloqueadas</div>
-            <div style="font-size:11px; color:#94a3b8">Actívalas desde Ajustes del navegador.</div>
-          </div>
-        </div>
-      ` : `
-        <div class="notif-status">
-          <span style="font-size:18px">⚪</span>
-          <div style="flex:1">
-            <div style="font-weight:700">Desactivadas</div>
-            <div style="font-size:11px; color:#94a3b8; margin-bottom:8px">Recibe avisos automáticos de vencimientos.</div>
-            <button class="banner-btn" style="background:#06b6d4" data-action="pedirNotif">Activar</button>
-          </div>
-        </div>
-      `}
-    </div>
-
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#a78bfa">📦</span> Por servicio (este mes)</div>
-      ${porServicio.map(s => `
-        <div class="servicio-bar">
-          <div class="servicio-bar-row">
-            <span class="nombre">${s.nombre}</span>
-            <span class="monto" style="color: ${s.ganancia >= 0 ? s.color : '#ef4444'}">${fmt(s.ganancia)}</span>
-          </div>
-          <div class="servicio-bar-bg">
-            <div class="servicio-bar-fill" style="width: ${(Math.abs(s.ganancia)/maxAbs)*100}%; background: linear-gradient(90deg, ${s.ganancia >= 0 ? s.color : '#ef4444'}80, ${s.ganancia >= 0 ? s.color : '#ef4444'})"></div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
-
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#06b6d4">💾</span> Respaldo de datos</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Guarda tus datos en un archivo o restáuralos en otro dispositivo.</p>
-      <div style="display:flex; gap:8px">
-        <button class="backup-btn" data-action="exportar">📤 Exportar</button>
-        <button class="backup-btn" data-action="importar">📥 Importar</button>
-        <input type="file" id="archivo-importar" accept="application/json,.json" style="display:none" onchange="importarDatos(this.files[0]); this.value=''" />
-      </div>
-    </div>
-  </div>`;
-}
-
-function renderLineChart(datos) {
-  const W = 320, H = 200, padL = 40, padR = 10, padT = 10, padB = 30;
-  const cw = W - padL - padR, ch = H - padT - padB;
-  const valores = datos.map(d => d.ganancia);
-  let minV = Math.min(...valores, 0);
-  let maxV = Math.max(...valores, 0);
-  if (minV === maxV) { maxV = minV + 100; }
-  const rango = maxV - minV;
-  const xStep = cw / (datos.length - 1 || 1);
-
-  const px = i => padL + i * xStep;
-  const py = v => padT + ch - ((v - minV) / rango) * ch;
-
-  // Líneas grid
-  let grid = '';
-  for (let i = 0; i <= 4; i++) {
-    const y = padT + (ch / 4) * i;
-    const val = maxV - (rango / 4) * i;
-    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
-    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
-  }
-
-  // Línea cero
-  if (minV < 0 && maxV > 0) {
-    const y0 = py(0);
-    grid += `<line x1="${padL}" y1="${y0}" x2="${W-padR}" y2="${y0}" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>`;
-  }
-
-  // Path
-  const pathD = datos.map((d, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(d.ganancia)}`).join(' ');
-
-  // Área debajo
-  const areaD = pathD + ` L ${px(datos.length-1)} ${padT+ch} L ${px(0)} ${padT+ch} Z`;
-
-  // Puntos y labels X
-  let puntos = '', labelsX = '';
-  datos.forEach((d, i) => {
-    puntos += `<circle cx="${px(i)}" cy="${py(d.ganancia)}" r="3.5" fill="#10b981" stroke="#0a0e1a" stroke-width="2"/>`;
-    if (i % 2 === 0 || i === datos.length - 1) {
-      labelsX += `<text x="${px(i)}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
-    }
-  });
-
-  return `<div class="chart-container">
-    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
-          <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      ${grid}
-      <path d="${areaD}" fill="url(#areaGrad)"/>
-      <path d="${pathD}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      ${puntos}
-      ${labelsX}
-    </svg>
-  </div>`;
-}
-
-function renderBarChart(datos) {
-  const W = 320, H = 200, padL = 40, padR = 10, padT = 10, padB = 30;
-  const cw = W - padL - padR, ch = H - padT - padB;
-  const maxV = Math.max(...datos.flatMap(d => [d.cobrado, d.costo]), 1);
-  const groupW = cw / datos.length;
-  const barW = groupW * 0.35;
-  const gap = groupW * 0.05;
-
-  let grid = '';
-  for (let i = 0; i <= 4; i++) {
-    const y = padT + (ch / 4) * i;
-    const val = maxV - (maxV / 4) * i;
-    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
-    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
-  }
-
-  let bars = '', labelsX = '';
-  datos.forEach((d, i) => {
-    const gx = padL + i * groupW + groupW * 0.1;
-    const hCob = (d.cobrado / maxV) * ch;
-    const hCos = (d.costo / maxV) * ch;
-    bars += `<rect x="${gx}" y="${padT+ch-hCob}" width="${barW}" height="${hCob}" fill="#06b6d4" rx="3"/>`;
-    bars += `<rect x="${gx+barW+gap}" y="${padT+ch-hCos}" width="${barW}" height="${hCos}" fill="#64748b" rx="3"/>`;
-    labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
-  });
-
-  return `<div class="chart-container">
-    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-      ${grid}
-      ${bars}
-      ${labelsX}
-    </svg>
-    <div style="display:flex; gap:16px; justify-content:center; margin-top:8px; font-size:11px">
-      <span style="display:flex; align-items:center; gap:4px"><span style="width:10px; height:10px; background:#06b6d4; border-radius:2px; display:inline-block"></span> Cobrado</span>
-      <span style="display:flex; align-items:center; gap:4px"><span style="width:10px; height:10px; background:#64748b; border-radius:2px; display:inline-block"></span> Costo</span>
-    </div>
-  </div>`;
-}
-
-function renderNav() {
-  return `<div class="nav-bottom">
-    <button class="nav-btn ${state.vista === 'inicio' ? 'activo' : ''}" data-action="setVista" data-vista="inicio">
-      <span class="icon">🏠</span> Inicio
-    </button>
-    <button class="nav-btn ${state.vista === 'dashboard' ? 'activo' : ''}" data-action="setVista" data-vista="dashboard">
-      <span class="icon">📊</span> Dashboard
-    </button>
-  </div>`;
-}
-
-function renderModal() {
-  if (!state.modal) return '';
-  const info = SERVICIOS[state.modal.servicio];
-  const f = state.formCliente;
-  return `<div class="modal-overlay" data-action="cerrarModal">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3>${state.modal.clienteId ? 'Editar' : 'Nuevo'} cliente</h3>
-        <button class="close-btn" data-action="cerrarModal">✕</button>
-      </div>
-      <div class="modal-subtitle" style="color:${info.color}">${info.nombre}</div>
-
-      <div class="campo">
-        <div class="campo-label"><label>Nombre del cliente <span class="required">*</span></label></div>
-        <input class="input" type="text" value="${esc(f.nombre)}" placeholder="Ej. Juan Pérez" oninput="actualizarForm('nombre', this.value); document.getElementById('btn-guardar').disabled = !this.value.trim()" />
-      </div>
-
-      <div class="campo">
-        <div class="campo-label"><label>¿Cuánto paga? ($)</label><span class="hint">Lo que te paga</span></div>
-        <input class="input" type="number" inputmode="decimal" value="${esc(f.pago)}" placeholder="0.00" oninput="actualizarForm('pago', this.value)" />
-      </div>
-
-      <div class="campo">
-        <div class="campo-label"><label>Tipo de pago</label></div>
-        <div class="tipo-pago-grid">
-          <button class="tipo-btn ${f.tipoPago === 'mensual' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="mensual">Mensual</button>
-          <button class="tipo-btn ${f.tipoPago === 'unico' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="unico">Pago único</button>
-        </div>
-      </div>
-
-      <div class="campo">
-        <div class="campo-label"><label>Fecha del último pago</label><span class="hint">Para calcular vencimiento</span></div>
-        <input class="input" type="date" value="${esc(f.fechaPago)}" oninput="actualizarForm('fechaPago', this.value)" />
-        ${f.fechaPago ? `<div style="font-size:11px; color:#10b981; margin-top:6px">Próximo pago: ${formatoFecha(sumarMes(f.fechaPago))}</div>` : ''}
-      </div>
-
-      <div class="campo">
-        <div class="campo-label"><label>Notas (opcional)</label></div>
-        <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Detalles, etc." oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
-      </div>
-
-      <button id="btn-guardar" class="guardar-btn" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarCliente">
-        ✓ ${state.modal.clienteId ? 'Guardar cambios' : 'Agregar cliente'}
-      </button>
-    </div>
-  </div>`;
-}
-
-function renderModalPago() {
-  if (!state.modalPago) return '';
-  const { servicio, clienteId, fecha } = state.modalPago;
-  const cliente = state.data[servicio]?.clientes.find(c => c.id === clienteId);
-  if (!cliente) return '';
-  const info = SERVICIOS[servicio];
-  const proxima = sumarMes(fecha);
-  return `<div class="modal-overlay" data-action="cancelarModalPago">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Registrar pago</h3>
-        <button class="close-btn" data-action="cancelarModalPago">✕</button>
-      </div>
-      <div class="modal-subtitle" style="color:${info.color}">${esc(cliente.nombre)} · ${info.nombre}</div>
-
-      <div class="campo">
-        <div class="campo-label"><label>Fecha de pago <span class="required">*</span></label></div>
-        <input class="input" type="date" value="${esc(fecha)}" oninput="actualizarFechaPago(this.value)" />
-      </div>
-
-      <div class="info-proximo">
-        <div style="font-size:13px; color:#94a3b8; margin-bottom:4px">Próximo pago:</div>
-        <div style="font-size:18px; font-weight:700; color:#10b981">${formatoFecha(proxima)}</div>
-        <div style="font-size:11px; color:#64748b; margin-top:4px">Se te recordará 3 días antes.</div>
-      </div>
-
-      <button class="guardar-btn" data-action="confirmarPago" style="margin-top:16px">
-        ✓ Confirmar pago
-      </button>
-    </div>
-  </div>`;
-}
-
-function renderConfirmar() {
-  if (!state.confirmar) return '';
-  const c = state.confirmar;
-  return `<div class="modal-overlay" data-action="cancelarConfirmar" style="align-items:center; padding: 20px">
-    <div class="confirmar-box" onclick="event.stopPropagation()">
-      <div class="confirmar-icon">⚠️</div>
-      <h3 class="confirmar-titulo">${esc(c.titulo)}</h3>
-      <p class="confirmar-mensaje">${esc(c.mensaje)}</p>
-      <div class="confirmar-botones">
-        <button class="btn-cancelar" data-action="cancelarConfirmar">Cancelar</button>
-        <button class="btn-confirmar" data-action="aceptarConfirmar">Eliminar</button>
-      </div>
-    </div>
-  </div>`;
-}
-
-// ============== EVENTOS ==============
-function bindEvents() {
-  document.querySelectorAll('[data-action]').forEach(el => {
-    el.addEventListener('click', handleClick);
-  });
-  const pi = document.getElementById('precio-input');
-  if (pi) {
-    pi.addEventListener('input', e => { state.precioTemp = e.target.value; });
-    pi.addEventListener('keydown', e => {
-      if (e.key === 'Enter') guardarPrecio(state.editandoPrecio);
-    });
-  }
-}
-
-function handleClick(e) {
-  const action = e.currentTarget.dataset.action;
-  const d = e.currentTarget.dataset;
-  switch(action) {
-    case 'setVista': setVista(d.vista); break;
-    case 'setMes': setMes(d.mes); break;
-    case 'toggleExp': toggleExpandido(d.key); break;
-    case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
-    case 'guardarPrecio': guardarPrecio(d.key); break;
-    case 'togglePago': togglePago(d.servicio, d.cid); break;
-    case 'abrirModal': abrirModal(d.servicio, d.cid); break;
-    case 'cerrarModal':
-      // Cierra si se clickea el overlay o el botón X (no si se clickea contenido del modal)
-      if (e.currentTarget.classList.contains('modal-overlay')) {
-        if (e.target === e.currentTarget) cerrarModal();
-      } else {
-        cerrarModal();
-      }
-      break;
-    case 'setTipoPago': actualizarForm('tipoPago', d.tipo); break;
-    case 'guardarCliente': guardarCliente(); break;
-    case 'eliminarCliente':
-      e.stopPropagation();
-      eliminarCliente(d.servicio, d.cid);
-      break;
-    case 'cancelarConfirmar':
-      // Cierra si se clickea el overlay o el botón cancelar
-      if (e.currentTarget.classList.contains('modal-overlay')) {
-        if (e.target === e.currentTarget) {
-          state.confirmar = null;
-          render();
+        function abrirCambioPassword() {
+            document.getElementById('changePasswordModal').classList.add('show');
+            ['currentPass','newPass','confirmPass','newUsername'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).value = ''; });
+            ['currentPassError','newPassError','confirmPassError'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).textContent = ''; });
         }
-      } else {
-        state.confirmar = null;
-        render();
-      }
-      break;
-    case 'aceptarConfirmar':
-      if (state.confirmar?.onConfirm) state.confirmar.onConfirm();
-      break;
-    case 'cancelarModalPago':
-      // Cerrar si overlay o botón X
-      if (e.currentTarget.classList.contains('modal-overlay')) {
-        if (e.target === e.currentTarget) cancelarModalPago();
-      } else {
-        cancelarModalPago();
-      }
-      break;
-    case 'confirmarPago':
-      confirmarPago();
-      break;
-    case 'pedirNotif':
-      pedirPermisoNotificaciones();
-      break;
-    case 'cerrarBannerNotif':
-      cerrarBannerNotif();
-      break;
-    case 'cerrarBannerInstalar':
-      cerrarBannerInstalar();
-      break;
-    case 'instalar':
-      instalarPWA();
-      break;
-    case 'irHoy':
-      state.mesActual = claveMes(new Date());
-      render();
-      break;
-    case 'exportar':
-      exportarDatos();
-      break;
-    case 'importar':
-      document.getElementById('archivo-importar')?.click();
-      break;
-  }
-}
+        function cerrarCambioPassword() { document.getElementById('changePasswordModal').classList.remove('show'); }
 
-// ============== INIT ==============
-cargarLocal();
-inicializarNotificaciones();
-render();
+        function cambiarCredenciales() {
+            const currentPass = document.getElementById('currentPass').value.trim();
+            const newUsername = document.getElementById('newUsername').value.trim();
+            const newPass = document.getElementById('newPass').value.trim();
+            const confirmPass = document.getElementById('confirmPass').value.trim();
+            let hasError = false;
+            ['currentPassError','newPassError','confirmPassError'].forEach(id => { if(document.getElementById(id)) document.getElementById(id).textContent = ''; });
 
-// Registrar Service Worker para notificaciones en segundo plano
-if ('serviceWorker' in navigator) {
-  const swCode = `
-    const REVISION_INTERVAL = 6 * 60 * 60 * 1000; // 6 horas
-    let revisionTimer = null;
+            if (!currentPass) { document.getElementById('currentPassError').textContent = 'Ingresa tu contraseña actual'; hasError = true; }
+            else if (currentPass !== getStoredPassword()) { document.getElementById('currentPassError').textContent = 'Contraseña actual incorrecta'; hasError = true; }
+            if (newPass && newPass.length < 6) { document.getElementById('newPassError').textContent = 'Mínimo 6 caracteres'; hasError = true; }
+            if (newPass && newPass !== confirmPass) { document.getElementById('confirmPassError').textContent = 'Las contraseñas no coinciden'; hasError = true; }
+            if (hasError) return;
 
-    self.addEventListener('install', (e) => {
-      self.skipWaiting();
-    });
+            if (newUsername) localStorage.setItem('kaizen-user', newUsername);
+            if (newPass) localStorage.setItem('kaizen-password', newPass);
 
-    self.addEventListener('activate', (e) => {
-      e.waitUntil(clients.claim());
-      programarRevision();
-    });
-
-    self.addEventListener('message', (e) => {
-      if (e.data?.type === 'programar-revision') programarRevision();
-    });
-
-    self.addEventListener('notificationclick', (e) => {
-      e.notification.close();
-      e.waitUntil(
-        clients.matchAll({ type: 'window' }).then(clientList => {
-          for (const c of clientList) {
-            if ('focus' in c) return c.focus();
-          }
-          if (clients.openWindow) return clients.openWindow('/');
-        })
-      );
-    });
-
-    function programarRevision() {
-      if (revisionTimer) clearTimeout(revisionTimer);
-      revisionTimer = setTimeout(revisarVencimientos, REVISION_INTERVAL);
-    }
-
-    async function revisarVencimientos() {
-      // El SW no tiene acceso directo a localStorage, así que pide datos al cliente
-      const clientList = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-      if (clientList.length > 0) {
-        // Si hay ventana abierta, ella misma revisa
-        programarRevision();
-        return;
-      }
-      // Sin ventana: intentar usar Background Sync si está disponible
-      programarRevision();
-    }
-
-    // Periodic Background Sync (Chrome Android, requiere permiso especial)
-    self.addEventListener('periodicsync', (e) => {
-      if (e.tag === 'revisar-vencimientos') {
-        e.waitUntil(revisarVencimientos());
-      }
-    });
-  `;
-
-  const swBlob = new Blob([swCode], { type: 'application/javascript' });
-  const swUrl = URL.createObjectURL(swBlob);
-
-  navigator.serviceWorker.register(swUrl, { scope: './' }).then(reg => {
-    console.log('Service Worker registrado');
-    // Intentar registrar periodic sync si el navegador lo soporta
-    if ('periodicSync' in reg) {
-      navigator.permissions.query({ name: 'periodic-background-sync' }).then(status => {
-        if (status.state === 'granted') {
-          reg.periodicSync.register('revisar-vencimientos', {
-            minInterval: 6 * 60 * 60 * 1000 // 6 horas
-          }).catch(e => console.log('Periodic sync no disponible:', e.message));
+            cerrarCambioPassword();
+            const cambios = [];
+            if (newUsername) cambios.push('usuario');
+            if (newPass) cambios.push('contraseña');
+            showToast(`✅ ${cambios.length ? cambios.join(' y ') + ' actualizado' + (cambios.length > 1 ? 's' : '') : 'Sin cambios'} exitosamente`);
         }
-      }).catch(() => {});
-    }
-  }).catch(e => console.log('SW no registrado:', e.message));
-}
 
-// Cuando la app gana el foco, revisar vencimientos
-window.addEventListener('focus', () => {
-  if (state.notifPermiso === 'granted') {
-    setTimeout(revisarYNotificar, 1000);
-  }
-});
+        window.addEventListener('DOMContentLoaded', () => {
+            if (isLoggedIn()) {
+                document.getElementById('loginContainer').classList.add('hidden');
+                document.getElementById('appContainer').classList.add('show');
+                init();
+            }
+            document.querySelectorAll('input, textarea, select').forEach(input => {
+                input.addEventListener('focus', () => document.body.classList.add('sticky-off'));
+                input.addEventListener('blur', () => document.body.classList.remove('sticky-off'));
+            });
+        });
 
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && state.notifPermiso === 'granted') {
-    setTimeout(revisarYNotificar, 1000);
-  }
-});
 
-// Revisar al iniciar si las notificaciones están activadas
-if (state.notifPermiso === 'granted') {
-  setTimeout(() => {
-    revisarYNotificar();
-    programarRevisionPeriodica();
-  }, 2000);
-}
+        const PLANES = { 
+            'Día': { precio: 50, dias: 1, tipo: 'dias' }, 
+            'Semana': { precio: 150, dias: 7, tipo: 'dias' }, 
+            'Mes': { precio: 500, dias: 1, tipo: 'meses' },
+            'Pareja': { precio: 900, dias: 1, tipo: 'meses' }
+        };
+        let planSeleccionado = 'Mes', precioSeleccionado = 500, diasSeleccionados = 1, tipoSeleccionado = 'meses';
+        let miembros = [], gastos = [], historialNotificaciones = [], gananciasChart = null, filtroActual = 'todos';
 
-// Tecla Escape cierra modales
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    if (state.confirmar) { state.confirmar = null; render(); }
-    else if (state.modalPago) { cancelarModalPago(); }
-    else if (state.modal) { cerrarModal(); }
-    else if (state.editandoPrecio) { state.editandoPrecio = null; state.precioTemp = ''; render(); }
-  }
-});
+        function cargarDatos() { 
+            try { 
+                const rawM = localStorage.getItem('kaizen-miembros'); if (rawM) { const p = JSON.parse(rawM); if (Array.isArray(p)) miembros = p; } 
+                const rawG = localStorage.getItem('kaizen-gastos'); if (rawG) { const p = JSON.parse(rawG); if (Array.isArray(p)) gastos = p; } 
+                const rawH = localStorage.getItem('kaizen-notif-historial'); if (rawH) { const p = JSON.parse(rawH); if (Array.isArray(p)) historialNotificaciones = p; } 
+            } catch (e) { 
+                miembros = []; gastos = []; historialNotificaciones = [];
+                showToast('⚠️ Datos corruptos. Se han reiniciado.');
+            } 
+        }
 
-// Exponer funciones que se llaman desde atributos inline (oninput, onchange)
-window.actualizarForm = actualizarForm;
-window.actualizarFechaPago = actualizarFechaPago;
-window.importarDatos = importarDatos;
-</script>
+        function hoy() { return new Date().toISOString().split('T')[0]; }
+        function normalizarTexto(s) { return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); }
+
+        function sumarDias(fecha, dias) { 
+            if (!fecha) return ''; 
+            const partes = fecha.split('-'); 
+            const dt = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]), 12, 0, 0); 
+            if (isNaN(dt.getTime())) return ''; 
+            dt.setDate(dt.getDate() + dias - 1);
+            const y = dt.getFullYear(); const m = String(dt.getMonth() + 1).padStart(2, '0'); const d = String(dt.getDate()).padStart(2, '0'); 
+            return y + '-' + m + '-' + d; 
+        }
+
+        function sumarMeses(fecha, meses) {
+            if (!fecha) return '';
+            const partes = fecha.split('-');
+            const dt = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]), 12, 0, 0);
+            if (isNaN(dt.getTime())) return '';
+            dt.setMonth(dt.getMonth() + meses);
+            dt.setDate(dt.getDate() - 1);
+            const y = dt.getFullYear(); const m = String(dt.getMonth() + 1).padStart(2, '0'); const d = String(dt.getDate()).padStart(2, '0');
+            return y + '-' + m + '-' + d;
+        }
+
+        function calcularVencimiento(fecha, plan) {
+            const datosPlan = PLANES[plan];
+            if (!datosPlan) return '';
+            if (datosPlan.tipo === 'meses') return sumarMeses(fecha, datosPlan.dias);
+            else return sumarDias(fecha, datosPlan.dias);
+        }
+
+        function fmtFecha(f) { if (!f) return '--'; const [y, m, d] = f.split('-'); return d + '/' + m + '/' + y; }
+        function fmtMonto(n) { return '$' + Number(n).toLocaleString('es-MX'); }
+
+        function diasRestantes(fecha) { 
+            if (!fecha) return null; 
+            const hoyDate = new Date(); const partes = fecha.split('-'); 
+            const vencDate = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]), 12, 0, 0); 
+            const hoySinHora = new Date(hoyDate.getFullYear(), hoyDate.getMonth(), hoyDate.getDate(), 12, 0, 0); 
+            const diff = Math.round((vencDate - hoySinHora) / (1000 * 60 * 60 * 24)); 
+            return isNaN(diff) ? null : diff; 
+        }
+
+        function esc(str) { if (!str) return ''; return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function showToast(msg) { const t = document.getElementById('toast'); document.getElementById('toastMsg').textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2500); }
+        function setErr(id, msg) { const el = document.getElementById(id); if (el) el.classList.add('err'); const em = document.getElementById('err-' + id); if (em) em.textContent = msg; }
+        function clearErr(id) { const el = document.getElementById(id); if (el) el.classList.remove('err'); const em = document.getElementById('err-' + id); if (em) em.textContent = ''; }
+
+        function showTab(name, btn) { 
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('page-' + name).classList.add('active'); 
+            if (btn) btn.classList.add('active'); 
+            if (name === 'miembros') renderMiembros(); 
+            if (name === 'gastos') renderGastos(); 
+            if (name === 'notificaciones') renderNotificaciones(); 
+            if (name === 'dashboard') { actualizarDashboard(); setTimeout(() => actualizarGraficoGanancias(), 150); } 
+        }
+
+        function seleccionarPlan(card) { 
+            document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected')); 
+            card.classList.add('selected'); 
+            planSeleccionado = card.dataset.plan; 
+            precioSeleccionado = parseInt(card.dataset.precio); 
+            diasSeleccionados = parseInt(card.dataset.dias); 
+            tipoSeleccionado = card.dataset.tipo;
+            document.getElementById('precioPreview').textContent = '$' + precioSeleccionado + ' MXN';
+            // Teléfono opcional para plan Día
+            const label = document.getElementById('telefonoLabel');
+            const hint = document.getElementById('telefonoHint');
+            if (planSeleccionado === 'Día') {
+                if (label) label.innerHTML = '📱 Teléfono <span style="color:var(--text3);font-weight:400">(opcional)</span>';
+                if (hint) hint.textContent = 'No es necesario para plan Día';
+            } else {
+                if (label) label.innerHTML = '📱 Teléfono (WhatsApp)';
+                if (hint) hint.textContent = 'Incluye código de país: 52 + número';
+            }
+            actualizarVencimiento(); 
+        }
+
+        function actualizarVencimiento() { 
+            const inicio = document.getElementById('m-inicio'); 
+            if (!inicio || !inicio.value) return;
+            const diasUsadosInput = document.getElementById('m-dias-usados');
+            let diasUsados = parseInt(diasUsadosInput?.value || 0) || 0;
+
+            // Calcular límite real de días según plan y mes calendario
+            let limiteMax = 0;
+            if (planSeleccionado === 'Día') limiteMax = 0;
+            else if (planSeleccionado === 'Semana') limiteMax = 6;
+            else if (planSeleccionado === 'Mes' || planSeleccionado === 'Pareja') {
+                // Días reales del mes de inicio
+                const partes = inicio.value.split('-');
+                const anio = Number(partes[0]), mes = Number(partes[1]);
+                limiteMax = new Date(anio, mes, 0).getDate() - 1; // días del mes - 1
+            }
+            if (diasUsadosInput) diasUsadosInput.max = limiteMax;
+            if (diasUsados > limiteMax) { diasUsados = limiteMax; if(diasUsadosInput) diasUsadosInput.value = limiteMax; }
+
+            const resultado = calcularVencimiento(inicio.value, planSeleccionado);
+            if (resultado) {
+                if (diasUsados > 0) {
+                    const partes = resultado.split('-');
+                    const fechaVenc = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]), 12, 0, 0);
+                    fechaVenc.setDate(fechaVenc.getDate() - diasUsados);
+                    document.getElementById('m-vencimiento').value = fechaVenc.toISOString().split('T')[0];
+                } else {
+                    document.getElementById('m-vencimiento').value = resultado;
+                }
+            } else { document.getElementById('m-vencimiento').value = ''; showToast('⚠️ Fecha de inicio inválida'); }
+        }
+
+        function registrarMiembro() { 
+            ['m-nombre', 'm-telefono', 'm-inicio'].forEach(clearErr); 
+            const nombre = document.getElementById('m-nombre').value.trim(); 
+            const telefono = document.getElementById('m-telefono').value.trim(); 
+            const inicio = document.getElementById('m-inicio').value; 
+            const vencimiento = document.getElementById('m-vencimiento').value; 
+            let ok = true; 
+            if (!nombre) { setErr('m-nombre', 'Campo requerido'); ok = false; } 
+            if (!telefono && planSeleccionado !== 'Día') { setErr('m-telefono', 'Teléfono requerido'); ok = false; } 
+            if (!inicio) { setErr('m-inicio', 'Fecha requerida'); ok = false; } 
+            if (!vencimiento) { setErr('m-inicio', 'Fecha inválida o no calculada'); ok = false; } 
+            if (!ok) return; 
+            const ahoraMiembro = Date.now();
+            miembros.push({ id: ahoraMiembro, nombre, telefono, plan: planSeleccionado, precio: precioSeleccionado, inicio, vencimiento, activo: true, diasPausados: 0, fechaPausa: null, pagos: [{ id: ahoraMiembro + 1, fecha: inicio, monto: precioSeleccionado, plan: planSeleccionado }] });
+            guardarMiembros(); 
+            document.getElementById('m-nombre').value = ''; 
+            document.getElementById('m-telefono').value = ''; 
+            document.getElementById('m-inicio').value = hoy();
+            document.getElementById('m-dias-usados').value = '0';
+            actualizarVencimiento(); actualizarTodo(); showToast('✅ Miembro registrado: ' + nombre);
+            showTab('miembros', document.querySelector('.tab-btn[data-tab="miembros"]')); 
+        }
+
+        let _fbSyncTimer = null;
+        let _fbBloqueado = false;
+        function syncFirebase() {
+            if (!window._fb || _fbBloqueado) return;
+            clearTimeout(_fbSyncTimer);
+            _fbSyncTimer = setTimeout(() => {
+                try {
+                    const { db, doc, setDoc } = window._fb;
+                    setDoc(doc(db, 'kaizen', 'datos'), {
+                        miembros: miembros,
+                        gastos: gastos,
+                        historialNotificaciones: historialNotificaciones,
+                        capitalInicial: getCapitalInicial(),
+                        updatedAt: new Date().toISOString()
+                    }).catch(e => console.warn('FB sync error:', e));
+                } catch (e) { console.warn('FB sync error:', e); }
+            }, 500);
+        }
+
+        function guardarMiembros() { localStorage.setItem('kaizen-miembros', JSON.stringify(miembros)); syncFirebase(); }
+        function guardarGastos() { localStorage.setItem('kaizen-gastos', JSON.stringify(gastos)); syncFirebase(); }
+        function guardarHistorial() { localStorage.setItem('kaizen-notif-historial', JSON.stringify(historialNotificaciones)); syncFirebase(); }
+
+        function suscribirFirebase() {
+            if (!window._fb) { setTimeout(suscribirFirebase, 500); return; }
+            try {
+                const { db, doc, onSnapshot } = window._fb;
+                onSnapshot(doc(db, 'kaizen', 'datos'), (snap) => {
+                    if (!snap.exists) return;
+                    const data = snap.data();
+                    _fbBloqueado = true;
+                    try {
+                        if (Array.isArray(data.miembros)) { miembros = data.miembros; localStorage.setItem('kaizen-miembros', JSON.stringify(miembros)); }
+                        if (Array.isArray(data.gastos)) { gastos = data.gastos; localStorage.setItem('kaizen-gastos', JSON.stringify(gastos)); }
+                        if (Array.isArray(data.historialNotificaciones)) { historialNotificaciones = data.historialNotificaciones; localStorage.setItem('kaizen-notif-historial', JSON.stringify(historialNotificaciones)); }
+                        if (data.capitalInicial !== undefined) { localStorage.setItem('kaizen-capital-inicial', data.capitalInicial); }
+                        actualizarTodo();
+                    } finally {
+                        _fbBloqueado = false;
+                    }
+                }, (err) => console.warn('FB subscribe error:', err));
+            } catch (e) { console.warn('FB subscribe error:', e); }
+        }
+
+        function togglePausaMiembro(id) { 
+            const m = miembros.find(mb => mb.id === id); if (!m) return; 
+            if (m.activo === true) { 
+                const diasRest = diasRestantes(m.vencimiento); const diasAGuardar = (diasRest !== null && diasRest > 0) ? diasRest : 0;
+                m.diasPausados = diasAGuardar; m.activo = false; m.fechaPausa = hoy(); guardarMiembros(); actualizarTodo();
+                showToast('⏸️ Membresía pausada: ' + m.nombre + ' (' + diasAGuardar + ' días guardados)'); 
+            } else if (m.activo === false) { 
+                const diasGuardados = m.diasPausados || 0; 
+                m.activo = true; m.inicio = hoy(); 
+                // Bug 2 fix: si no hay días guardados, dar al menos 1 día de gracia
+                m.vencimiento = diasGuardados > 0 ? sumarDias(hoy(), diasGuardados) : hoy();
+                m.diasPausados = 0; m.fechaPausa = null; guardarMiembros(); actualizarTodo();
+                showToast('▶️ Membresía reactivada: ' + m.nombre + (diasGuardados > 0 ? ' (vence en ' + diasGuardados + ' días)' : ' (sin días restantes, renueva pronto)')); 
+            } 
+        }
+
+        function cambiarFiltro(filtro, btn) { 
+            filtroActual = filtro; document.querySelectorAll('.filtro-btn').forEach(b => b.classList.remove('active')); 
+            if (btn) btn.classList.add('active'); renderMiembros(); 
+        }
+
+        function getMiembrosFiltrados() { 
+            let todos = [...miembros]; 
+            switch (filtroActual) { 
+                case 'activos': return todos.filter(m => m.activo === true); 
+                case 'pausados': return todos.filter(m => m.activo === false); 
+                case 'vencidos': return todos.filter(m => m.activo === true && diasRestantes(m.vencimiento) !== null && diasRestantes(m.vencimiento) < 0); 
+                default: return todos; 
+            } 
+        }
+
+        function registrarPago(id) { 
+            const m = miembros.find(mb => mb.id === id); if (!m || m.activo === false) { if (m && m.activo === false) showToast('⚠️ Este miembro está pausado. Reactívalo primero.'); return; } 
+            const confirmar = confirm('💳 Registrar pago para ' + m.nombre + '\n\nPlan: ' + m.plan + ' ($' + m.precio + ')\nVence: ' + fmtFecha(m.vencimiento) + '\n\n¿Confirmar pago de $' + m.precio + '?'); 
+            if (!confirmar) return; if (!PLANES[m.plan]) { showToast('⚠️ Plan "' + m.plan + '" no reconocido.'); return; }
+            // Bug 3 fix: sumar días desde vencimiento anterior si no ha vencido, desde hoy si ya venció
+            const base = (m.vencimiento && diasRestantes(m.vencimiento) >= 0) ? m.vencimiento : hoy();
+            if (!m.pagos) m.pagos = [];
+            m.pagos.push({ id: Date.now(), fecha: hoy(), monto: m.precio, plan: m.plan }); 
+            m.vencimiento = calcularVencimiento(base, m.plan);
+            m.activo = true; guardarMiembros(); actualizarTodo(); showToast('💰 Pago registrado: ' + m.nombre + ' · $' + m.precio); 
+        }
+
+        function renovarMiembro(id) { 
+            const m = miembros.find(mb => mb.id === id); if (!m) return; 
+            if (m.activo === false) { if (!confirm('⚠️ ' + m.nombre + ' tiene la membresía pausada.\n\n¿Deseas reactivarla y renovarla?')) return; }
+            // Bug 3 fix: usar modal en lugar de prompt()
+            document.getElementById('renovarNombre').textContent = m.nombre;
+            document.querySelectorAll('.renovar-plan-card').forEach(c => {
+                c.classList.remove('selected');
+                if (c.dataset.plan === m.plan) c.classList.add('selected');
+            });
+            document.getElementById('renovarPlanSeleccionado').value = m.plan;
+            document.getElementById('renovarModal').dataset.miembroId = id;
+            document.getElementById('renovarModal').classList.add('show');
+        }
+
+        function confirmarRenovacion() {
+            const id = parseInt(document.getElementById('renovarModal').dataset.miembroId);
+            const planValido = document.getElementById('renovarPlanSeleccionado').value;
+            const m = miembros.find(mb => mb.id === id);
+            // Bug 2 fix: validar que haya un plan seleccionado
+            if (!m) { showToast('⚠️ Error: miembro no encontrado'); cerrarRenovarModal(); return; }
+            if (!planValido || !PLANES[planValido]) { showToast('⚠️ Selecciona un plan primero'); return; }
+            const datosPlan = PLANES[planValido];
+            m.plan = planValido; m.precio = datosPlan.precio; m.inicio = hoy();
+            m.vencimiento = calcularVencimiento(hoy(), planValido);
+            m.activo = true; m.diasPausados = 0; m.fechaPausa = null; if (!m.pagos) m.pagos = [];
+            m.pagos.push({ id: Date.now(), fecha: hoy(), monto: datosPlan.precio, plan: planValido });
+            guardarMiembros(); actualizarTodo();
+            document.getElementById('renovarModal').classList.remove('show');
+            showToast('🔄 Renovado: ' + m.nombre + ' · ' + planValido + ' $' + datosPlan.precio);
+        }
+        function cerrarRenovarModal() { document.getElementById('renovarModal').classList.remove('show'); }
+        function seleccionarPlanRenovar(el) {
+            document.querySelectorAll('.renovar-plan-card').forEach(c => c.classList.remove('selected'));
+            el.classList.add('selected');
+            document.getElementById('renovarPlanSeleccionado').value = el.dataset.plan;
+        }
+
+        function eliminarMiembro(id) { if (!confirm('¿Eliminar este miembro permanentemente?')) return; miembros = miembros.filter(m => m.id !== id); guardarMiembros(); actualizarTodo(); showToast('🗑️ Miembro eliminado'); }
+
+        function enviarWhatsAppIndividual(id) { 
+            const m = miembros.find(mb => mb.id === id); if (!m) return;
+            if (!m.telefono) { showToast('⚠️ Este miembro no tiene teléfono registrado'); return; }
+            abrirWhatsApp(m, 'manual');
+            historialNotificaciones.unshift({ id: Date.now(), miembroId: m.id, nombre: m.nombre, telefono: m.telefono, fecha: hoy(), plan: m.plan, vencimiento: m.vencimiento, tipo: 'manual' });
+            guardarHistorial(); actualizarTodo(); showToast('📱 Abriendo WhatsApp para ' + m.nombre); 
+        }
+
+        function abrirWhatsApp(m, tipo = 'manual') { 
+            if (!m.telefono) { showToast('⚠️ Este miembro no tiene teléfono registrado'); return; }
+            const dias = diasRestantes(m.vencimiento); let mensaje = ''; 
+            if (m.activo === false) { mensaje = 'Hola ' + m.nombre + ' 👋\n\nEl gimnasio Kaizen Fitness te notifica que tu membresía está PAUSADA ⏸️\nTienes ' + (m.diasPausados || 0) + ' días guardados para cuando decidas volver 💪\n\n📩 Cualquier duda o aclaración, no dudes en ponerte en contacto con nosotros.\n\nSaludos,\nKaizen Fitness 🏋️‍♂️'; } 
+            else if (dias === null) { mensaje = 'Hola ' + m.nombre + ' 👋\n\nEl gimnasio Kaizen Fitness te notifica que eres parte de nuestra familia ⏳\nTe lo comentamos para que no pierdas la continuidad en tu entrenamiento 💪\n\n📩 Cualquier duda o aclaración, no dudes en ponerte en contacto con nosotros.\n\nSaludos,\nKaizen Fitness 🏋️‍♂️'; } 
+            else if (dias < 0) { mensaje = 'Hola ' + m.nombre + ' 👋\n\nEl gimnasio Kaizen Fitness te notifica que tu membresía ya venció ⏳\nTe lo comentamos para que no pierdas la continuidad en tu entrenamiento 💪\n\n📩 Cualquier duda o aclaración, no dudes en ponerte en contacto con nosotros.\n\nSaludos,\nKaizen Fitness 🏋️‍♂️'; } 
+            else if (dias <= 1) { mensaje = 'Hola ' + m.nombre + ' 👋\n\nEl gimnasio Kaizen Fitness te notifica que tu membresía vence ' + (dias === 0 ? 'HOY' : 'mañana') + ' ⏳\nTe lo comentamos para que no pierdas la continuidad en tu entrenamiento 💪\n\n📩 Cualquier duda o aclaración, no dudes en ponerte en contacto con nosotros.\n\nSaludos,\nKaizen Fitness 🏋️‍♂️'; } 
+            else { mensaje = 'Hola ' + m.nombre + ' 👋\n\nEl gimnasio Kaizen Fitness te notifica que tu membresía vence en ' + dias + ' días ⏳\nTe lo comentamos para que no pierdas la continuidad en tu entrenamiento 💪\n\n📩 Cualquier duda o aclaración, no dudes en ponerte en contacto con nosotros.\n\nSaludos,\nKaizen Fitness 🏋️‍♂️'; } 
+            const telefonoLimpio = m.telefono.replace(/[^0-9]/g, ''); const url = 'https://wa.me/' + telefonoLimpio + '?text=' + encodeURIComponent(mensaje);
+            window.open(url, '_blank');
+        }
+
+        function renderMiembros() { 
+            const list = document.getElementById('memberList'); const filtrados = getMiembrosFiltrados(); 
+            if (filtrados.length === 0) { 
+                const msgs = { 'todos': ['🏋️', 'Sin miembros aún', 'Registra tu primer miembro'], 'activos': ['✅', 'Sin miembros activos', 'Todos están pausados o vencidos'], 'pausados': ['⏸️', 'Sin membresías pausadas', 'Ningún miembro está en pausa'], 'vencidos': ['❌', 'Sin membresías vencidas', 'Todos están al día'] }; 
+                const [icon, title, desc] = msgs[filtroActual] || msgs['todos'];
+                list.innerHTML = `<div class="empty-state"><span class="empty-icon">${icon}</span><div class="empty-title">${title}</div><div class="empty-desc">${desc}</div></div>`; return; 
+            } 
+            const ordenados = [...filtrados].sort((a, b) => { if (a.activo === false && b.activo !== false) return 1; if (a.activo !== false && b.activo === false) return -1; return (diasRestantes(a.vencimiento) ?? 9999) - (diasRestantes(b.vencimiento) ?? 9999); });
+            list.innerHTML = ordenados.map(m => { 
+                const dias = diasRestantes(m.vencimiento); const pausada = m.activo === false; let sc = 'active', st = 'Al día'; 
+                if (pausada) { sc = 'pausada'; st = 'Pausada'; } else if (dias === null) { sc = 'active'; st = '--'; } else if (dias < 0) { sc = 'expired'; st = 'Vencido'; } else if (dias <= 5) { sc = 'warning'; st = 'Por vencer'; } 
+                const pagosArray = m.pagos || []; const pH = pagosArray.length ? '<div class="pagos-list">' + pagosArray.slice().reverse().slice(0, 5).map(p => `<div class="pago-row"><div><span class="pago-plan">${p.plan||m.plan}</span><span class="pago-fecha"> · ${fmtFecha(p.fecha)}</span></div><span class="pago-monto">$${p.monto}</span></div>`).join('') + '</div>' : '<div class="no-pagos">Sin pagos registrados</div>'; 
+                const diasInfo = pausada ? `<div class="dias-guardados-info">💾 ${m.diasPausados || 0} días guardados</div>` : ''; 
+                const pausaBtn = pausada ? `<button class="btn-sm resume" onclick="togglePausaMiembro(${m.id})">▶️ Reactivar</button>` : `<button class="btn-sm pause" onclick="togglePausaMiembro(${m.id})">⏸️ Pausar</button>`; 
+                return `<div class="member-card${pausada?' pausada':''}"><div class="member-top"><div class="member-avatar${pausada?' pausada':''}">${pausada?'⏸️':'💪'}</div><div class="member-info"><div class="member-name">${esc(m.nombre)}</div><div class="member-phone">📱 ${esc(m.telefono)}</div><span class="member-plan-badge${pausada?' pausada':''}">${m.plan} · $${m.precio} MXN</span></div><div class="member-status"><div class="member-days ${sc}">${pausada?'⏸':(dias!==null?dias+'d':'--')}</div><div class="member-status-label">${st}</div></div></div>${diasInfo}${pH}<div class="member-actions">${pausaBtn}${!pausada?`<button class="btn-sm pay" onclick="registrarPago(${m.id})">💰 Pagar</button>`:''}<button class="btn-sm renew" onclick="renovarMiembro(${m.id})">🔄 Renovar</button>${m.plan !== 'Día' ? `<button class="btn-sm whatsapp" onclick="enviarWhatsAppIndividual(${m.id})">📱 WhatsApp</button>` : ''}<button class="delete-btn" onclick="eliminarMiembro(${m.id})" style="margin-left:auto">🗑️</button></div></div>`; 
+            }).join(''); 
+        }
+
+        function registrarGasto() { 
+            ['g-descripcion', 'g-monto', 'g-fecha'].forEach(clearErr); 
+            const categoria = document.getElementById('g-categoria').value; 
+            const tipo = document.getElementById('g-tipo').value;
+            const descripcion = document.getElementById('g-descripcion').value.trim(); 
+            const monto = parseFloat(document.getElementById('g-monto').value); const fecha = document.getElementById('g-fecha').value; 
+            let ok = true; if (!descripcion) { setErr('g-descripcion', 'Campo requerido'); ok = false; } 
+            if (isNaN(monto) || monto <= 0) { setErr('g-monto', 'Monto inválido'); ok = false; } 
+            if (!fecha) { setErr('g-fecha', 'Fecha requerida'); ok = false; } if (!ok) return;
+            gastos.push({ id: Date.now(), categoria, descripcion, monto, fecha, tipo: tipo || 'ganancia' }); guardarGastos();
+            document.getElementById('g-descripcion').value = ''; document.getElementById('g-monto').value = ''; document.getElementById('g-fecha').value = hoy();
+            actualizarTodo(); showToast('💸 Gasto registrado: ' + descripcion + ' · $' + monto); 
+        }
+
+        function eliminarGasto(id) { if (!confirm('¿Eliminar este gasto?')) return; gastos = gastos.filter(g => g.id !== id); guardarGastos(); actualizarTodo(); showToast('🗑️ Gasto eliminado'); }
+
+        function renderGastos() { 
+            const q = getQuincena();
+            const todosMes = gastos.filter(g => enQuincena(g.fecha)).sort((a, b) => new Date(b.fecha + 'T00:00:00') - new Date(a.fecha + 'T00:00:00'));
+            const totalGastosMes = todosMes.filter(g => g.tipo === 'ganancia' || !g.tipo).reduce((s, g) => s + g.monto, 0); 
+            document.getElementById('gastosTotalMes').textContent = 'Total ' + q.label + ': ' + fmtMonto(totalGastosMes); 
+            const list = document.getElementById('gastosList'); if (todosMes.length === 0) { list.innerHTML = '<div style="text-align:center;color:var(--text3);padding:20px;font-size:11px">✅ No hay gastos esta quincena</div>'; return; }
+            list.innerHTML = todosMes.map(g => `<div class="gasto-item"><div class="gasto-info"><div class="gasto-categoria">${g.categoria} <span style="font-size:8px;padding:1px 5px;border-radius:4px;background:${g.tipo === 'capital' ? 'rgba(212,175,55,0.2)' : 'rgba(239,68,68,0.2)'};color:${g.tipo === 'capital' ? '#d4af37' : '#ef4444'}">${g.tipo === 'capital' ? '💰 Capital' : '📊 Ganancia'}</span></div><div class="gasto-desc">${esc(g.descripcion)}</div><div class="gasto-fecha">${fmtFecha(g.fecha)}</div></div><span class="gasto-monto">-${fmtMonto(g.monto)}</span><button class="gasto-del" onclick="eliminarGasto(${g.id})">🗑️</button></div>`).join(''); 
+        }
+
+        function renderNotificaciones() { 
+            const activos = miembros.filter(m => m.activo === true); 
+            const porVencer = activos.filter(m => { const d = diasRestantes(m.vencimiento); return m.plan !== 'Día' && d !== null && d >= -30 && d <= 3; }).sort((a, b) => (diasRestantes(a.vencimiento) ?? 9999) - (diasRestantes(b.vencimiento) ?? 9999)); 
+            const notifList = document.getElementById('notifList'); 
+            if (porVencer.length === 0) { notifList.innerHTML = '<div class="empty-state"><span class="empty-icon">✅</span><div class="empty-title">Todos al día</div><div class="empty-desc">No hay miembros por vencer</div></div>'; } 
+            else { notifList.innerHTML = porVencer.map(m => { const dias = diasRestantes(m.vencimiento); const isUrgent = dias !== null && dias <= 1; return `<div class="notif-card${isUrgent?' urgent':''}"><div class="checkbox-custom" id="chk-${m.id}" onclick="toggleCheck(${m.id})"></div><div class="notif-avatar">💪</div><div class="notif-info"><div class="notif-name">${esc(m.nombre)}</div><div class="notif-detail">📱 ${esc(m.telefono)} · ${m.plan} · Vence: ${fmtFecha(m.vencimiento)}</div></div><div class="notif-days ${isUrgent?'urgent':'warning'}">${dias < 0 ? 'VENCIDO' : dias === 0 ? 'HOY' : dias + 'd'}</div></div>`; }).join(''); } 
+            const histDiv = document.getElementById('historialNotif'); const recientes = historialNotificaciones.slice(0, 10); 
+            if (recientes.length === 0) { histDiv.innerHTML = '<div style="text-align:center;color:var(--text3);padding:14px;font-size:10px">Sin recordatorios enviados</div>'; } 
+            else { histDiv.innerHTML = recientes.map(h => `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:10px"><div><span style="color:#fff;font-weight:500">${h.tipo==='automático'?'🤖 ':''}${esc(h.nombre)}</span><span style="color:var(--text3);font-size:8px"> · ${h.plan}</span></div><span style="color:var(--text3);font-size:8px">${fmtFecha(h.fecha)}</span></div>`).join(''); } 
+        }
+
+        function toggleCheck(id) { const chk = document.getElementById('chk-' + id); if (!chk) return; chk.classList.toggle('checked'); }
+        function seleccionarTodos() { document.querySelectorAll('#notifList .checkbox-custom').forEach(c => c.classList.add('checked')); }
+        function deseleccionarTodos() { document.querySelectorAll('#notifList .checkbox-custom').forEach(c => c.classList.remove('checked')); }
+
+        function enviarNotificaciones() { 
+            const checks = document.querySelectorAll('#notifList .checkbox-custom.checked'); 
+            if (checks.length === 0) { showToast('⚠️ Selecciona al menos un miembro'); return; } 
+            const ids = Array.from(checks).map(chk => parseInt(chk.id.replace('chk-', '')));
+            let index = 0;
+            // Bug 3 fix: enviar uno por uno con confirmación entre cada uno para evitar bloqueo de popups
+            function enviarSiguiente() {
+                if (index >= ids.length) { 
+                    guardarHistorial(); actualizarTodo(); 
+                    showToast('📱 ' + ids.length + ' recordatorio(s) registrados'); 
+                    renderNotificaciones(); return; 
+                }
+                const id = ids[index];
+                const m = miembros.find(mb => mb.id === id);
+                if (m) {
+                    abrirWhatsApp(m, 'manual');
+                    historialNotificaciones.unshift({ id: Date.now() + index, miembroId: m.id, nombre: m.nombre, telefono: m.telefono, fecha: hoy(), plan: m.plan, vencimiento: m.vencimiento, tipo: 'manual' });
+                }
+                index++;
+                if (index < ids.length) {
+                    setTimeout(enviarSiguiente, 1200);
+                } else {
+                    guardarHistorial(); actualizarTodo();
+                    showToast('📱 ' + ids.length + ' recordatorio(s) registrados');
+                    renderNotificaciones();
+                }
+            }
+            enviarSiguiente();
+        }
+
+        function getQuincena() {
+            const hoy = new Date();
+            const dia = hoy.getDate();
+            const mes = hoy.getMonth();
+            const año = hoy.getFullYear();
+            if (dia <= 15) {
+                return { inicio: new Date(año, mes, 1, 0, 0, 0), fin: new Date(año, mes, 15, 23, 59, 59), label: '1ra quincena' };
+            } else {
+                const ultimoDia = new Date(año, mes + 1, 0).getDate();
+                return { inicio: new Date(año, mes, 16, 0, 0, 0), fin: new Date(año, mes, ultimoDia, 23, 59, 59), label: '2da quincena' };
+            }
+        }
+
+        function enQuincena(fechaStr) {
+            const fg = new Date(fechaStr + 'T00:00:00');
+            if (isNaN(fg.getTime())) return false;
+            const q = getQuincena();
+            return fg >= q.inicio && fg <= q.fin;
+        } 
+
+        function getMesesData() {
+            const ahora = new Date(); const mesesNombres = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']; const meses = []; 
+            for (let i = 11; i >= 0; i--) { const fecha = new Date(ahora.getFullYear(), ahora.getMonth() - i, 1); meses.push({ mes: fecha.getMonth(), año: fecha.getFullYear(), nombre: mesesNombres[fecha.getMonth()] + ' ' + fecha.getFullYear().toString().slice(-2), ingresos: 0, gastos: 0 }); }
+            miembros.forEach(m => { (m.pagos || []).forEach(p => { const fp = new Date(p.fecha + 'T00:00:00'); if (isNaN(fp.getTime())) return; const md = meses.find(mes => mes.mes === fp.getMonth() && mes.año === fp.getFullYear()); if (md) md.ingresos += p.monto || 0; }); });
+            gastos.forEach(g => { const fg = new Date(g.fecha + 'T00:00:00'); if (isNaN(fg.getTime())) return; const md = meses.find(mes => mes.mes === fg.getMonth() && mes.año === fg.getFullYear()); if (md) md.gastos += g.monto || 0; }); return meses; 
+        }
+
+        function actualizarGraficoGanancias() { 
+            const canvas = document.getElementById('gananciasChart'); if (!canvas) return;
+            const pageDashboard = document.getElementById('page-dashboard'); if (!pageDashboard || !pageDashboard.classList.contains('active')) return;
+            const ctx = canvas.getContext('2d'); const meses = getMesesData();
+            // Si el gráfico ya existe, solo actualizar datos sin destruir
+            if (gananciasChart) {
+                gananciasChart.data.labels = meses.map(m => m.nombre);
+                gananciasChart.data.datasets[0].data = meses.map(m => m.ingresos);
+                gananciasChart.data.datasets[1].data = meses.map(m => m.gastos);
+                gananciasChart.data.datasets[2].data = meses.map(m => m.ingresos - m.gastos);
+                gananciasChart.update('none'); // 'none' = sin animación, más rápido
+                return;
+            }
+            gananciasChart = new Chart(ctx, { type: 'bar', data: { labels: meses.map(m => m.nombre), datasets: [{ label: 'Ingresos', data: meses.map(m => m.ingresos), backgroundColor: 'rgba(34,197,94,0.5)', borderColor: '#22c55e', borderWidth: 2, borderRadius: 4, borderSkipped: false, order: 2 }, { label: 'Gastos', data: meses.map(m => m.gastos), backgroundColor: 'rgba(239,68,68,0.5)', borderColor: '#ef4444', borderWidth: 2, borderRadius: 4, borderSkipped: false, order: 2 }, { label: 'Ganancia Neta', data: meses.map(m => m.ingresos - m.gastos), type: 'line', borderColor: '#d4af37', borderWidth: 3, pointBackgroundColor: '#d4af37', pointRadius: 4, pointHoverRadius: 6, tension: 0.3, fill: false, order: 1 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { color: 'rgba(42,42,42,0.6)' }, ticks: { callback: v => '$' + v.toLocaleString('es-MX'), font: { size: 8 }, color: '#666' } }, x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#a0a0a0' } } } } }); 
+        }
+
+        function abrirModalStat(tipo) { 
+            const overlay = document.getElementById('modalOverlay'); const sheet = document.getElementById('modalSheet'); 
+            const icon = document.getElementById('modalIcon'); const title = document.getElementById('modalTitle'); 
+            const sub = document.getElementById('modalSubtitle'); const body = document.getElementById('modalBody'); 
+            const activos = miembros.filter(m => m.activo !== false); 
+            if (tipo === 'miembros') {
+                icon.textContent = '👥'; title.textContent = 'Todos los Miembros'; sub.textContent = miembros.length + ' registrados'; 
+                const ordenados = [...miembros].sort((a, b) => (diasRestantes(a.vencimiento) ?? 9999) - (diasRestantes(b.vencimiento) ?? 9999));
+                body.innerHTML = ordenados.length === 0 ? '<div class="modal-empty"><span class="modal-empty-icon">🏋️</span>Sin miembros aún</div>' : ordenados.map(m => { const d = diasRestantes(m.vencimiento); const color = m.activo === false ? 'var(--purple)' : d === null ? '#fff' : d < 0 ? '#ef4444' : d <= 5 ? 'var(--orange)' : 'var(--green)'; const label = m.activo === false ? '⏸️' : d === null ? '--' : d < 0 ? 'VENCIDO' : d === 0 ? 'HOY' : d + 'd'; return `<div class="modal-row"><div class="modal-row-left"><div class="modal-row-name">${m.activo===false?'⏸️':'💪'} ${esc(m.nombre)}</div><div class="modal-row-detail">📱 ${esc(m.telefono)} · ${m.plan} · $${m.precio}</div><div class="modal-row-detail">📅 ${m.activo===false?'Pausada':'Vence: '+fmtFecha(m.vencimiento)}</div></div><div class="modal-row-badge" style="color:${color}">${label}</div></div>`; }).join(''); 
+            } else if (tipo === 'activos') { 
+                const alDia = activos.filter(m => { const d = diasRestantes(m.vencimiento); return d !== null && d >= 0; });
+                icon.textContent = '✅'; title.textContent = 'Miembros Activos'; sub.textContent = alDia.length + ' al día';
+                body.innerHTML = alDia.sort((a, b) => (diasRestantes(a.vencimiento) ?? 9999) - (diasRestantes(b.vencimiento) ?? 9999)).map(m => { const d = diasRestantes(m.vencimiento); return `<div class="modal-row"><div class="modal-row-left"><div class="modal-row-name">💪 ${esc(m.nombre)}</div><div class="modal-row-detail">${m.plan} · $${m.precio} · Vence ${fmtFecha(m.vencimiento)}</div></div><div class="modal-row-badge" style="color:${d<=5?'var(--orange)':'var(--green)'}">${d===0?'HOY':d+'d'}</div></div>`; }).join('') || '<div class="modal-empty"><span class="modal-empty-icon">✅</span>Todos al día</div>'; 
+            } else if (tipo === 'ingresos') { 
+                const pagosMes = []; miembros.forEach(m => { (m.pagos || []).forEach(p => { if (enQuincena(p.fecha)) { pagosMes.push({ ...p, nombre: m.nombre }); } }); });
+                pagosMes.sort((a, b) => new Date(b.fecha + 'T00:00:00') - new Date(a.fecha + 'T00:00:00')); const totalMes = pagosMes.reduce((s, p) => s + (p.monto || 0), 0);
+                const q = getQuincena();
+                icon.textContent = '💰'; title.textContent = 'Ingresos de la Quincena'; sub.textContent = pagosMes.length + ' pagos · Total: ' + fmtMonto(totalMes) + ' · ' + q.label;
+                body.innerHTML = pagosMes.length === 0 ? '<div class="modal-empty"><span class="modal-empty-icon">💸</span>Sin pagos este mes</div>' : pagosMes.map(p => `<div class="modal-row"><div class="modal-row-left"><div class="modal-row-name">💪 ${esc(p.nombre)}</div><div class="modal-row-detail">${p.plan||'—'} · ${fmtFecha(p.fecha)}</div></div><div class="modal-row-badge" style="color:var(--green)">${fmtMonto(p.monto)}</div></div>`).join(''); 
+            } else if (tipo === 'porVencer') { 
+                const porVencer = activos.filter(m => { const d = diasRestantes(m.vencimiento); return m.plan !== 'Día' && d !== null && d >= 0 && d <= 5; }).sort((a, b) => (diasRestantes(a.vencimiento) ?? 999) - (diasRestantes(b.vencimiento) ?? 999));
+                icon.textContent = '⚠️'; title.textContent = 'Por Vencer'; sub.textContent = porVencer.length + ' miembro(s) vencen en ≤ 5 días';
+                body.innerHTML = porVencer.length === 0 ? '<div class="modal-empty"><span class="modal-empty-icon">✅</span>Nadie vence pronto</div>' : porVencer.map(m => { const d = diasRestantes(m.vencimiento); return `<div class="modal-row"><div class="modal-row-left"><div class="modal-row-name">💪 ${esc(m.nombre)}</div><div class="modal-row-detail">${m.plan} · $${m.precio} · Vence ${fmtFecha(m.vencimiento)}</div><div class="modal-row-detail">📱 ${esc(m.telefono)}</div></div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0"><div class="modal-row-badge" style="color:${d<=1?'#ef4444':'var(--orange)'}">${d===0?'HOY':d+'d'}</div><button class="btn-sm whatsapp" style="font-size:7px;padding:3px 7px" onclick="cerrarModal();enviarWhatsAppIndividual(${m.id})">📱</button></div></div>`; }).join(''); 
+            }
+            overlay.classList.add('show'); sheet.classList.add('show'); 
+        }
+
+        function cerrarModal() { document.getElementById('modalOverlay').classList.remove('show'); document.getElementById('modalSheet').classList.remove('show'); }
+        (function() { let startY = 0; const sheet = document.getElementById('modalSheet'); sheet.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true }); sheet.addEventListener('touchend', e => { if (e.changedTouches[0].clientY - startY > 60) cerrarModal(); }, { passive: true }); })();
+
+        // ---- CAPITAL ----
+        function getCapitalInicial() { return parseFloat(localStorage.getItem('kaizen-capital-inicial') || 0); }
+        function getTotalPagosHistorico() {
+            const totalPagos = miembros.reduce((total, m) => {
+                if (!m.pagos) return total;
+                return total + m.pagos.reduce((s, p) => s + (p.monto || 0), 0);
+            }, 0);
+            // Solo gastos de tipo capital se descuentan del Capital
+            const totalGastosCapital = gastos.filter(g => g.tipo === 'capital').reduce((total, g) => total + (g.monto || 0), 0);
+            // Gastos de tipo ganancia se descuentan de ganancias, no del capital
+            const totalGastosGanancia = gastos.filter(g => g.tipo === 'ganancia' || !g.tipo).reduce((total, g) => total + (g.monto || 0), 0);
+            return totalPagos - totalGastosCapital - totalGastosGanancia;
+        }
+        function actualizarCapital() {
+            const el = document.getElementById('capitalTotal');
+            if (!el) return;
+            const total = Math.round(getCapitalInicial() + getTotalPagosHistorico());
+            el.textContent = '$' + total.toLocaleString('es-MX');
+        }
+        function abrirCapitalModal() {
+            document.getElementById('capitalInicialInput').value = getCapitalInicial() || '';
+            document.getElementById('capitalModal').classList.add('show');
+        }
+        function cerrarCapitalModal() { document.getElementById('capitalModal').classList.remove('show'); }
+        function guardarCapital() {
+            const val = parseFloat(document.getElementById('capitalInicialInput').value) || 0;
+            localStorage.setItem('kaizen-capital-inicial', val);
+            // Bug 1 fix: sincronizar capital con Firebase
+            if (window._fb && !_fbBloqueado) {
+                try {
+                    const { db, doc, setDoc } = window._fb;
+                    setDoc(doc(db, 'kaizen', 'datos'), {
+                        miembros, gastos, historialNotificaciones,
+                        capitalInicial: val,
+                        updatedAt: new Date().toISOString()
+                    }).catch(e => console.warn('FB capital sync error:', e));
+                } catch(e) {}
+            }
+            cerrarCapitalModal();
+            actualizarCapital();
+            showToast('💰 Capital guardado');
+        }
+
+        function actualizarTodo() { 
+            actualizarStats(); 
+            actualizarDashboard(); 
+            actualizarGraficoGanancias(); 
+            actualizarAlertBadge(); 
+            actualizarCapital();
+            // Solo renderizar la pestaña activa para evitar trabajo innecesario
+            if (document.getElementById('page-miembros').classList.contains('active')) renderMiembros();
+            if (document.getElementById('page-gastos').classList.contains('active')) renderGastos();
+            if (document.getElementById('page-notificaciones').classList.contains('active')) renderNotificaciones(); 
+        }
+        function actualizarAlertBadge() { const activos = miembros.filter(m => m.activo === true); const porVencer = activos.filter(m => { const d = diasRestantes(m.vencimiento); return m.plan !== 'Día' && d !== null && d >= -30 && d <= 3; }).length; const badge = document.getElementById('alertBadge'); document.getElementById('alertCount').textContent = porVencer; if (porVencer > 0) badge.classList.add('show'); else badge.classList.remove('show'); }
+
+        function actualizarStats() { 
+            const activos = miembros.filter(m => m.activo === true); const pausados = miembros.filter(m => m.activo === false); 
+            const ingresosMes = miembros.reduce((t, m) => t + (m.pagos || []).reduce((s, p) => { return enQuincena(p.fecha) ? s + p.monto : s; }, 0), 0); 
+            const gastosMes = gastos.filter(g => enQuincena(g.fecha) && (g.tipo === 'ganancia' || !g.tipo)).reduce((s, g) => s + g.monto, 0); 
+            const gananciaLimpia = ingresosMes - gastosMes; const porVencer = activos.filter(m => { const d = diasRestantes(m.vencimiento); return m.plan !== 'Día' && d !== null && d >= 0 && d <= 5; }).length;
+            document.getElementById('st-total').textContent = miembros.length;
+            document.getElementById('st-activos').textContent = activos.filter(m => { const d = diasRestantes(m.vencimiento); return d !== null && d >= 0; }).length;
+            document.getElementById('st-ingresos').textContent = fmtMonto(ingresosMes);
+            document.getElementById('st-porVencer').textContent = porVencer; 
+            const glEl = document.getElementById('gananciaLimpia');
+            glEl.textContent = fmtMonto(gananciaLimpia); glEl.style.color = gananciaLimpia >= 0 ? 'var(--green)' : '#ef4444';
+            const qlEl = document.getElementById('quincelaLabel');
+            if (qlEl) { const q = getQuincena(); qlEl.textContent = q.label + ' · ' + ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][new Date().getMonth()]; }
+        }
+
+        function actualizarDashboard() { 
+            const activos = miembros.filter(m => m.activo === true); const pausados = miembros.filter(m => m.activo === false); 
+            const alDia = activos.filter(m => { const d = diasRestantes(m.vencimiento); return d !== null && d >= 0; }).length; 
+            const vencidos = activos.filter(m => { const d = diasRestantes(m.vencimiento); return d !== null && d < 0; }).length;
+            document.getElementById('dashResumen').innerHTML = `<div class="dash-mini"><div class="dash-mini-icon">👥</div><div class="dash-mini-val">${miembros.length}</div><div class="dash-mini-lbl">Total</div></div><div class="dash-mini"><div class="dash-mini-icon">✅</div><div class="dash-mini-val" style="color:var(--green)">${alDia}</div><div class="dash-mini-lbl">Al día</div></div><div class="dash-mini"><div class="dash-mini-icon">⏸️</div><div class="dash-mini-val" style="color:var(--purple)">${pausados.length}</div><div class="dash-mini-lbl">Pausados</div></div><div class="dash-mini"><div class="dash-mini-icon">❌</div><div class="dash-mini-val" style="color:#ef4444">${vencidos}</div><div class="dash-mini-lbl">Vencidos</div></div>`; 
+            const proximos = activos.filter(m => { const d = diasRestantes(m.vencimiento); return m.plan !== 'Día' && d !== null && d >= 0 && d <= 5; }).sort((a, b) => (diasRestantes(a.vencimiento) ?? 999) - (diasRestantes(b.vencimiento) ?? 999)); 
+            const venDiv = document.getElementById('dashVencimientos');
+            venDiv.innerHTML = proximos.length === 0 ? '<div style="text-align:center;color:var(--text3);padding:14px;font-size:11px">✅ No hay vencimientos próximos</div>' : proximos.map(m => { const d = diasRestantes(m.vencimiento); return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px;background:var(--surface2);border-radius:8px;margin-bottom:5px;border:1px solid var(--border);font-size:11px"><div><div style="font-weight:600">${esc(m.nombre)}</div><div style="font-size:8px;color:var(--text3)">${m.plan} · $${m.precio}</div></div><button class="btn-sm whatsapp" onclick="enviarWhatsAppIndividual(${m.id})" style="font-size:7px;padding:3px 7px">📱</button><div style="font-family:'Bebas Neue',sans-serif;font-size:14px;color:var(--orange)">${d===0?'HOY':d+'d'}</div></div>`; }).join(''); 
+        }
+
+        function actualizarFecha() { const ahora = new Date(); document.getElementById('hdrDate').textContent = ahora.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase(); }
+
+        function init() { 
+            actualizarFecha(); cargarDatos(); 
+            const mInicio = document.getElementById('m-inicio'); const gFecha = document.getElementById('g-fecha'); 
+            if (mInicio) mInicio.value = hoy(); if (gFecha) gFecha.value = hoy(); 
+            actualizarVencimiento(); actualizarTodo();
+            setTimeout(suscribirFirebase, 1000);
+        }
+    </script>
+    <!-- Modal Renovar Membresía -->
+    <div class="change-password-modal" id="renovarModal">
+        <div class="change-password-card">
+            <div class="change-password-title">🔄 Renovar Membresía</div>
+            <div class="change-password-sub" id="renovarNombre"></div>
+            <input type="hidden" id="renovarPlanSeleccionado">
+            <div class="plan-cards" style="margin:14px 0">
+                <div class="renovar-plan-card plan-card" data-plan="Día" onclick="seleccionarPlanRenovar(this)" style="cursor:pointer">
+                    <div class="plan-name">🏃 Día</div><div class="plan-duration">1 día</div><div class="plan-price">$50<span> MXN</span></div>
+                </div>
+                <div class="renovar-plan-card plan-card" data-plan="Semana" onclick="seleccionarPlanRenovar(this)" style="cursor:pointer">
+                    <div class="plan-name">📅 Semana</div><div class="plan-duration">7 días</div><div class="plan-price">$150<span> MXN</span></div>
+                </div>
+                <div class="renovar-plan-card plan-card" data-plan="Mes" onclick="seleccionarPlanRenovar(this)" style="cursor:pointer">
+                    <div class="plan-name">📆 Mes</div><div class="plan-duration">30 días</div><div class="plan-price">$500<span> MXN</span></div>
+                </div>
+                <div class="renovar-plan-card plan-card" data-plan="Pareja" onclick="seleccionarPlanRenovar(this)" style="cursor:pointer">
+                    <div class="plan-name">💑 Pareja</div><div class="plan-duration">30 días · 2</div><div class="plan-price">$900<span> MXN</span></div>
+                </div>
+            </div>
+            <div class="flex-gap">
+                <button class="btn-primary" onclick="confirmarRenovacion()" style="flex:1">✅ Renovar</button>
+                <button class="btn-primary" onclick="cerrarRenovarModal()" class="btn-primary btn-cancel">❌ Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banner de actualización -->
+    <div id="update-banner" style="
+        display:none;
+        position:fixed;
+        bottom:80px;
+        left:50%;
+        transform:translateX(-50%);
+        background:#cc0000;
+        color:#fff;
+        padding:12px 20px;
+        border-radius:12px;
+        z-index:9999;
+        font-family:'Poppins',sans-serif;
+        font-size:14px;
+        box-shadow:0 4px 20px rgba(0,0,0,0.4);
+        display:none;
+        align-items:center;
+        gap:12px;
+        white-space:nowrap;
+    ">
+        🚀 ¡Nueva versión disponible!
+        <button onclick="activarActualizacion()" style="
+            background:#fff;
+            color:#cc0000;
+            border:none;
+            border-radius:8px;
+            padding:6px 14px;
+            font-weight:700;
+            cursor:pointer;
+            font-family:'Poppins',sans-serif;
+        ">Actualizar</button>
+    </div>
+
+    <script>
+        let swRegistration = null;
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => {
+                        swRegistration = reg;
+                        reg.addEventListener('updatefound', () => {
+                            const newWorker = reg.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // Hay nueva versión lista
+                                    const banner = document.getElementById('update-banner');
+                                    banner.style.display = 'flex';
+                                }
+                            });
+                        });
+                    })
+                    .catch(err => console.warn('SW error:', err));
+
+                // Cuando se activa la nueva versión, recargar
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    window.location.reload();
+                });
+            });
+        }
+
+        function activarActualizacion() {
+            if (swRegistration && swRegistration.waiting) {
+                swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+        }
+    </script>
 </body>
 </html>
