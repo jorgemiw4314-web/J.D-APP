@@ -129,6 +129,9 @@
   .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
   .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
   .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cliente-fecha { margin-top: 4px; }
+  .fecha-btn { background: transparent; border: none; padding: 0; font-size: 11px; font-weight: 600; }
+  .fecha-input { background: #1e293b; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; color: #f1f5f9; font-size: 12px; padding: 3px 6px; }
   .cliente-pago { text-align: right; flex-shrink: 0; }
   .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
   .cliente-acciones { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
@@ -260,6 +263,7 @@ let state = {
   expandido: { internet: true, netflix: true, spotify: true, otros: true },
   editandoPrecio: null,
   precioTemp: '',
+  editandoFecha: null,
   modal: null,
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '' }
 };
@@ -271,7 +275,20 @@ function formatoMes(k) { const {year, month} = parseMes(k); return `${MESES_NOMB
 function formatoMesCorto(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${String(year).slice(2)}`; }
 function fmt(n) { return '$' + (n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k'; return '$' + Math.round(n); }
-function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
+function hoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtFechaCorta(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}`;
+}
+function estaPagado(sk, cid) { return !!state.pagosMes[state.mesActual]?.[sk+':'+cid]; }
+function fechaPago(sk, cid) {
+  const entry = state.pagosMes[state.mesActual]?.[sk+':'+cid];
+  return (entry && typeof entry === 'object') ? (entry.fecha || '') : '';
+}
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ============== PERSISTENCIA (localStorage) ==============
@@ -312,7 +329,24 @@ function guardarPrecio(k) {
 function togglePago(sk, cid) {
   if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
   const k = sk+':'+cid;
-  state.pagosMes[state.mesActual][k] = !state.pagosMes[state.mesActual][k];
+  if (state.pagosMes[state.mesActual][k]) {
+    delete state.pagosMes[state.mesActual][k];
+  } else {
+    state.pagosMes[state.mesActual][k] = { fecha: hoyISO() };
+  }
+  guardarLocal();
+  render();
+}
+
+function iniciarEditarFecha(sk, cid) {
+  state.editandoFecha = sk+':'+cid;
+  render();
+}
+function guardarFecha(sk, cid, fecha) {
+  if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
+  const k = sk+':'+cid;
+  state.pagosMes[state.mesActual][k] = { fecha: fecha || hoyISO() };
+  state.editandoFecha = null;
   guardarLocal();
   render();
 }
@@ -527,6 +561,8 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
+  const fecha = fechaPago(servicioKey, c.id);
+  const editandoFecha = state.editandoFecha === servicioKey+':'+c.id;
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -538,6 +574,15 @@ function renderClienteRow(servicioKey, c, color) {
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
           ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
         </div>
+        ${pagado ? `
+          <div class="cliente-fecha">
+            ${editandoFecha ? `
+              <input type="date" class="fecha-input" value="${fecha || hoyISO()}" onchange="guardarFecha('${servicioKey}','${c.id}', this.value)" onblur="guardarFecha('${servicioKey}','${c.id}', this.value)" />
+            ` : `
+              <button class="fecha-btn" style="color:${color}" data-action="iniciarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">📅 ${fecha ? fmtFechaCorta(fecha) : 'Poner fecha'}</button>
+            `}
+          </div>
+        ` : ''}
       </div>
       <div class="cliente-pago">
         <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
@@ -796,6 +841,7 @@ function handleClick(e) {
     case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
     case 'guardarPrecio': guardarPrecio(d.key); break;
     case 'togglePago': togglePago(d.servicio, d.cid); break;
+    case 'iniciarFecha': iniciarEditarFecha(d.servicio, d.cid); break;
     case 'abrirModal': abrirModal(d.servicio, d.cid); break;
     case 'cerrarModal':
       if (e.target === e.currentTarget) cerrarModal();
