@@ -63,6 +63,25 @@
   }
   .mes-btn.activo { background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; }
 
+  /* Pagos por vencer */
+  .venc-card {
+    margin: 16px 20px 0;
+    background: rgba(239,68,68,0.06);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 14px; padding: 12px 14px;
+  }
+  .venc-title { font-size: 13px; font-weight: 700; color: #f87171; margin-bottom: 8px; }
+  .venc-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 6px; border-radius: 10px;
+  }
+  .venc-row:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .venc-info { flex: 1; min-width: 0; }
+  .venc-info .nombre { font-size: 13px; font-weight: 600; color: #e4e7eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .venc-info .tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+  .venc-dias { font-size: 12px; font-weight: 700; color: #fbbf24; flex-shrink: 0; }
+  .venc-dias.vencido { color: #ef4444; }
+
   /* Resumen */
   .resumen { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .resumen-card {
@@ -128,10 +147,8 @@
   .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
   .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
   .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
+  .tag-venc { background: rgba(251,191,36,0.15); color: #fbbf24; }
   .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cliente-fecha { margin-top: 4px; }
-  .fecha-btn { background: transparent; border: none; padding: 0; font-size: 11px; font-weight: 600; }
-  .fecha-input { background: #1e293b; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; color: #f1f5f9; font-size: 12px; padding: 3px 6px; }
   .cliente-pago { text-align: right; flex-shrink: 0; }
   .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
   .cliente-acciones { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
@@ -263,9 +280,8 @@ let state = {
   expandido: { internet: true, netflix: true, spotify: true, otros: true },
   editandoPrecio: null,
   precioTemp: '',
-  editandoFecha: null,
   modal: null,
-  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '' }
+  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' }
 };
 
 // ============== HELPERS ==============
@@ -275,20 +291,7 @@ function formatoMes(k) { const {year, month} = parseMes(k); return `${MESES_NOMB
 function formatoMesCorto(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${String(year).slice(2)}`; }
 function fmt(n) { return '$' + (n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k'; return '$' + Math.round(n); }
-function hoyISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function fmtFechaCorta(iso) {
-  if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}`;
-}
-function estaPagado(sk, cid) { return !!state.pagosMes[state.mesActual]?.[sk+':'+cid]; }
-function fechaPago(sk, cid) {
-  const entry = state.pagosMes[state.mesActual]?.[sk+':'+cid];
-  return (entry && typeof entry === 'object') ? (entry.fecha || '') : '';
-}
+function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ============== PERSISTENCIA (localStorage) ==============
@@ -314,7 +317,7 @@ function toggleExpandido(k) { state.expandido[k] = !state.expandido[k]; render()
 
 function iniciarEditarPrecio(k) {
   state.editandoPrecio = k;
-  state.precioTemp = String(state.data[k].precioReal ?? '');
+  state.precioTemp = state.data[k].precioReal != null ? String(state.data[k].precioReal) : '';
   render();
   setTimeout(() => document.getElementById('precio-input')?.focus(), 50);
 }
@@ -326,27 +329,11 @@ function guardarPrecio(k) {
   render();
 }
 
-function togglePago(sk, cid) {
-  if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
+function togglePago(sk, cid, mes) {
+  const m = mes || state.mesActual;
+  if (!state.pagosMes[m]) state.pagosMes[m] = {};
   const k = sk+':'+cid;
-  if (state.pagosMes[state.mesActual][k]) {
-    delete state.pagosMes[state.mesActual][k];
-  } else {
-    state.pagosMes[state.mesActual][k] = { fecha: hoyISO() };
-  }
-  guardarLocal();
-  render();
-}
-
-function iniciarEditarFecha(sk, cid) {
-  state.editandoFecha = sk+':'+cid;
-  render();
-}
-function guardarFecha(sk, cid, fecha) {
-  if (!state.pagosMes[state.mesActual]) state.pagosMes[state.mesActual] = {};
-  const k = sk+':'+cid;
-  state.pagosMes[state.mesActual][k] = { fecha: fecha || hoyISO() };
-  state.editandoFecha = null;
+  state.pagosMes[m][k] = !state.pagosMes[m][k];
   guardarLocal();
   render();
 }
@@ -355,16 +342,17 @@ function abrirModal(servicio, clienteId) {
   const cliente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
   state.formCliente = {
     nombre: cliente?.nombre || '',
-    pago: cliente && cliente.pago != null ? String(cliente.pago) : '',
+    pago: cliente?.pago != null ? String(cliente.pago) : '',
     tipoPago: cliente?.tipoPago || 'mensual',
-    notas: cliente?.notas || ''
+    notas: cliente?.notas || '',
+    diaPago: cliente?.diaPago ? String(cliente.diaPago) : ''
   };
   state.modal = { servicio, clienteId };
   render();
 }
 function cerrarModal() {
   state.modal = null;
-  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '' };
+  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' };
   render();
 }
 function actualizarForm(campo, valor) {
@@ -382,6 +370,7 @@ function guardarCliente() {
     pago: parseFloat(state.formCliente.pago) || 0,
     tipoPago: state.formCliente.tipoPago,
     notas: state.formCliente.notas.trim(),
+    diaPago: state.formCliente.diaPago ? Math.min(31, Math.max(1, parseInt(state.formCliente.diaPago) || 1)) : null,
     creado: clienteId ? state.data[servicio].clientes.find(c=>c.id===clienteId).creado : Date.now()
   };
   if (clienteId) {
@@ -394,11 +383,15 @@ function guardarCliente() {
 }
 
 function eliminarCliente(servicio, id) {
-  if (!confirm('¿Eliminar este cliente?')) return;
+  if (!confirm('¿Eliminar este cliente? También se borrará su historial de pagos.')) return;
   state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
-  // Limpiar registros de pago huérfanos del cliente eliminado en todos los meses
-  const k = servicio + ':' + id;
-  Object.values(state.pagosMes).forEach(mes => { delete mes[k]; });
+  // BUG FIX: antes los registros de pago (pagosMes) de un cliente eliminado se quedaban
+  // huérfanos para siempre en localStorage, inflando los datos guardados y descuadrando
+  // los totales históricos del dashboard. Ahora se limpian de todos los meses.
+  const clave = servicio + ':' + id;
+  Object.keys(state.pagosMes).forEach(mes => {
+    if (state.pagosMes[mes] && clave in state.pagosMes[mes]) delete state.pagosMes[mes][clave];
+  });
   guardarLocal();
   render();
 }
@@ -442,6 +435,87 @@ function calcularDatosMensuales() {
   return meses;
 }
 
+// ============== RESPALDO (exportar / importar) ==============
+function exportarRespaldo() {
+  const respaldo = { data: state.data, pagosMes: state.pagosMes, version: 1, fecha: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const f = new Date();
+  const nombre = `jd-ventas-respaldo-${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}.json`;
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function importarRespaldo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const json = JSON.parse(e.target.result);
+      if (!json.data || !json.pagosMes) throw new Error('Formato inválido');
+      if (!confirm('Esto reemplazará todos los datos actuales con los del respaldo. ¿Continuar?')) return;
+      state.data = json.data;
+      state.pagosMes = json.pagosMes;
+      guardarLocal();
+      render();
+      alert('Respaldo restaurado correctamente.');
+    } catch(err) {
+      alert('El archivo no es un respaldo válido de J.D Ventas.');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ============== VENCIMIENTOS ==============
+function calcularVencimientos() {
+  const LIMITE_DIAS = 5; // avisar desde 5 días antes
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  const claveReal = claveMes(hoy);
+  const pagosReales = state.pagosMes[claveReal] || {};
+  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+  const lista = [];
+  Object.entries(state.data).forEach(([sk, s]) => {
+    s.clientes.forEach(c => {
+      if (c.tipoPago !== 'mensual' || !c.diaPago) return;
+      if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
+      const dia = Math.min(c.diaPago, diasEnMes);
+      const fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+      const diffDias = Math.round((fechaVenc - hoy) / 86400000);
+      if (diffDias <= LIMITE_DIAS) {
+        lista.push({ servicio: sk, cliente: c, diasRestantes: diffDias });
+      }
+    });
+  });
+  lista.sort((a,b) => a.diasRestantes - b.diasRestantes);
+  return lista;
+}
+
+function renderVencimientos() {
+  const venc = calcularVencimientos();
+  if (venc.length === 0) return '';
+  const claveHoy = claveMes(new Date());
+  return `<div class="venc-card">
+    <div class="venc-title">⏰ Pagos por vencer</div>
+    ${venc.map(v => {
+      const info = SERVICIOS[v.servicio];
+      const vencido = v.diasRestantes < 0;
+      const texto = vencido ? `Vencido hace ${Math.abs(v.diasRestantes)}d` : v.diasRestantes === 0 ? 'Vence hoy' : `En ${v.diasRestantes}d`;
+      return `<div class="venc-row ${vencido ? 'vencido' : ''}" data-action="togglePago" data-servicio="${v.servicio}" data-cid="${v.cliente.id}" data-mes="${claveHoy}">
+        <span class="check-btn" style="font-size:18px">⭕</span>
+        <div class="venc-info">
+          <div class="nombre">${esc(v.cliente.nombre)}</div>
+          <span class="tag" style="background:${info.color}20; color:${info.color}">${info.nombre}</span>
+        </div>
+        <div class="venc-dias ${vencido ? 'vencido' : ''}">${texto}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 // ============== RENDER ==============
 function render() {
   const app = document.getElementById('app');
@@ -479,6 +553,7 @@ function renderSelectorMes() {
 function renderInicio() {
   const t = calcularTotalesMes();
   let html = '<div class="fade-in">';
+  html += renderVencimientos();
   html += `
     <div class="resumen">
       <div class="resumen-card destacado">
@@ -534,7 +609,7 @@ function renderSeccion(key, info) {
         <span class="label">Precio real (lo que pagas)</span>
         ${editando ? `
           <div style="display:flex; gap:6px; align-items:center">
-            <input id="precio-input" type="number" inputmode="decimal" class="precio-input" value="${state.precioTemp}" data-action="changePrecio" style="border-color: ${info.color}40" />
+            <input id="precio-input" type="number" inputmode="decimal" class="precio-input" value="${state.precioTemp}" style="border-color: ${info.color}40" />
             <button class="save-btn" style="background: ${info.color}" data-action="guardarPrecio" data-key="${key}">✓</button>
           </div>
         ` : `
@@ -561,8 +636,6 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
-  const fecha = fechaPago(servicioKey, c.id);
-  const editandoFecha = state.editandoFecha === servicioKey+':'+c.id;
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -572,17 +645,9 @@ function renderClienteRow(servicioKey, c, color) {
         <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
         <div class="cliente-tags">
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
+          ${c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
           ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
         </div>
-        ${pagado ? `
-          <div class="cliente-fecha">
-            ${editandoFecha ? `
-              <input type="date" class="fecha-input" value="${fecha || hoyISO()}" onchange="guardarFecha('${servicioKey}','${c.id}', this.value)" onblur="guardarFecha('${servicioKey}','${c.id}', this.value)" />
-            ` : `
-              <button class="fecha-btn" style="color:${color}" data-action="iniciarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">📅 ${fecha ? fmtFechaCorta(fecha) : 'Poner fecha'}</button>
-            `}
-          </div>
-        ` : ''}
       </div>
       <div class="cliente-pago">
         <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
@@ -661,6 +726,16 @@ function renderDashboard() {
           </div>
         </div>
       `).join('')}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#94a3b8">💾</span> Respaldo de datos</div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
+      <div style="display:flex; gap:8px">
+        <button class="tipo-btn" style="flex:1" onclick="exportarRespaldo()">⬇ Exportar respaldo</button>
+        <button class="tipo-btn" style="flex:1" onclick="document.getElementById('input-restaurar').click()">⬆ Restaurar</button>
+      </div>
+      <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
     </div>
   </div>`;
 }
@@ -806,8 +881,13 @@ function renderModal() {
       </div>
 
       <div class="campo">
+        <div class="campo-label"><label>Día de vencimiento (opcional)</label><span class="hint">Día del mes, 1-31</span></div>
+        <input class="input" type="number" inputmode="numeric" min="1" max="31" value="${esc(f.diaPago)}" placeholder="Ej. 15" oninput="actualizarForm('diaPago', this.value)" />
+      </div>
+
+      <div class="campo">
         <div class="campo-label"><label>Notas (opcional)</label></div>
-        <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Fecha de corte, detalles, etc." oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
+        <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Detalles adicionales" oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
       </div>
 
       <button id="btn-guardar" class="guardar-btn" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarCliente">
@@ -840,8 +920,7 @@ function handleClick(e) {
     case 'toggleExp': toggleExpandido(d.key); break;
     case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
     case 'guardarPrecio': guardarPrecio(d.key); break;
-    case 'togglePago': togglePago(d.servicio, d.cid); break;
-    case 'iniciarFecha': iniciarEditarFecha(d.servicio, d.cid); break;
+    case 'togglePago': togglePago(d.servicio, d.cid, d.mes); break;
     case 'abrirModal': abrirModal(d.servicio, d.cid); break;
     case 'cerrarModal':
       if (e.target === e.currentTarget) cerrarModal();
@@ -858,6 +937,18 @@ function handleClick(e) {
 // ============== INIT ==============
 cargarLocal();
 render();
+
+// BUG FIX: si la app se queda abierta en segundo plano y cambia el día (o el mes),
+// el selector de mes y los "pagos por vencer" quedaban congelados con la fecha de
+// cuando se abrió la app. Revisamos cada minuto si cambió el día y volvemos a pintar.
+let ultimoDiaConocido = new Date().toDateString();
+setInterval(() => {
+  const ahora = new Date().toDateString();
+  if (ahora !== ultimoDiaConocido) {
+    ultimoDiaConocido = ahora;
+    render();
+  }
+}, 60000);
 
 // ============== PWA: Service Worker ==============
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
