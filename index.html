@@ -519,7 +519,8 @@ function renderVencimientos() {
 // ============== RENDER ==============
 function render() {
   const app = document.getElementById('app');
-  app.innerHTML = renderHeader() + (state.vista === 'inicio' ? renderInicio() : renderDashboard()) + renderNav() + renderModal();
+  const vista = state.vista === 'inicio' ? renderInicio() : renderDashboard();
+  app.innerHTML = renderHeader() + vista + '<div style="height:120px"></div>' + renderNav() + renderModal();
   bindEvents();
 }
 
@@ -579,7 +580,7 @@ function renderInicio() {
   Object.entries(SERVICIOS).forEach(([key, info]) => {
     html += renderSeccion(key, info);
   });
-  html += '</div><div style="height:120px"></div></div>';
+  html += '</div></div>';
   return html;
 }
 
