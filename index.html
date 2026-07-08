@@ -14,7 +14,12 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <title>J.D Ventas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- PERF FIX: antes esta hoja de estilos bloqueaba el primer render hasta descargarse
+     (2 dominios + varios archivos de fuente). En internet lento esto se sentía como que
+     "tarda en abrir". Ahora se carga en segundo plano y no detiene la pintura inicial. -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"></noscript>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -151,6 +156,7 @@
   .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cliente-pago { text-align: right; flex-shrink: 0; }
   .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
+  .fecha-pago-btn { background: transparent; border: none; color: #64748b; font-size: 10px; margin-top: 2px; padding: 0; }
   .cliente-acciones { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
   .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   .icon-btn.edit { background: rgba(255,255,255,0.04); color: #94a3b8; }
@@ -256,6 +262,7 @@
 <body>
 
 <div id="app"></div>
+<input type="date" id="date-picker-hidden" style="position:fixed; top:-999px; left:-999px; opacity:0; pointer-events:none" onchange="handleFechaChange(this)" />
 
 <script>
 // ============== ESTADO ==============
@@ -291,7 +298,20 @@ function formatoMes(k) { const {year, month} = parseMes(k); return `${MESES_NOMB
 function formatoMesCorto(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${String(year).slice(2)}`; }
 function fmt(n) { return '$' + (n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k'; return '$' + Math.round(n); }
-function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
+function estaPagado(sk, cid) {
+  const v = state.pagosMes[state.mesActual]?.[sk+':'+cid];
+  return v === true || (!!v && v.pagado === true);
+}
+// Devuelve la fecha (YYYY-MM-DD) en que se registró el pago, o null si no hay una guardada
+function fechaDePago(sk, cid, mes) {
+  const v = state.pagosMes[mes || state.mesActual]?.[sk+':'+cid];
+  return (v && typeof v === 'object' && v.fecha) ? v.fecha : null;
+}
+function formatoFechaCorta(iso) {
+  if (!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${d} ${MESES_NOMBRES[+m-1]}`;
+}
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 // ============== PERSISTENCIA (localStorage) ==============
@@ -333,9 +353,39 @@ function togglePago(sk, cid, mes) {
   const m = mes || state.mesActual;
   if (!state.pagosMes[m]) state.pagosMes[m] = {};
   const k = sk+':'+cid;
-  state.pagosMes[m][k] = !state.pagosMes[m][k];
+  const yaPagado = estaPagadoEnMes(m, sk, cid);
+  if (yaPagado) {
+    delete state.pagosMes[m][k];
+  } else {
+    state.pagosMes[m][k] = { pagado: true, fecha: new Date().toISOString().slice(0,10) };
+  }
   guardarLocal();
   render();
+}
+function estaPagadoEnMes(mes, sk, cid) {
+  const v = state.pagosMes[mes]?.[sk+':'+cid];
+  return v === true || (!!v && v.pagado === true);
+}
+function cambiarFechaPago(sk, cid, mes, nuevaFecha) {
+  if (!nuevaFecha) return;
+  const m = mes || state.mesActual;
+  if (!state.pagosMes[m]) state.pagosMes[m] = {};
+  state.pagosMes[m][sk+':'+cid] = { pagado: true, fecha: nuevaFecha };
+  guardarLocal();
+  render();
+}
+function abrirEditorFecha(sk, cid, mes) {
+  const m = mes || state.mesActual;
+  const input = document.getElementById('date-picker-hidden');
+  input.value = fechaDePago(sk, cid, m) || new Date().toISOString().slice(0,10);
+  input.dataset.servicio = sk;
+  input.dataset.cid = cid;
+  input.dataset.mes = m;
+  input.showPicker ? input.showPicker() : input.click();
+}
+function handleFechaChange(input) {
+  const { servicio, cid, mes } = input.dataset;
+  cambiarFechaPago(servicio, cid, mes, input.value);
 }
 
 function abrirModal(servicio, clienteId) {
@@ -637,6 +687,7 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
+  const fecha = pagado ? fechaDePago(servicioKey, c.id) : null;
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -652,6 +703,7 @@ function renderClienteRow(servicioKey, c, color) {
       </div>
       <div class="cliente-pago">
         <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
+        ${fecha ? `<button class="fecha-pago-btn" data-action="editarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">${formatoFechaCorta(fecha)} ✎</button>` : ''}
       </div>
       <div class="cliente-acciones">
         <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
@@ -922,6 +974,10 @@ function handleClick(e) {
     case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
     case 'guardarPrecio': guardarPrecio(d.key); break;
     case 'togglePago': togglePago(d.servicio, d.cid, d.mes); break;
+    case 'editarFecha':
+      e.stopPropagation();
+      abrirEditorFecha(d.servicio, d.cid, d.mes);
+      break;
     case 'abrirModal': abrirModal(d.servicio, d.cid); break;
     case 'cerrarModal':
       if (e.target === e.currentTarget) cerrarModal();
