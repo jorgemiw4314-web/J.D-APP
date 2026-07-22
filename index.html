@@ -157,6 +157,13 @@
   .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   .icon-btn.edit { background: rgba(255,255,255,0.04); color: #94a3b8; }
   .icon-btn.delete { background: rgba(239,68,68,0.08); color: #ef4444; }
+  .fecha-pago-row { display: flex; align-items: center; gap: 4px; margin-top: 4px; justify-content: flex-end; }
+  .fecha-pago-row .fecha-label { font-size: 9px; color: #64748b; }
+  .fecha-pago-input {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px; color: #94a3b8; font-size: 10px; padding: 2px 4px;
+    font-family: 'JetBrains Mono', monospace; color-scheme: dark;
+  }
 
   .add-cliente-btn {
     width: 100%; padding: 16px;
@@ -348,10 +355,41 @@ function togglePago(sk, cid, mes) {
     delete state.pagosMes[m][k];
   } else {
     const cliente = state.data[sk]?.clientes.find(c => c.id === cid);
-    state.pagosMes[m][k] = { monto: cliente ? cliente.pago : 0 };
+    const hoy = new Date();
+    state.pagosMes[m][k] = {
+      monto: cliente ? cliente.pago : 0,
+      fecha: `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`
+    };
   }
   guardarLocal();
   render();
+}
+
+// Permite corregir la fecha real en la que se recibió el pago (para clientes que
+// pagan antes/después de la fecha en que se marcaron en la app), y así calcular
+// la próxima renovación a partir de la fecha real de pago en vez de solo el
+// día de corte configurado.
+function cambiarFechaPago(sk, cid, nuevaFecha) {
+  const entry = state.pagosMes[state.mesActual]?.[sk+':'+cid];
+  if (!entry || typeof entry !== 'object' || !nuevaFecha) return;
+  entry.fecha = nuevaFecha;
+  guardarLocal();
+  render();
+}
+
+// Busca la fecha del pago más reciente registrado para un cliente, sin
+// importar en qué mes quedó guardado (permite calcular la próxima renovación
+// aunque el cliente esté siendo visto en un mes distinto).
+function ultimaFechaPago(sk, cid) {
+  let ultima = null;
+  Object.values(state.pagosMes).forEach(mesObj => {
+    const entry = mesObj?.[sk+':'+cid];
+    if (entry && typeof entry === 'object' && entry.fecha) {
+      const f = new Date(entry.fecha+'T00:00:00');
+      if (!ultima || f > ultima) ultima = f;
+    }
+  });
+  return ultima;
 }
 
 function abrirModal(servicio, clienteId) {
@@ -489,25 +527,40 @@ function importarRespaldo(input) {
 }
 
 // ============== VENCIMIENTOS ==============
-function diasParaVencimiento(c, hoy) {
+function diasParaVencimiento(c, hoy, sk) {
   if (c.tipoPago !== 'mensual' || !c.diaPago) return null;
   hoy = hoy || new Date();
   hoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
-  const dia = Math.min(c.diaPago, diasEnMes);
-  let fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
-  // BUG FIX: un cliente agregado DESPUÉS de la fecha de corte de este mes (ej. se
-  // registra el día 25 con corte el día 10) todavía no ha tenido su primer
-  // vencimiento. Antes se mostraba como "vencido hace 15 días" al instante de
-  // crearlo; ahora su primer cobro se corre al día de corte del próximo mes.
-  if (c.creado) {
-    const fechaCreado = new Date(c.creado);
-    fechaCreado.setHours(0,0,0,0);
-    if (fechaCreado > fechaVenc) {
-      const sigAno = hoy.getMonth() === 11 ? hoy.getFullYear()+1 : hoy.getFullYear();
-      const sigMes = (hoy.getMonth()+1) % 12;
-      const diasSigMes = new Date(sigAno, sigMes+1, 0).getDate();
-      fechaVenc = new Date(sigAno, sigMes, Math.min(c.diaPago, diasSigMes));
+
+  const ultimoPago = sk ? ultimaFechaPago(sk, c.id) : null;
+  let fechaVenc;
+
+  if (ultimoPago) {
+    // Próxima renovación = 1 mes calendario después de la fecha real del último
+    // pago registrado (lo que pidió Jorge), en vez de depender solo del día de
+    // corte fijo.
+    const anoSig = ultimoPago.getMonth() === 11 ? ultimoPago.getFullYear()+1 : ultimoPago.getFullYear();
+    const mesSig = (ultimoPago.getMonth()+1) % 12;
+    const diasMesSig = new Date(anoSig, mesSig+1, 0).getDate();
+    fechaVenc = new Date(anoSig, mesSig, Math.min(ultimoPago.getDate(), diasMesSig));
+  } else {
+    // Sin ningún pago registrado todavía: usamos el día de corte configurado
+    // como estimado inicial.
+    const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+    const dia = Math.min(c.diaPago, diasEnMes);
+    fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+    // BUG FIX: un cliente agregado DESPUÉS de la fecha de corte de este mes
+    // (ej. se registra el día 25 con corte el día 10) todavía no ha tenido su
+    // primer vencimiento. Se corre al día de corte del próximo mes.
+    if (c.creado) {
+      const fechaCreado = new Date(c.creado);
+      fechaCreado.setHours(0,0,0,0);
+      if (fechaCreado > fechaVenc) {
+        const sigAno = hoy.getMonth() === 11 ? hoy.getFullYear()+1 : hoy.getFullYear();
+        const sigMes = (hoy.getMonth()+1) % 12;
+        const diasSigMes = new Date(sigAno, sigMes+1, 0).getDate();
+        fechaVenc = new Date(sigAno, sigMes, Math.min(c.diaPago, diasSigMes));
+      }
     }
   }
   return Math.round((fechaVenc - hoy) / 86400000);
@@ -523,7 +576,7 @@ function calcularVencimientos() {
   Object.entries(state.data).forEach(([sk, s]) => {
     s.clientes.forEach(c => {
       if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
-      const diffDias = diasParaVencimiento(c, hoy);
+      const diffDias = diasParaVencimiento(c, hoy, sk);
       if (diffDias === null) return;
       if (diffDias <= LIMITE_DIAS) {
         lista.push({ servicio: sk, cliente: c, diasRestantes: diffDias });
@@ -677,13 +730,15 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
-  const dias = diasParaVencimiento(c);
+  const dias = diasParaVencimiento(c, null, servicioKey);
   let tagDias = '';
-  if (dias !== null && !pagado) {
+  if (dias !== null) {
     const vencido = dias < 0;
     const texto = vencido ? `Vencido ${Math.abs(dias)}d` : dias === 0 ? 'Vence hoy' : `Faltan ${dias}d`;
-    tagDias = `<span class="tag tag-venc" style="${vencido ? 'background:rgba(239,68,68,0.15); color:#ef4444;' : ''}">${texto}</span>`;
+    tagDias = `<span class="tag tag-venc" style="${vencido && !pagado ? 'background:rgba(239,68,68,0.15); color:#ef4444;' : ''}">${texto}</span>`;
   }
+  const entryPago = state.pagosMes[state.mesActual]?.[servicioKey+':'+c.id];
+  const fechaPago = (entryPago && typeof entryPago === 'object') ? (entryPago.fecha || '') : '';
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -699,6 +754,10 @@ function renderClienteRow(servicioKey, c, color) {
       </div>
       <div class="cliente-pago">
         <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
+        ${pagado ? `<div class="fecha-pago-row">
+          <span class="fecha-label">Pagó:</span>
+          <input type="date" class="fecha-pago-input" value="${esc(fechaPago)}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); cambiarFechaPago('${servicioKey}','${c.id}', this.value)" />
+        </div>` : ''}
       </div>
       <div class="cliente-acciones">
         <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
