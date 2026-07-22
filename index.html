@@ -15,11 +15,8 @@
 <title>J.D Ventas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- PERF FIX: antes esta hoja de estilos bloqueaba el primer render hasta descargarse
-     (2 dominios + varios archivos de fuente). En internet lento esto se sentía como que
-     "tarda en abrir". Ahora se carga en segundo plano y no detiene la pintura inicial. -->
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"></noscript>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"></noscript>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -156,7 +153,6 @@
   .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cliente-pago { text-align: right; flex-shrink: 0; }
   .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
-  .fecha-pago-btn { background: transparent; border: none; color: #64748b; font-size: 10px; margin-top: 2px; padding: 0; }
   .cliente-acciones { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
   .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   .icon-btn.edit { background: rgba(255,255,255,0.04); color: #94a3b8; }
@@ -262,7 +258,6 @@
 <body>
 
 <div id="app"></div>
-<input type="date" id="date-picker-hidden" style="position:fixed; top:-999px; left:-999px; opacity:0; pointer-events:none" onchange="handleFechaChange(this)" />
 
 <script>
 // ============== ESTADO ==============
@@ -298,19 +293,15 @@ function formatoMes(k) { const {year, month} = parseMes(k); return `${MESES_NOMB
 function formatoMesCorto(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${String(year).slice(2)}`; }
 function fmt(n) { return '$' + (n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k'; return '$' + Math.round(n); }
-function estaPagado(sk, cid) {
-  const v = state.pagosMes[state.mesActual]?.[sk+':'+cid];
-  return v === true || (!!v && v.pagado === true);
-}
-// Devuelve la fecha (YYYY-MM-DD) en que se registró el pago, o null si no hay una guardada
-function fechaDePago(sk, cid, mes) {
-  const v = state.pagosMes[mes || state.mesActual]?.[sk+':'+cid];
-  return (v && typeof v === 'object' && v.fecha) ? v.fecha : null;
-}
-function formatoFechaCorta(iso) {
-  if (!iso) return '';
-  const [y,m,d] = iso.split('-');
-  return `${d} ${MESES_NOMBRES[+m-1]}`;
+function estaPagado(sk, cid) { return !!state.pagosMes[state.mesActual]?.[sk+':'+cid]; }
+// BUG FIX: antes solo se guardaba `true` al marcar un pago, así que si luego
+// cambiabas el precio del cliente, el historial de meses ya cerrados (dashboard
+// y gráficas) se recalculaba con el precio nuevo y descuadraba la ganancia real
+// de esos meses. Ahora se guarda el monto cobrado en el momento del pago.
+function montoPagado(entry, cliente) {
+  if (!entry) return 0;
+  if (typeof entry === 'object') return entry.monto ?? (cliente ? cliente.pago : 0);
+  return cliente ? cliente.pago : 0; // formato viejo (true) sin monto guardado
 }
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
@@ -353,39 +344,14 @@ function togglePago(sk, cid, mes) {
   const m = mes || state.mesActual;
   if (!state.pagosMes[m]) state.pagosMes[m] = {};
   const k = sk+':'+cid;
-  const yaPagado = estaPagadoEnMes(m, sk, cid);
-  if (yaPagado) {
+  if (state.pagosMes[m][k]) {
     delete state.pagosMes[m][k];
   } else {
-    state.pagosMes[m][k] = { pagado: true, fecha: new Date().toISOString().slice(0,10) };
+    const cliente = state.data[sk]?.clientes.find(c => c.id === cid);
+    state.pagosMes[m][k] = { monto: cliente ? cliente.pago : 0 };
   }
   guardarLocal();
   render();
-}
-function estaPagadoEnMes(mes, sk, cid) {
-  const v = state.pagosMes[mes]?.[sk+':'+cid];
-  return v === true || (!!v && v.pagado === true);
-}
-function cambiarFechaPago(sk, cid, mes, nuevaFecha) {
-  if (!nuevaFecha) return;
-  const m = mes || state.mesActual;
-  if (!state.pagosMes[m]) state.pagosMes[m] = {};
-  state.pagosMes[m][sk+':'+cid] = { pagado: true, fecha: nuevaFecha };
-  guardarLocal();
-  render();
-}
-function abrirEditorFecha(sk, cid, mes) {
-  const m = mes || state.mesActual;
-  const input = document.getElementById('date-picker-hidden');
-  input.value = fechaDePago(sk, cid, m) || new Date().toISOString().slice(0,10);
-  input.dataset.servicio = sk;
-  input.dataset.cid = cid;
-  input.dataset.mes = m;
-  input.showPicker ? input.showPicker() : input.click();
-}
-function handleFechaChange(input) {
-  const { servicio, cid, mes } = input.dataset;
-  cambiarFechaPago(servicio, cid, mes, input.value);
 }
 
 function abrirModal(servicio, clienteId) {
@@ -449,11 +415,13 @@ function eliminarCliente(servicio, id) {
 // ============== CÁLCULOS ==============
 function calcularTotalesMes() {
   let cobrado = 0, costoReal = 0, mensual = 0;
+  const pagosDelMes = state.pagosMes[state.mesActual] || {};
   Object.entries(state.data).forEach(([sk, s]) => {
     let huboPagos = false;
     s.clientes.forEach(c => {
       if (c.tipoPago === 'mensual') mensual += c.pago;
-      if (estaPagado(sk, c.id)) { cobrado += c.pago; huboPagos = true; }
+      const entry = pagosDelMes[sk+':'+c.id];
+      if (entry) { cobrado += montoPagado(entry, c); huboPagos = true; }
     });
     if (huboPagos) costoReal += s.precioReal;
   });
@@ -471,7 +439,8 @@ function calcularDatosMensuales() {
     Object.entries(state.data).forEach(([sk, s]) => {
       let hubo = false;
       s.clientes.forEach(c => {
-        if (pagos[sk+':'+c.id]) { cobrado += c.pago; hubo = true; }
+        const entry = pagos[sk+':'+c.id];
+        if (entry) { cobrado += montoPagado(entry, c); hubo = true; }
       });
       if (hubo) costo += s.precioReal;
     });
@@ -520,21 +489,42 @@ function importarRespaldo(input) {
 }
 
 // ============== VENCIMIENTOS ==============
+function diasParaVencimiento(c, hoy) {
+  if (c.tipoPago !== 'mensual' || !c.diaPago) return null;
+  hoy = hoy || new Date();
+  hoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+  const dia = Math.min(c.diaPago, diasEnMes);
+  let fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+  // BUG FIX: un cliente agregado DESPUÉS de la fecha de corte de este mes (ej. se
+  // registra el día 25 con corte el día 10) todavía no ha tenido su primer
+  // vencimiento. Antes se mostraba como "vencido hace 15 días" al instante de
+  // crearlo; ahora su primer cobro se corre al día de corte del próximo mes.
+  if (c.creado) {
+    const fechaCreado = new Date(c.creado);
+    fechaCreado.setHours(0,0,0,0);
+    if (fechaCreado > fechaVenc) {
+      const sigAno = hoy.getMonth() === 11 ? hoy.getFullYear()+1 : hoy.getFullYear();
+      const sigMes = (hoy.getMonth()+1) % 12;
+      const diasSigMes = new Date(sigAno, sigMes+1, 0).getDate();
+      fechaVenc = new Date(sigAno, sigMes, Math.min(c.diaPago, diasSigMes));
+    }
+  }
+  return Math.round((fechaVenc - hoy) / 86400000);
+}
+
 function calcularVencimientos() {
   const LIMITE_DIAS = 5; // avisar desde 5 días antes
   const hoy = new Date();
   hoy.setHours(0,0,0,0);
   const claveReal = claveMes(hoy);
   const pagosReales = state.pagosMes[claveReal] || {};
-  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
   const lista = [];
   Object.entries(state.data).forEach(([sk, s]) => {
     s.clientes.forEach(c => {
-      if (c.tipoPago !== 'mensual' || !c.diaPago) return;
       if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
-      const dia = Math.min(c.diaPago, diasEnMes);
-      const fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
-      const diffDias = Math.round((fechaVenc - hoy) / 86400000);
+      const diffDias = diasParaVencimiento(c, hoy);
+      if (diffDias === null) return;
       if (diffDias <= LIMITE_DIAS) {
         lista.push({ servicio: sk, cliente: c, diasRestantes: diffDias });
       }
@@ -569,8 +559,7 @@ function renderVencimientos() {
 // ============== RENDER ==============
 function render() {
   const app = document.getElementById('app');
-  const vista = state.vista === 'inicio' ? renderInicio() : renderDashboard();
-  app.innerHTML = renderHeader() + vista + '<div style="height:120px"></div>' + renderNav() + renderModal();
+  app.innerHTML = renderHeader() + (state.vista === 'inicio' ? renderInicio() : renderDashboard()) + renderNav() + renderModal();
   bindEvents();
 }
 
@@ -630,13 +619,14 @@ function renderInicio() {
   Object.entries(SERVICIOS).forEach(([key, info]) => {
     html += renderSeccion(key, info);
   });
-  html += '</div></div>';
+  html += '</div><div style="height:120px"></div></div>';
   return html;
 }
 
 function renderSeccion(key, info) {
   const s = state.data[key];
-  const cobrado = s.clientes.reduce((sum, c) => sum + (estaPagado(key, c.id) ? c.pago : 0), 0);
+  const pagosDelMes = state.pagosMes[state.mesActual] || {};
+  const cobrado = s.clientes.reduce((sum, c) => sum + montoPagado(pagosDelMes[key+':'+c.id], c), 0);
   const ganancia = cobrado - s.precioReal;
   const pagados = s.clientes.filter(c => estaPagado(key, c.id)).length;
   const editando = state.editandoPrecio === key;
@@ -687,7 +677,13 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
-  const fecha = pagado ? fechaDePago(servicioKey, c.id) : null;
+  const dias = diasParaVencimiento(c);
+  let tagDias = '';
+  if (dias !== null && !pagado) {
+    const vencido = dias < 0;
+    const texto = vencido ? `Vencido ${Math.abs(dias)}d` : dias === 0 ? 'Vence hoy' : `Faltan ${dias}d`;
+    tagDias = `<span class="tag tag-venc" style="${vencido ? 'background:rgba(239,68,68,0.15); color:#ef4444;' : ''}">${texto}</span>`;
+  }
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -697,13 +693,12 @@ function renderClienteRow(servicioKey, c, color) {
         <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
         <div class="cliente-tags">
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
-          ${c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
+          ${tagDias}
           ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
         </div>
       </div>
       <div class="cliente-pago">
         <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
-        ${fecha ? `<button class="fecha-pago-btn" data-action="editarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">${formatoFechaCorta(fecha)} ✎</button>` : ''}
       </div>
       <div class="cliente-acciones">
         <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
@@ -729,7 +724,7 @@ function renderDashboard() {
   const pagosM = state.pagosMes[mesK] || {};
   const porServicio = Object.entries(SERVICIOS).map(([sk, info]) => {
     const s = state.data[sk];
-    const cob = s.clientes.reduce((sum,c) => sum + (pagosM[sk+':'+c.id] ? c.pago : 0), 0);
+    const cob = s.clientes.reduce((sum,c) => sum + montoPagado(pagosM[sk+':'+c.id], c), 0);
     return { nombre: info.nombre, ganancia: Math.round((cob - s.precioReal)*100)/100, color: info.color };
   });
   const maxAbs = Math.max(...porServicio.map(p => Math.abs(p.ganancia)), 1);
@@ -974,10 +969,6 @@ function handleClick(e) {
     case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
     case 'guardarPrecio': guardarPrecio(d.key); break;
     case 'togglePago': togglePago(d.servicio, d.cid, d.mes); break;
-    case 'editarFecha':
-      e.stopPropagation();
-      abrirEditorFecha(d.servicio, d.cid, d.mes);
-      break;
     case 'abrirModal': abrirModal(d.servicio, d.cid); break;
     case 'cerrarModal':
       if (e.target === e.currentTarget) cerrarModal();
