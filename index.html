@@ -528,7 +528,7 @@ function importarRespaldo(input) {
 
 // ============== VENCIMIENTOS ==============
 function diasParaVencimiento(c, hoy, sk) {
-  if (c.tipoPago !== 'mensual' || !c.diaPago) return null;
+  if (c.tipoPago !== 'mensual') return null;
   hoy = hoy || new Date();
   hoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
 
@@ -538,14 +538,19 @@ function diasParaVencimiento(c, hoy, sk) {
   if (ultimoPago) {
     // Próxima renovación = 1 mes calendario después de la fecha real del último
     // pago registrado (lo que pidió Jorge), en vez de depender solo del día de
-    // corte fijo.
+    // corte fijo. No requiere que 'diaPago' esté configurado.
     const anoSig = ultimoPago.getMonth() === 11 ? ultimoPago.getFullYear()+1 : ultimoPago.getFullYear();
     const mesSig = (ultimoPago.getMonth()+1) % 12;
     const diasMesSig = new Date(anoSig, mesSig+1, 0).getDate();
     fechaVenc = new Date(anoSig, mesSig, Math.min(ultimoPago.getDate(), diasMesSig));
   } else {
-    // Sin ningún pago registrado todavía: usamos el día de corte configurado
-    // como estimado inicial.
+    // BUG FIX: antes, si el cliente no tenía 'día de corte' configurado, la
+    // función regresaba null de inmediato sin importar si ya había una fecha
+    // de pago registrada — por eso nunca aparecían los días restantes al
+    // ponerle fecha de pago a un cliente sin día de corte. Ahora ese campo
+    // solo se exige aquí, como estimado inicial cuando NUNCA se ha registrado
+    // un pago.
+    if (!c.diaPago) return null;
     const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
     const dia = Math.min(c.diaPago, diasEnMes);
     fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
