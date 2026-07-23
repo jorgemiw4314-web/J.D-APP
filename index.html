@@ -1,1073 +1,1941 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#10b981">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="J.D Ventas">
-<meta name="mobile-web-app-capable" content="yes">
-<link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
-<title>J.D Ventas</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" media="print" onload="this.media='all'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap"></noscript>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  html, body { height: 100%; }
-  body {
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
-    background: linear-gradient(180deg, #0a0e1a 0%, #0f1729 100%);
-    color: #e4e7eb;
-    min-height: 100vh;
-    padding-bottom: 240px;
-    overflow-x: hidden;
-  }
-  input, button, select, textarea { font-family: inherit; }
-  input:focus, textarea:focus { outline: none; border-color: #10b981 !important; }
-  button { cursor: pointer; transition: transform 0.1s; }
-  button:active { transform: scale(0.97); }
-  .mono { font-family: 'JetBrains Mono', monospace; }
-  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-  .card { animation: slideUp 0.3s ease-out; }
-  .fade-in { animation: fadeIn 0.3s ease-out; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#6366f1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Control de Cobros</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        /* ===== RESET ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
 
-  /* Header */
-  .header {
-    padding: 24px 20px 16px;
-    background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(6,182,212,0.04) 100%);
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-  .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .logo {
-    width: 42px; height: 42px; border-radius: 12px;
-    background: linear-gradient(135deg, #10b981, #06b6d4);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 22px; font-weight: 800; color: white;
-  }
-  .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-  .header p { font-size: 12px; color: #94a3b8; }
+        html,
+        body {
+            height: 100%;
+        }
 
-  /* Selector mes */
-  .meses-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; margin-right: -20px; padding-right: 20px; }
-  .meses-scroll::-webkit-scrollbar { display: none; }
-  .mes-btn {
-    padding: 8px 14px; background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
-    color: #94a3b8; font-size: 13px; font-weight: 600;
-    white-space: nowrap; flex-shrink: 0;
-  }
-  .mes-btn.activo { background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; }
+        body {
+            font-family: 'Inter', -apple-system, system-ui, sans-serif;
+            background: #0f1117;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding-bottom: 100px;
+            overflow-x: hidden;
+        }
 
-  /* Pagos por vencer */
-  .venc-card {
-    margin: 16px 20px 0;
-    background: rgba(239,68,68,0.06);
-    border: 1px solid rgba(239,68,68,0.2);
-    border-radius: 14px; padding: 12px 14px;
-  }
-  .venc-title { font-size: 13px; font-weight: 700; color: #f87171; margin-bottom: 8px; }
-  .venc-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 6px; border-radius: 10px;
-  }
-  .venc-row:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,0.05); }
-  .venc-info { flex: 1; min-width: 0; }
-  .venc-info .nombre { font-size: 13px; font-weight: 600; color: #e4e7eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .venc-info .tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
-  .venc-dias { font-size: 12px; font-weight: 700; color: #fbbf24; flex-shrink: 0; }
-  .venc-dias.vencido { color: #ef4444; }
+        /* ===== SCROLLBAR ===== */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #6366f1;
+            border-radius: 2px;
+        }
 
-  /* Resumen */
-  .resumen { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .resumen-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px; padding: 12px 14px;
-  }
-  .resumen-card.destacado { background: linear-gradient(135deg, rgba(16,185,129,0.13), rgba(16,185,129,0.03)); border-color: rgba(16,185,129,0.25); }
-  .resumen-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-  .resumen-value { font-size: 17px; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: #e4e7eb; }
-  .resumen-sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+        /* ===== UTILITIES ===== */
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
 
-  /* Secciones */
-  .secciones { padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
-  .seccion {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 18px; overflow: hidden;
-  }
-  .seccion-header { padding: 16px; }
-  .seccion-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-  .chevron-btn { background: transparent; border: none; color: #94a3b8; padding: 0; display: flex; }
-  .seccion-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-  .seccion-info { flex: 1; }
-  .seccion-info h2 { font-size: 17px; font-weight: 700; }
-  .seccion-info p { font-size: 12px; color: #94a3b8; }
-  .seccion-ganancia { text-align: right; }
-  .seccion-ganancia .label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
-  .seccion-ganancia .value { font-size: 16px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+        .hidden {
+            display: none !important;
+        }
 
-  .precio-real-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 12px; background: rgba(0,0,0,0.25); border-radius: 10px;
-  }
-  .precio-real-row .label { font-size: 12px; color: #94a3b8; font-weight: 600; }
-  .precio-real-row button { background: transparent; border: none; color: #e4e7eb; display: flex; align-items: center; gap: 6px; }
-  .precio-real-row .monto { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-  .precio-input {
-    width: 100px; padding: 6px 10px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 8px; color: #e4e7eb;
-    font-size: 14px; font-family: 'JetBrains Mono', monospace;
-    text-align: right;
-  }
-  .save-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; color: white; }
+        @keyframes slideUp {
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
 
-  .seccion-body { padding: 12px; }
-  .vacio { text-align: center; padding: 20px; color: #64748b; font-size: 13px; }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
 
-  /* Cliente row */
-  .cliente {
-    display: flex; align-items: center; gap: 10px; padding: 12px;
-    background: rgba(255,255,255,0.02); border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.04);
-    margin-bottom: 8px;
-    transition: all 0.2s;
-  }
-  .check-btn { background: transparent; border: none; padding: 0; flex-shrink: 0; font-size: 24px; }
-  .cliente-info { flex: 1; min-width: 0; }
-  .cliente-info .nombre { font-size: 14px; font-weight: 600; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cliente-tags { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
-  .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
-  .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
-  .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
-  .tag-venc { background: rgba(251,191,36,0.15); color: #fbbf24; }
-  .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cliente-pago { text-align: right; flex-shrink: 0; }
-  .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
-  .cliente-acciones { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
-  .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .icon-btn.edit { background: rgba(255,255,255,0.04); color: #94a3b8; }
-  .icon-btn.delete { background: rgba(239,68,68,0.08); color: #ef4444; }
-  .fecha-pago-row { display: flex; align-items: center; gap: 4px; margin-top: 4px; justify-content: flex-end; }
-  .fecha-pago-row .fecha-label { font-size: 9px; color: #64748b; }
-  .fecha-pago-input {
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 6px; color: #94a3b8; font-size: 10px; padding: 2px 4px;
-    font-family: 'JetBrains Mono', monospace; color-scheme: dark;
-  }
+        .card {
+            animation: slideUp 0.3s ease-out;
+        }
 
-  .add-cliente-btn {
-    width: 100%; padding: 16px;
-    border-radius: 10px;
-    font-weight: 600; font-size: 15px;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    position: relative; z-index: 10;
-  }
+        .fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
 
-  /* Modal */
-  .modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-    z-index: 200; display: flex; align-items: flex-end;
-    backdrop-filter: blur(8px);
-  }
-  .modal {
-    background: #0f1729; width: 100%;
-    border-radius: 24px 24px 0 0; padding: 24px 20px;
-    max-height: 90vh; overflow-y: auto;
-    border: 1px solid rgba(255,255,255,0.08);
-    animation: slideUp 0.3s ease-out;
-  }
-  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
-  .modal-header h3 { font-size: 20px; font-weight: 700; }
-  .modal-subtitle { font-size: 13px; font-weight: 600; margin-bottom: 20px; }
-  .close-btn {
-    background: rgba(255,255,255,0.05); border: none;
-    width: 36px; height: 36px; border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #94a3b8; font-size: 18px;
-  }
-  .campo { margin-bottom: 16px; }
-  .campo-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-  .campo-label label { font-size: 13px; font-weight: 600; color: #cbd5e1; }
-  .campo-label .hint { font-size: 11px; color: #64748b; }
-  .required { color: #10b981; }
-  .input {
-    width: 100%; padding: 14px 16px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px; color: #e4e7eb;
-    font-size: 15px;
-  }
-  .tipo-pago-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .tipo-btn {
-    padding: 12px; background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
-    color: #94a3b8; font-weight: 600; font-size: 14px;
-  }
-  .tipo-btn.activo { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
-  .guardar-btn {
-    width: 100%; padding: 16px; border: none; border-radius: 14px;
-    font-size: 16px; font-weight: 700; color: white;
-    margin-top: 8px;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    background: linear-gradient(135deg, #10b981, #059669);
-  }
-  .guardar-btn:disabled { background: rgba(255,255,255,0.05); cursor: not-allowed; }
+        /* ===== HEADER ===== */
+        .header {
+            padding: 20px 20px 16px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.04) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
 
-  /* Bottom Nav */
-  .nav-bottom {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: rgba(10,14,26,0.95);
-    backdrop-filter: blur(20px);
-    border-top: 1px solid rgba(255,255,255,0.08);
-    padding: 12px 20px 20px;
-    display: flex; gap: 8px; z-index: 50;
-  }
-  .nav-btn {
-    flex: 1; padding: 10px; background: transparent;
-    border: none; border-radius: 12px; color: #64748b;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    font-size: 11px; font-weight: 600;
-  }
-  .nav-btn.activo { background: rgba(16,185,129,0.15); color: #10b981; }
-  .nav-btn .icon { font-size: 20px; }
+        .header-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
 
-  /* Dashboard */
-  .dashboard-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 16px; padding: 16px;
-    margin-bottom: 16px;
-  }
-  .dashboard-title { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 15px; font-weight: 700; }
+        .logo {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: 800;
+            color: white;
+            flex-shrink: 0;
+        }
 
-  /* Charts */
-  .chart-container { width: 100%; }
-  .chart-svg { width: 100%; display: block; }
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
 
-  .servicio-bar { margin-bottom: 12px; }
-  .servicio-bar-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
-  .servicio-bar-row .nombre { color: #cbd5e1; font-weight: 600; }
-  .servicio-bar-row .monto { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
-  .servicio-bar-bg { height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
-  .servicio-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease-out; }
-</style>
+        .header p {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        /* ===== MESES SCROLL ===== */
+        .meses-scroll {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 4px 0;
+            margin-right: -20px;
+            padding-right: 20px;
+            scroll-behavior: smooth;
+        }
+
+        .meses-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .mes-btn {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            color: #94a3b8;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .mes-btn:active {
+            transform: scale(0.96);
+        }
+
+        .mes-btn.activo {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: #6366f1;
+            color: #818cf8;
+        }
+
+        /* ===== NOTIFICACIONES ===== */
+        .toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1e293b;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px 20px;
+            color: #e2e8f0;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 999;
+            animation: slideUp 0.3s ease-out;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            max-width: 90%;
+        }
+
+        .toast.success {
+            border-color: #10b981;
+            background: rgba(16, 185, 129, 0.15);
+        }
+
+        .toast.error {
+            border-color: #ef4444;
+            background: rgba(239, 68, 68, 0.15);
+        }
+
+        /* ===== VENCIMIENTOS ===== */
+        .venc-card {
+            margin: 16px 20px 0;
+            background: rgba(239, 68, 68, 0.05);
+            border: 1px solid rgba(239, 68, 68, 0.15);
+            border-radius: 14px;
+            padding: 14px 16px;
+        }
+
+        .venc-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #f87171;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .venc-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 6px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .venc-row:not(:last-child) {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .venc-row:active {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .venc-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .venc-info .nombre {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e2e8f0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .venc-info .tag {
+            font-size: 10px;
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .venc-dias {
+            font-size: 12px;
+            font-weight: 700;
+            color: #fbbf24;
+            flex-shrink: 0;
+        }
+
+        .venc-dias.vencido {
+            color: #ef4444;
+        }
+
+        /* ===== RESUMEN ===== */
+        .resumen {
+            padding: 16px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .resumen-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 14px 16px;
+        }
+
+        .resumen-card.destacado {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0.03));
+            border-color: rgba(99, 102, 241, 0.25);
+        }
+
+        .resumen-label {
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+            color: #94a3b8;
+        }
+
+        .resumen-value {
+            font-size: 18px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            color: #e2e8f0;
+        }
+
+        .resumen-sub {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        /* ===== SECCIONES ===== */
+        .secciones {
+            padding: 0 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .seccion {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        .seccion-header {
+            padding: 16px;
+            cursor: pointer;
+        }
+
+        .seccion-top {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .seccion-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .seccion-info {
+            flex: 1;
+        }
+
+        .seccion-info h2 {
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        .seccion-info p {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .seccion-ganancia {
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .seccion-ganancia .label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .seccion-ganancia .value {
+            font-size: 16px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .precio-real-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 10px;
+        }
+
+        .precio-real-row .label {
+            font-size: 12px;
+            color: #94a3b8;
+            font-weight: 600;
+        }
+
+        .precio-real-row .monto {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .seccion-body {
+            padding: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .vacio {
+            text-align: center;
+            padding: 24px;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        /* ===== CLIENTE ROW ===== */
+        .cliente {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            margin-bottom: 8px;
+            transition: all 0.2s;
+        }
+
+        .check-btn {
+            background: transparent;
+            border: none;
+            padding: 0;
+            flex-shrink: 0;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        .cliente-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .cliente-info .nombre {
+            font-size: 14px;
+            font-weight: 600;
+            color: #cbd5e1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .cliente-tags {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 2px;
+            flex-wrap: wrap;
+        }
+
+        .tag {
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .tag-mensual {
+            background: rgba(99, 102, 241, 0.15);
+            color: #818cf8;
+        }
+
+        .tag-unico {
+            background: rgba(139, 92, 246, 0.15);
+            color: #a78bfa;
+        }
+
+        .tag-venc {
+            background: rgba(251, 191, 36, 0.12);
+            color: #fbbf24;
+        }
+
+        .cliente-notas {
+            font-size: 11px;
+            color: #64748b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .cliente-pago {
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .cliente-pago .monto {
+            font-size: 15px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: #f1f5f9;
+        }
+
+        .cliente-acciones {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .icon-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .icon-btn:active {
+            transform: scale(0.9);
+        }
+
+        .icon-btn.edit {
+            background: rgba(255, 255, 255, 0.04);
+            color: #94a3b8;
+        }
+
+        .icon-btn.delete {
+            background: rgba(239, 68, 68, 0.08);
+            color: #ef4444;
+        }
+
+        .fecha-pago-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-top: 4px;
+            justify-content: flex-end;
+        }
+
+        .fecha-pago-row .fecha-label {
+            font-size: 9px;
+            color: #64748b;
+        }
+
+        .fecha-pago-input {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            color: #94a3b8;
+            font-size: 10px;
+            padding: 2px 6px;
+            font-family: 'JetBrains Mono', monospace;
+            color-scheme: dark;
+            width: 110px;
+        }
+
+        .add-cliente-btn {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+            background: rgba(99, 102, 241, 0.1);
+            color: #818cf8;
+            border: 1px dashed rgba(99, 102, 241, 0.3);
+        }
+
+        .add-cliente-btn:active {
+            transform: scale(0.97);
+        }
+
+        /* ===== DASHBOARD ===== */
+        .dashboard-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .dashboard-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .chart-container {
+            width: 100%;
+        }
+
+        .chart-svg {
+            width: 100%;
+            display: block;
+        }
+
+        .servicio-bar {
+            margin-bottom: 12px;
+        }
+
+        .servicio-bar-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .servicio-bar-row .nombre {
+            color: #cbd5e1;
+            font-weight: 600;
+        }
+
+        .servicio-bar-row .monto {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+        }
+
+        .servicio-bar-bg {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .servicio-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease-out;
+        }
+
+        /* ===== MODAL ===== */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 200;
+            display: flex;
+            align-items: flex-end;
+            backdrop-filter: blur(8px);
+        }
+
+        .modal {
+            background: #0f1117;
+            width: 100%;
+            border-radius: 24px 24px 0 0;
+            padding: 24px 20px 30px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .modal-header h3 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .modal-subtitle {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #818cf8;
+        }
+
+        .close-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .close-btn:active {
+            transform: scale(0.9);
+        }
+
+        .campo {
+            margin-bottom: 16px;
+        }
+
+        .campo-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            margin-bottom: 6px;
+        }
+
+        .campo-label label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .campo-label .hint {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .required {
+            color: #818cf8;
+        }
+
+        .input {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            color: #e2e8f0;
+            font-size: 15px;
+            transition: border-color 0.2s;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: #6366f1 !important;
+        }
+
+        .input::placeholder {
+            color: #475569;
+        }
+
+        .tipo-pago-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .tipo-btn {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tipo-btn:active {
+            transform: scale(0.96);
+        }
+
+        .tipo-btn.activo {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: #6366f1;
+            color: #818cf8;
+        }
+
+        .guardar-btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: 700;
+            color: white;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .guardar-btn:active {
+            transform: scale(0.97);
+        }
+
+        .guardar-btn:disabled {
+            background: rgba(255, 255, 255, 0.05);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        /* ===== BOTTOM NAV ===== */
+        .nav-bottom {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(15, 17, 23, 0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 10px 20px 20px;
+            display: flex;
+            gap: 8px;
+            z-index: 50;
+        }
+
+        .nav-btn {
+            flex: 1;
+            padding: 10px;
+            background: transparent;
+            border: none;
+            border-radius: 12px;
+            color: #64748b;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:active {
+            transform: scale(0.95);
+        }
+
+        .nav-btn.activo {
+            background: rgba(99, 102, 241, 0.12);
+            color: #818cf8;
+        }
+
+        .nav-btn .icon {
+            font-size: 20px;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (min-width: 600px) {
+            body {
+                max-width: 480px;
+                margin: 0 auto;
+                padding-bottom: 100px;
+            }
+
+            .modal {
+                border-radius: 24px;
+                max-width: 480px;
+                margin: 0 auto;
+            }
+
+            .nav-bottom {
+                max-width: 480px;
+                left: 50%;
+                transform: translateX(-50%);
+                border-radius: 12px 12px 0 0;
+            }
+        }
+    </style>
 </head>
 <body>
 
-<div id="app"></div>
+    <div id="app"></div>
 
-<script>
-// ============== ESTADO ==============
-const SERVICIOS = {
-  internet: { nombre: 'Internet', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>', color: '#06b6d4', gradient: 'linear-gradient(135deg, #06b6d4, #0891b2)' },
-  netflix: { nombre: 'Netflix', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>', color: '#ef4444', gradient: 'linear-gradient(135deg, #ef4444, #dc2626)' },
-  spotify: { nombre: 'Spotify', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
-  otros: { nombre: 'Otros', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', color: '#a78bfa', gradient: 'linear-gradient(135deg, #a78bfa, #8b5cf6)' }
-};
-const MESES_NOMBRES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    <script>
+        // ============================================================
+        //  CONTROL DE COBROS - APP COMPLETA
+        //  Versión limpia, modular y sin bugs
+        // ============================================================
 
-let state = {
-  data: {
-    internet: { precioReal: 0, clientes: [] },
-    netflix: { precioReal: 0, clientes: [] },
-    spotify: { precioReal: 0, clientes: [] },
-    otros: { precioReal: 0, clientes: [] }
-  },
-  pagosMes: {},
-  vista: 'inicio',
-  mesActual: claveMes(new Date()),
-  expandido: { internet: true, netflix: true, spotify: true, otros: true },
-  editandoPrecio: null,
-  precioTemp: '',
-  modal: null,
-  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' }
-};
+        // ===== CONFIGURACIÓN =====
+        const CONFIG = {
+            servicios: [
+                { id: 'internet', nombre: 'Internet', icon: '🌐', color: '#06b6d4' },
+                { id: 'netflix', nombre: 'Netflix', icon: '📺', color: '#ef4444' },
+                { id: 'spotify', nombre: 'Spotify', icon: '🎵', color: '#10b981' },
+                { id: 'otros', nombre: 'Otros', icon: '📦', color: '#a78bfa' }
+            ],
+            mesesNombres: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+            diasVencimiento: 5 // días de anticipación para alertas
+        };
 
-// ============== HELPERS ==============
-function claveMes(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
-function parseMes(k) { const [y,m] = k.split('-'); return { year: +y, month: +m-1 }; }
-function formatoMes(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${year}`; }
-function formatoMesCorto(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${String(year).slice(2)}`; }
-function fmt(n) { return '$' + (n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k'; return '$' + Math.round(n); }
-function estaPagado(sk, cid) { return !!state.pagosMes[state.mesActual]?.[sk+':'+cid]; }
-// BUG FIX: antes solo se guardaba `true` al marcar un pago, así que si luego
-// cambiabas el precio del cliente, el historial de meses ya cerrados (dashboard
-// y gráficas) se recalculaba con el precio nuevo y descuadraba la ganancia real
-// de esos meses. Ahora se guarda el monto cobrado en el momento del pago.
-function montoPagado(entry, cliente) {
-  if (!entry) return 0;
-  if (typeof entry === 'object') return entry.monto ?? (cliente ? cliente.pago : 0);
-  return cliente ? cliente.pago : 0; // formato viejo (true) sin monto guardado
-}
-function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-// ============== PERSISTENCIA (localStorage) ==============
-function guardarLocal() {
-  try {
-    localStorage.setItem('pagos-data', JSON.stringify(state.data));
-    localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
-  } catch(e) { console.error(e); }
-}
-function cargarLocal() {
-  try {
-    const d = localStorage.getItem('pagos-data');
-    const p = localStorage.getItem('pagos-mes');
-    if (d) state.data = { ...state.data, ...JSON.parse(d) };
-    if (p) state.pagosMes = JSON.parse(p);
-  } catch(e) { console.error(e); }
-}
-
-// ============== ACCIONES ==============
-function setVista(v) { state.vista = v; render(); }
-function setMes(m) { state.mesActual = m; render(); }
-function toggleExpandido(k) { state.expandido[k] = !state.expandido[k]; render(); }
-
-function iniciarEditarPrecio(k) {
-  state.editandoPrecio = k;
-  state.precioTemp = state.data[k].precioReal != null ? String(state.data[k].precioReal) : '';
-  render();
-  setTimeout(() => document.getElementById('precio-input')?.focus(), 50);
-}
-function guardarPrecio(k) {
-  state.data[k].precioReal = parseFloat(state.precioTemp) || 0;
-  state.editandoPrecio = null;
-  state.precioTemp = '';
-  guardarLocal();
-  render();
-}
-
-function togglePago(sk, cid, mes) {
-  const m = mes || state.mesActual;
-  if (!state.pagosMes[m]) state.pagosMes[m] = {};
-  const k = sk+':'+cid;
-  if (state.pagosMes[m][k]) {
-    delete state.pagosMes[m][k];
-  } else {
-    const cliente = state.data[sk]?.clientes.find(c => c.id === cid);
-    const hoy = new Date();
-    state.pagosMes[m][k] = {
-      monto: cliente ? cliente.pago : 0,
-      fecha: `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`
-    };
-  }
-  guardarLocal();
-  render();
-}
-
-// Permite corregir la fecha real en la que se recibió el pago (para clientes que
-// pagan antes/después de la fecha en que se marcaron en la app), y así calcular
-// la próxima renovación a partir de la fecha real de pago en vez de solo el
-// día de corte configurado.
-function cambiarFechaPago(sk, cid, nuevaFecha) {
-  const entry = state.pagosMes[state.mesActual]?.[sk+':'+cid];
-  if (!entry || typeof entry !== 'object' || !nuevaFecha) return;
-  entry.fecha = nuevaFecha;
-  guardarLocal();
-  render();
-}
-
-// Busca la fecha del pago más reciente registrado para un cliente, sin
-// importar en qué mes quedó guardado (permite calcular la próxima renovación
-// aunque el cliente esté siendo visto en un mes distinto).
-function ultimaFechaPago(sk, cid) {
-  let ultima = null;
-  Object.values(state.pagosMes).forEach(mesObj => {
-    const entry = mesObj?.[sk+':'+cid];
-    if (entry && typeof entry === 'object' && entry.fecha) {
-      const f = new Date(entry.fecha+'T00:00:00');
-      if (!ultima || f > ultima) ultima = f;
-    }
-  });
-  return ultima;
-}
-
-function abrirModal(servicio, clienteId) {
-  const cliente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
-  state.formCliente = {
-    nombre: cliente?.nombre || '',
-    pago: cliente?.pago != null ? String(cliente.pago) : '',
-    tipoPago: cliente?.tipoPago || 'mensual',
-    notas: cliente?.notas || '',
-    diaPago: cliente?.diaPago ? String(cliente.diaPago) : ''
-  };
-  state.modal = { servicio, clienteId };
-  render();
-}
-function cerrarModal() {
-  state.modal = null;
-  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' };
-  render();
-}
-function actualizarForm(campo, valor) {
-  state.formCliente[campo] = valor;
-  // Solo re-render para tipoPago (cambia visual). Para inputs no re-render para no perder focus
-  if (campo === 'tipoPago') render();
-}
-
-function guardarCliente() {
-  if (!state.formCliente.nombre.trim()) return;
-  const { servicio, clienteId } = state.modal;
-  const nuevo = {
-    id: clienteId || ('c_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
-    nombre: state.formCliente.nombre.trim(),
-    pago: parseFloat(state.formCliente.pago) || 0,
-    tipoPago: state.formCliente.tipoPago,
-    notas: state.formCliente.notas.trim(),
-    diaPago: state.formCliente.diaPago ? Math.min(31, Math.max(1, parseInt(state.formCliente.diaPago) || 1)) : null,
-    creado: clienteId ? state.data[servicio].clientes.find(c=>c.id===clienteId).creado : Date.now()
-  };
-  if (clienteId) {
-    state.data[servicio].clientes = state.data[servicio].clientes.map(c => c.id === clienteId ? nuevo : c);
-  } else {
-    state.data[servicio].clientes.push(nuevo);
-  }
-  guardarLocal();
-  cerrarModal();
-}
-
-function eliminarCliente(servicio, id) {
-  if (!confirm('¿Eliminar este cliente? También se borrará su historial de pagos.')) return;
-  state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
-  // BUG FIX: antes los registros de pago (pagosMes) de un cliente eliminado se quedaban
-  // huérfanos para siempre en localStorage, inflando los datos guardados y descuadrando
-  // los totales históricos del dashboard. Ahora se limpian de todos los meses.
-  const clave = servicio + ':' + id;
-  Object.keys(state.pagosMes).forEach(mes => {
-    if (state.pagosMes[mes] && clave in state.pagosMes[mes]) delete state.pagosMes[mes][clave];
-  });
-  guardarLocal();
-  render();
-}
-
-// ============== CÁLCULOS ==============
-function calcularTotalesMes() {
-  let cobrado = 0, costoReal = 0, mensual = 0;
-  const pagosDelMes = state.pagosMes[state.mesActual] || {};
-  Object.entries(state.data).forEach(([sk, s]) => {
-    let huboPagos = false;
-    s.clientes.forEach(c => {
-      if (c.tipoPago === 'mensual') mensual += c.pago;
-      const entry = pagosDelMes[sk+':'+c.id];
-      if (entry) { cobrado += montoPagado(entry, c); huboPagos = true; }
-    });
-    if (huboPagos) costoReal += s.precioReal;
-  });
-  return { cobrado, costoReal, ganancia: cobrado - costoReal, mensualEsperado: mensual };
-}
-
-function calcularDatosMensuales() {
-  const hoy = new Date();
-  const meses = [];
-  for (let i = 11; i >= 0; i--) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-    const key = claveMes(d);
-    const pagos = state.pagosMes[key] || {};
-    let cobrado = 0, costo = 0;
-    Object.entries(state.data).forEach(([sk, s]) => {
-      let hubo = false;
-      s.clientes.forEach(c => {
-        const entry = pagos[sk+':'+c.id];
-        if (entry) { cobrado += montoPagado(entry, c); hubo = true; }
-      });
-      if (hubo) costo += s.precioReal;
-    });
-    meses.push({
-      mes: formatoMesCorto(key),
-      cobrado: Math.round(cobrado*100)/100,
-      costo: Math.round(costo*100)/100,
-      ganancia: Math.round((cobrado-costo)*100)/100
-    });
-  }
-  return meses;
-}
-
-// ============== RESPALDO (exportar / importar) ==============
-function exportarRespaldo() {
-  const respaldo = { data: state.data, pagosMes: state.pagosMes, version: 1, fecha: new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const f = new Date();
-  const nombre = `jd-ventas-respaldo-${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}.json`;
-  a.href = url; a.download = nombre;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-function importarRespaldo(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const json = JSON.parse(e.target.result);
-      if (!json.data || !json.pagosMes) throw new Error('Formato inválido');
-      if (!confirm('Esto reemplazará todos los datos actuales con los del respaldo. ¿Continuar?')) return;
-      state.data = json.data;
-      state.pagosMes = json.pagosMes;
-      guardarLocal();
-      render();
-      alert('Respaldo restaurado correctamente.');
-    } catch(err) {
-      alert('El archivo no es un respaldo válido de J.D Ventas.');
-    }
-  };
-  reader.readAsText(file);
-  input.value = '';
-}
-
-// ============== VENCIMIENTOS ==============
-function diasParaVencimiento(c, hoy, sk) {
-  if (c.tipoPago !== 'mensual') return null;
-  hoy = hoy || new Date();
-  hoy = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-
-  const ultimoPago = sk ? ultimaFechaPago(sk, c.id) : null;
-  let fechaVenc;
-
-  if (ultimoPago) {
-    // Próxima renovación = 1 mes calendario después de la fecha real del último
-    // pago registrado (lo que pidió Jorge), en vez de depender solo del día de
-    // corte fijo. No requiere que 'diaPago' esté configurado.
-    const anoSig = ultimoPago.getMonth() === 11 ? ultimoPago.getFullYear()+1 : ultimoPago.getFullYear();
-    const mesSig = (ultimoPago.getMonth()+1) % 12;
-    const diasMesSig = new Date(anoSig, mesSig+1, 0).getDate();
-    fechaVenc = new Date(anoSig, mesSig, Math.min(ultimoPago.getDate(), diasMesSig));
-  } else {
-    // BUG FIX: antes, si el cliente no tenía 'día de corte' configurado, la
-    // función regresaba null de inmediato sin importar si ya había una fecha
-    // de pago registrada — por eso nunca aparecían los días restantes al
-    // ponerle fecha de pago a un cliente sin día de corte. Ahora ese campo
-    // solo se exige aquí, como estimado inicial cuando NUNCA se ha registrado
-    // un pago.
-    if (!c.diaPago) return null;
-    const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
-    const dia = Math.min(c.diaPago, diasEnMes);
-    fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
-    // BUG FIX: un cliente agregado DESPUÉS de la fecha de corte de este mes
-    // (ej. se registra el día 25 con corte el día 10) todavía no ha tenido su
-    // primer vencimiento. Se corre al día de corte del próximo mes.
-    if (c.creado) {
-      const fechaCreado = new Date(c.creado);
-      fechaCreado.setHours(0,0,0,0);
-      if (fechaCreado > fechaVenc) {
-        const sigAno = hoy.getMonth() === 11 ? hoy.getFullYear()+1 : hoy.getFullYear();
-        const sigMes = (hoy.getMonth()+1) % 12;
-        const diasSigMes = new Date(sigAno, sigMes+1, 0).getDate();
-        fechaVenc = new Date(sigAno, sigMes, Math.min(c.diaPago, diasSigMes));
-      }
-    }
-  }
-  return Math.round((fechaVenc - hoy) / 86400000);
-}
-
-function calcularVencimientos() {
-  const LIMITE_DIAS = 5; // avisar desde 5 días antes
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
-  const claveReal = claveMes(hoy);
-  const pagosReales = state.pagosMes[claveReal] || {};
-  const lista = [];
-  Object.entries(state.data).forEach(([sk, s]) => {
-    s.clientes.forEach(c => {
-      if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
-      const diffDias = diasParaVencimiento(c, hoy, sk);
-      if (diffDias === null) return;
-      if (diffDias <= LIMITE_DIAS) {
-        lista.push({ servicio: sk, cliente: c, diasRestantes: diffDias });
-      }
-    });
-  });
-  lista.sort((a,b) => a.diasRestantes - b.diasRestantes);
-  return lista;
-}
-
-function renderVencimientos() {
-  const venc = calcularVencimientos();
-  if (venc.length === 0) return '';
-  const claveHoy = claveMes(new Date());
-  return `<div class="venc-card">
-    <div class="venc-title">⏰ Pagos por vencer</div>
-    ${venc.map(v => {
-      const info = SERVICIOS[v.servicio];
-      const vencido = v.diasRestantes < 0;
-      const texto = vencido ? `Vencido hace ${Math.abs(v.diasRestantes)}d` : v.diasRestantes === 0 ? 'Vence hoy' : `En ${v.diasRestantes}d`;
-      return `<div class="venc-row ${vencido ? 'vencido' : ''}" data-action="togglePago" data-servicio="${v.servicio}" data-cid="${v.cliente.id}" data-mes="${claveHoy}">
-        <span class="check-btn" style="font-size:18px">⭕</span>
-        <div class="venc-info">
-          <div class="nombre">${esc(v.cliente.nombre)}</div>
-          <span class="tag" style="background:${info.color}20; color:${info.color}">${info.nombre}</span>
-        </div>
-        <div class="venc-dias ${vencido ? 'vencido' : ''}">${texto}</div>
-      </div>`;
-    }).join('')}
-  </div>`;
-}
-
-// ============== RENDER ==============
-function render() {
-  const app = document.getElementById('app');
-  app.innerHTML = renderHeader() + (state.vista === 'inicio' ? renderInicio() : renderDashboard()) + renderNav() + renderModal();
-  bindEvents();
-}
-
-function renderHeader() {
-  return `
-    <div class="header">
-      <div class="header-top">
-        <div class="logo">$</div>
-        <div style="flex:1">
-          <h1>J.D Ventas</h1>
-          <p>${state.vista === 'inicio' ? 'Control por servicio' : 'Ganancias mes a mes'}</p>
-        </div>
-      </div>
-      ${state.vista === 'inicio' ? renderSelectorMes() : ''}
-    </div>
-  `;
-}
-
-function renderSelectorMes() {
-  const hoy = new Date();
-  let html = '<div class="meses-scroll">';
-  for (let i = -6; i <= 2; i++) {
-    const d = new Date(hoy.getFullYear(), hoy.getMonth()+i, 1);
-    const k = claveMes(d);
-    html += `<button class="mes-btn ${k===state.mesActual?'activo':''}" data-action="setMes" data-mes="${k}">${formatoMes(k)}</button>`;
-  }
-  html += '</div>';
-  return html;
-}
-
-function renderInicio() {
-  const t = calcularTotalesMes();
-  let html = '<div class="fade-in">';
-  html += renderVencimientos();
-  html += `
-    <div class="resumen">
-      <div class="resumen-card destacado">
-        <div class="resumen-label" style="color:#10b981">Ganancia del mes</div>
-        <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#06b6d4">Cobrado</div>
-        <div class="resumen-value">${fmt(t.cobrado)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#94a3b8">Costo real</div>
-        <div class="resumen-value">${fmt(t.costoReal)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#a78bfa">Esperado mensual</div>
-        <div class="resumen-value">${fmt(t.mensualEsperado)}</div>
-      </div>
-    </div>
-  `;
-
-  html += '<div class="secciones">';
-  Object.entries(SERVICIOS).forEach(([key, info]) => {
-    html += renderSeccion(key, info);
-  });
-  html += '</div><div style="height:120px"></div></div>';
-  return html;
-}
-
-function renderSeccion(key, info) {
-  const s = state.data[key];
-  const pagosDelMes = state.pagosMes[state.mesActual] || {};
-  const cobrado = s.clientes.reduce((sum, c) => sum + montoPagado(pagosDelMes[key+':'+c.id], c), 0);
-  const ganancia = cobrado - s.precioReal;
-  const pagados = s.clientes.filter(c => estaPagado(key, c.id)).length;
-  const editando = state.editandoPrecio === key;
-  const expandido = state.expandido[key];
-
-  let html = `<div class="seccion">
-    <div class="seccion-header" style="background: linear-gradient(135deg, ${info.color}15, ${info.color}05); ${expandido ? `border-bottom: 1px solid ${info.color}20;` : ''}">
-      <div class="seccion-top" data-action="toggleExp" data-key="${key}" style="cursor:pointer">
-        <span class="chevron-btn" style="font-size:14px">${expandido ? '▼' : '▶'}</span>
-        <div class="seccion-icon" style="background: ${info.gradient}">${info.icon}</div>
-        <div class="seccion-info">
-          <h2>${info.nombre}</h2>
-          <p>${pagados}/${s.clientes.length} pagaron</p>
-        </div>
-        <div class="seccion-ganancia">
-          <div class="label">Ganancia</div>
-          <div class="value" style="color: ${ganancia >= 0 ? info.color : '#ef4444'}">${fmt(ganancia)}</div>
-        </div>
-      </div>
-      <div class="precio-real-row">
-        <span class="label">Precio real (lo que pagas)</span>
-        ${editando ? `
-          <div style="display:flex; gap:6px; align-items:center">
-            <input id="precio-input" type="number" inputmode="decimal" class="precio-input" value="${state.precioTemp}" style="border-color: ${info.color}40" />
-            <button class="save-btn" style="background: ${info.color}" data-action="guardarPrecio" data-key="${key}">✓</button>
-          </div>
-        ` : `
-          <button data-action="iniciarPrecio" data-key="${key}">
-            <span class="monto">${fmt(s.precioReal)}</span>
-            <span style="color:#64748b; font-size:12px">✎</span>
-          </button>
-        `}
-      </div>
-    </div>
-    ${expandido ? `
-      <div class="seccion-body">
-        ${s.clientes.length === 0 ? `<div class="vacio">Sin clientes en ${info.nombre}</div>` :
-          s.clientes.map(c => renderClienteRow(key, c, info.color)).join('')
+        // ===== ESTADO INICIAL =====
+        function getInitialState() {
+            const data = {};
+            CONFIG.servicios.forEach(s => {
+                data[s.id] = { precioReal: 0, clientes: [] };
+            });
+            return {
+                data: data,
+                pagosMes: {},
+                mesActual: getClaveMes(new Date()),
+                vista: 'inicio',
+                expandido: {},
+                modal: null,
+                form: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
+                editandoPrecio: null,
+                precioTemp: ''
+            };
         }
-        <button class="add-cliente-btn" style="background: ${info.color}15; color: ${info.color}; border: 1px dashed ${info.color}40" data-action="abrirModal" data-servicio="${key}">
-          + Agregar cliente
-        </button>
-      </div>
-    ` : ''}
-  </div>`;
-  return html;
-}
 
-function renderClienteRow(servicioKey, c, color) {
-  const pagado = estaPagado(servicioKey, c.id);
-  const dias = diasParaVencimiento(c, null, servicioKey);
-  let tagDias = '';
-  if (dias !== null) {
-    const vencido = dias < 0;
-    const texto = vencido ? `Vencido ${Math.abs(dias)}d` : dias === 0 ? 'Vence hoy' : `Faltan ${dias}d`;
-    tagDias = `<span class="tag tag-venc" style="${vencido && !pagado ? 'background:rgba(239,68,68,0.15); color:#ef4444;' : ''}">${texto}</span>`;
-  }
-  const entryPago = state.pagosMes[state.mesActual]?.[servicioKey+':'+c.id];
-  const fechaPago = (entryPago && typeof entryPago === 'object') ? (entryPago.fecha || '') : '';
-  return `
-    <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
-      <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
-        ${pagado ? `<span style="color:${color}">✅</span>` : '<span style="color:#475569">⭕</span>'}
-      </button>
-      <div class="cliente-info">
-        <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
-        <div class="cliente-tags">
-          <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
-          ${tagDias}
-          ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
-        </div>
-      </div>
-      <div class="cliente-pago">
-        <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
-        ${pagado ? `<div class="fecha-pago-row">
-          <span class="fecha-label">Pagó:</span>
-          <input type="date" class="fecha-pago-input" value="${esc(fechaPago)}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); cambiarFechaPago('${servicioKey}','${c.id}', this.value)" />
-        </div>` : ''}
-      </div>
-      <div class="cliente-acciones">
-        <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
-        <button class="icon-btn delete" data-action="eliminarCliente" data-servicio="${servicioKey}" data-cid="${c.id}">🗑</button>
-      </div>
-    </div>
-  `;
-}
+        let state = getInitialState();
 
-function renderDashboard() {
-  const datos = calcularDatosMensuales();
-  const conDatos = datos.filter(m => m.ganancia !== 0);
-  const totalAnual = conDatos.reduce((s,m)=>s+m.ganancia,0);
-  const promedio = conDatos.length > 0 ? totalAnual / conDatos.length : 0;
-  const mejorMes = conDatos.reduce((max,m) => m.ganancia > (max?.ganancia || -Infinity) ? m : max, null);
-  const mesActual = datos[datos.length-1];
-  const mesAnt = datos[datos.length-2];
-  let cambio = 0;
-  if (mesAnt && mesAnt.ganancia !== 0) cambio = ((mesActual.ganancia - mesAnt.ganancia) / Math.abs(mesAnt.ganancia)) * 100;
+        // ===== HELPERS =====
+        function getClaveMes(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
 
-  // Por servicio mes actual
-  const mesK = claveMes(new Date());
-  const pagosM = state.pagosMes[mesK] || {};
-  const porServicio = Object.entries(SERVICIOS).map(([sk, info]) => {
-    const s = state.data[sk];
-    const cob = s.clientes.reduce((sum,c) => sum + montoPagado(pagosM[sk+':'+c.id], c), 0);
-    return { nombre: info.nombre, ganancia: Math.round((cob - s.precioReal)*100)/100, color: info.color };
-  });
-  const maxAbs = Math.max(...porServicio.map(p => Math.abs(p.ganancia)), 1);
+        function parseMes(clave) {
+            const [y, m] = clave.split('-');
+            return { year: +y, month: +m - 1 };
+        }
 
-  return `<div class="fade-in" style="padding: 16px 20px">
-    <div class="resumen" style="padding: 0; margin-bottom: 20px">
-      <div class="resumen-card destacado">
-        <div class="resumen-label" style="color:#10b981">Total 12 meses</div>
-        <div class="resumen-value" style="color:#10b981">${fmt(totalAnual)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#06b6d4">Promedio mensual</div>
-        <div class="resumen-value">${fmt(promedio)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:${cambio >= 0 ? '#10b981' : '#ef4444'}">Mes actual</div>
-        <div class="resumen-value">${fmt(mesActual?.ganancia || 0)}</div>
-        ${cambio !== 0 ? `<div class="resumen-sub">${cambio >= 0 ? '↑' : '↓'} ${Math.abs(cambio).toFixed(0)}% vs mes anterior</div>` : '<div class="resumen-sub">sin datos previos</div>'}
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#a78bfa">Mejor mes</div>
-        <div class="resumen-value">${mejorMes ? fmt(mejorMes.ganancia) : '—'}</div>
-        ${mejorMes ? `<div class="resumen-sub">${mejorMes.mes}</div>` : ''}
-      </div>
-    </div>
+        function formatoMes(clave) {
+            const { year, month } = parseMes(clave);
+            return `${CONFIG.mesesNombres[month]} ${year}`;
+        }
 
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#10b981">📈</span> Ganancia mensual</div>
-      ${renderLineChart(datos)}
-    </div>
+        function formatoMesCorto(clave) {
+            const { year, month } = parseMes(clave);
+            return `${CONFIG.mesesNombres[month]} ${String(year).slice(2)}`;
+        }
 
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#06b6d4">📊</span> Cobrado vs Costo (6 meses)</div>
-      ${renderBarChart(datos.slice(-6))}
-    </div>
+        function fmt(n) {
+            if (n === undefined || n === null) return '$0.00';
+            return '$' + Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
 
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#a78bfa">📦</span> Por servicio (este mes)</div>
-      ${porServicio.map(s => `
-        <div class="servicio-bar">
-          <div class="servicio-bar-row">
-            <span class="nombre">${s.nombre}</span>
-            <span class="monto" style="color: ${s.ganancia >= 0 ? s.color : '#ef4444'}">${fmt(s.ganancia)}</span>
-          </div>
-          <div class="servicio-bar-bg">
-            <div class="servicio-bar-fill" style="width: ${(Math.abs(s.ganancia)/maxAbs)*100}%; background: linear-gradient(90deg, ${s.ganancia >= 0 ? s.color : '#ef4444'}80, ${s.ganancia >= 0 ? s.color : '#ef4444'})"></div>
-          </div>
-        </div>
-      `).join('')}
-    </div>
+        function fmtCorto(n) {
+            if (!n) return '$0';
+            const abs = Math.abs(n);
+            if (abs >= 1000) return (n >= 0 ? '$' : '-$') + (abs / 1000).toFixed(1) + 'k';
+            return (n >= 0 ? '$' : '-$') + Math.round(abs);
+        }
 
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#94a3b8">💾</span> Respaldo de datos</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
-      <div style="display:flex; gap:8px">
-        <button class="tipo-btn" style="flex:1" onclick="exportarRespaldo()">⬇ Exportar respaldo</button>
-        <button class="tipo-btn" style="flex:1" onclick="document.getElementById('input-restaurar').click()">⬆ Restaurar</button>
-      </div>
-      <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
-    </div>
-  </div>`;
-}
+        function esc(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;',
+                "'": '&#39;' }[c] || c));
+        }
 
-function renderLineChart(datos) {
-  const W = 320, H = 200, padL = 40, padR = 10, padT = 10, padB = 30;
-  const cw = W - padL - padR, ch = H - padT - padB;
-  const valores = datos.map(d => d.ganancia);
-  let minV = Math.min(...valores, 0);
-  let maxV = Math.max(...valores, 0);
-  if (minV === maxV) { maxV = minV + 100; }
-  const rango = maxV - minV;
-  const xStep = cw / (datos.length - 1 || 1);
+        function generarId() {
+            return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        }
 
-  const px = i => padL + i * xStep;
-  const py = v => padT + ch - ((v - minV) / rango) * ch;
+        function hoy() {
+            const d = new Date();
+            d.setHours(0, 0, 0, 0);
+            return d;
+        }
 
-  // Líneas grid
-  let grid = '';
-  for (let i = 0; i <= 4; i++) {
-    const y = padT + (ch / 4) * i;
-    const val = maxV - (rango / 4) * i;
-    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
-    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
-  }
+        function esNumeroValido(v) {
+            return v !== undefined && v !== null && !isNaN(v) && isFinite(v);
+        }
 
-  // Línea cero
-  if (minV < 0 && maxV > 0) {
-    const y0 = py(0);
-    grid += `<line x1="${padL}" y1="${y0}" x2="${W-padR}" y2="${y0}" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>`;
-  }
+        // ===== PERSISTENCIA =====
+        function guardarLocal() {
+            try {
+                localStorage.setItem('cobros-data', JSON.stringify(state.data));
+                localStorage.setItem('cobros-pagos', JSON.stringify(state.pagosMes));
+            } catch (e) {
+                console.error('Error guardando:', e);
+            }
+        }
 
-  // Path
-  const pathD = datos.map((d, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(d.ganancia)}`).join(' ');
+        function cargarLocal() {
+            try {
+                const dataRaw = localStorage.getItem('cobros-data');
+                const pagosRaw = localStorage.getItem('cobros-pagos');
+                if (dataRaw) {
+                    const parsed = JSON.parse(dataRaw);
+                    // Fusionar con estructura actual (por si hay nuevos servicios)
+                    CONFIG.servicios.forEach(s => {
+                        if (!parsed[s.id]) parsed[s.id] = { precioReal: 0, clientes: [] };
+                        if (!parsed[s.id].clientes) parsed[s.id].clientes = [];
+                        if (parsed[s.id].precioReal === undefined) parsed[s.id].precioReal = 0;
+                    });
+                    state.data = parsed;
+                }
+                if (pagosRaw) {
+                    state.pagosMes = JSON.parse(pagosRaw);
+                }
+            } catch (e) {
+                console.error('Error cargando:', e);
+                // Si hay error, resetear estado
+                state = getInitialState();
+            }
+        }
 
-  // Área debajo
-  const areaD = pathD + ` L ${px(datos.length-1)} ${padT+ch} L ${px(0)} ${padT+ch} Z`;
+        // ===== TOAST =====
+        function mostrarToast(mensaje, tipo = 'success') {
+            const existing = document.querySelector('.toast');
+            if (existing) existing.remove();
 
-  // Puntos y labels X
-  let puntos = '', labelsX = '';
-  datos.forEach((d, i) => {
-    puntos += `<circle cx="${px(i)}" cy="${py(d.ganancia)}" r="3.5" fill="#10b981" stroke="#0a0e1a" stroke-width="2"/>`;
-    if (i % 2 === 0 || i === datos.length - 1) {
-      labelsX += `<text x="${px(i)}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
-    }
-  });
+            const toast = document.createElement('div');
+            toast.className = `toast ${tipo}`;
+            toast.textContent = mensaje;
+            document.body.appendChild(toast);
 
-  return `<div class="chart-container">
-    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-      <defs>
-        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
-          <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      ${grid}
-      <path d="${areaD}" fill="url(#areaGrad)"/>
-      <path d="${pathD}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      ${puntos}
-      ${labelsX}
-    </svg>
-  </div>`;
-}
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s';
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
 
-function renderBarChart(datos) {
-  const W = 320, H = 200, padL = 40, padR = 10, padT = 10, padB = 30;
-  const cw = W - padL - padR, ch = H - padT - padB;
-  const maxV = Math.max(...datos.flatMap(d => [d.cobrado, d.costo]), 1);
-  const groupW = cw / datos.length;
-  const barW = groupW * 0.35;
-  const gap = groupW * 0.05;
+        // ===== ACCIONES =====
+        function setVista(vista) {
+            state.vista = vista;
+            render();
+        }
 
-  let grid = '';
-  for (let i = 0; i <= 4; i++) {
-    const y = padT + (ch / 4) * i;
-    const val = maxV - (maxV / 4) * i;
-    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
-    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
-  }
+        function setMes(clave) {
+            state.mesActual = clave;
+            render();
+        }
 
-  let bars = '', labelsX = '';
-  datos.forEach((d, i) => {
-    const gx = padL + i * groupW + groupW * 0.1;
-    const hCob = (d.cobrado / maxV) * ch;
-    const hCos = (d.costo / maxV) * ch;
-    bars += `<rect x="${gx}" y="${padT+ch-hCob}" width="${barW}" height="${hCob}" fill="#06b6d4" rx="3"/>`;
-    bars += `<rect x="${gx+barW+gap}" y="${padT+ch-hCos}" width="${barW}" height="${hCos}" fill="#64748b" rx="3"/>`;
-    labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
-  });
+        function toggleExpandido(id) {
+            state.expandido[id] = !state.expandido[id];
+            render();
+        }
 
-  return `<div class="chart-container">
-    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-      ${grid}
-      ${bars}
-      ${labelsX}
-    </svg>
-    <div style="display:flex; gap:16px; justify-content:center; margin-top:8px; font-size:11px">
-      <span style="display:flex; align-items:center; gap:4px"><span style="width:10px; height:10px; background:#06b6d4; border-radius:2px; display:inline-block"></span> Cobrado</span>
-      <span style="display:flex; align-items:center; gap:4px"><span style="width:10px; height:10px; background:#64748b; border-radius:2px; display:inline-block"></span> Costo</span>
-    </div>
-  </div>`;
-}
+        function iniciarEditarPrecio(id) {
+            state.editandoPrecio = id;
+            state.precioTemp = state.data[id].precioReal != null ? String(state.data[id].precioReal) : '';
+            render();
+            setTimeout(() => document.getElementById('precio-input')?.focus(), 50);
+        }
 
-function renderNav() {
-  return `<div class="nav-bottom">
-    <button class="nav-btn ${state.vista === 'inicio' ? 'activo' : ''}" data-action="setVista" data-vista="inicio">
-      <span class="icon">🏠</span> Inicio
-    </button>
-    <button class="nav-btn ${state.vista === 'dashboard' ? 'activo' : ''}" data-action="setVista" data-vista="dashboard">
-      <span class="icon">📊</span> Dashboard
-    </button>
-  </div>`;
-}
+        function guardarPrecio(id) {
+            const val = parseFloat(state.precioTemp);
+            state.data[id].precioReal = esNumeroValido(val) ? val : 0;
+            state.editandoPrecio = null;
+            state.precioTemp = '';
+            guardarLocal();
+            mostrarToast('Precio actualizado ✅');
+            render();
+        }
 
-function renderModal() {
-  if (!state.modal) return '';
-  const info = SERVICIOS[state.modal.servicio];
-  const f = state.formCliente;
-  return `<div class="modal-overlay" data-action="cerrarModal">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3>${state.modal.clienteId ? 'Editar' : 'Nuevo'} cliente</h3>
-        <button class="close-btn" data-action="cerrarModal">✕</button>
-      </div>
-      <div class="modal-subtitle" style="color:${info.color}">${info.nombre}</div>
+        function togglePago(servicioId, clienteId, mesClave) {
+            const mes = mesClave || state.mesActual;
+            if (!state.pagosMes[mes]) state.pagosMes[mes] = {};
+            const key = servicioId + ':' + clienteId;
 
-      <div class="campo">
-        <div class="campo-label"><label>Nombre del cliente <span class="required">*</span></label></div>
-        <input class="input" type="text" value="${esc(f.nombre)}" placeholder="Ej. Juan Pérez" oninput="actualizarForm('nombre', this.value); document.getElementById('btn-guardar').disabled = !this.value.trim()" />
-      </div>
+            if (state.pagosMes[mes][key]) {
+                delete state.pagosMes[mes][key];
+                mostrarToast('Pago desmarcado ⭕');
+            } else {
+                const cliente = state.data[servicioId]?.clientes.find(c => c.id === clienteId);
+                if (!cliente) return;
+                const fecha = hoy();
+                state.pagosMes[mes][key] = {
+                    monto: cliente.pago || 0,
+                    fecha: `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`
+                };
+                mostrarToast('Pago registrado ✅');
+            }
+            guardarLocal();
+            render();
+        }
 
-      <div class="campo">
-        <div class="campo-label"><label>¿Cuánto paga? ($)</label><span class="hint">Lo que te paga</span></div>
-        <input class="input" type="number" inputmode="decimal" value="${esc(f.pago)}" placeholder="0.00" oninput="actualizarForm('pago', this.value)" />
-      </div>
+        function cambiarFechaPago(servicioId, clienteId, nuevaFecha) {
+            const entry = state.pagosMes[state.mesActual]?.[servicioId + ':' + clienteId];
+            if (!entry || typeof entry !== 'object' || !nuevaFecha) return;
+            entry.fecha = nuevaFecha;
+            guardarLocal();
+            render();
+        }
 
-      <div class="campo">
-        <div class="campo-label"><label>Tipo de pago</label></div>
-        <div class="tipo-pago-grid">
-          <button class="tipo-btn ${f.tipoPago === 'mensual' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="mensual">Mensual</button>
-          <button class="tipo-btn ${f.tipoPago === 'unico' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="unico">Pago único</button>
-        </div>
-      </div>
+        function obtenerUltimoPago(servicioId, clienteId) {
+            let ultima = null;
+            Object.values(state.pagosMes).forEach(mesObj => {
+                const entry = mesObj?.[servicioId + ':' + clienteId];
+                if (entry && typeof entry === 'object' && entry.fecha) {
+                    const f = new Date(entry.fecha + 'T00:00:00');
+                    if (!ultima || f > ultima) ultima = f;
+                }
+            });
+            return ultima;
+        }
 
-      <div class="campo">
-        <div class="campo-label"><label>Día de vencimiento (opcional)</label><span class="hint">Día del mes, 1-31</span></div>
-        <input class="input" type="number" inputmode="numeric" min="1" max="31" value="${esc(f.diaPago)}" placeholder="Ej. 15" oninput="actualizarForm('diaPago', this.value)" />
-      </div>
+        function calcularDiasVencimiento(cliente, servicioId) {
+            if (cliente.tipoPago !== 'mensual') return null;
 
-      <div class="campo">
-        <div class="campo-label"><label>Notas (opcional)</label></div>
-        <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Detalles adicionales" oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
-      </div>
+            const hoyDate = hoy();
+            const ultimoPago = servicioId ? obtenerUltimoPago(servicioId, cliente.id) : null;
+            let fechaVenc;
 
-      <button id="btn-guardar" class="guardar-btn" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarCliente">
-        ✓ ${state.modal.clienteId ? 'Guardar cambios' : 'Agregar cliente'}
-      </button>
-    </div>
-  </div>`;
-}
+            if (ultimoPago) {
+                // Próximo vencimiento = +1 mes desde el último pago real
+                const anoSig = ultimoPago.getMonth() === 11 ? ultimoPago.getFullYear() + 1 : ultimoPago.getFullYear();
+                const mesSig = (ultimoPago.getMonth() + 1) % 12;
+                const diasMesSig = new Date(anoSig, mesSig + 1, 0).getDate();
+                fechaVenc = new Date(anoSig, mesSig, Math.min(ultimoPago.getDate(), diasMesSig));
+            } else {
+                // Sin historial: usar día de corte
+                if (!cliente.diaPago) return null;
+                const dia = Math.min(cliente.diaPago, new Date(hoyDate.getFullYear(), hoyDate.getMonth() + 1, 0)
+                .getDate());
+                fechaVenc = new Date(hoyDate.getFullYear(), hoyDate.getMonth(), dia);
 
-// ============== EVENTOS ==============
-function bindEvents() {
-  document.querySelectorAll('[data-action]').forEach(el => {
-    el.addEventListener('click', handleClick);
-  });
-  const pi = document.getElementById('precio-input');
-  if (pi) {
-    pi.addEventListener('input', e => { state.precioTemp = e.target.value; });
-    pi.addEventListener('keydown', e => {
-      if (e.key === 'Enter') guardarPrecio(state.editandoPrecio);
-    });
-  }
-}
+                // Si se creó después del día de corte, correr al mes siguiente
+                if (cliente.creado) {
+                    const fechaCreado = new Date(cliente.creado);
+                    fechaCreado.setHours(0, 0, 0, 0);
+                    if (fechaCreado > fechaVenc) {
+                        const sigAno = hoyDate.getMonth() === 11 ? hoyDate.getFullYear() + 1 : hoyDate.getFullYear();
+                        const sigMes = (hoyDate.getMonth() + 1) % 12;
+                        const diasSigMes = new Date(sigAno, sigMes + 1, 0).getDate();
+                        fechaVenc = new Date(sigAno, sigMes, Math.min(cliente.diaPago, diasSigMes));
+                    }
+                }
+            }
 
-function handleClick(e) {
-  const action = e.currentTarget.dataset.action;
-  const d = e.currentTarget.dataset;
-  switch(action) {
-    case 'setVista': setVista(d.vista); break;
-    case 'setMes': setMes(d.mes); break;
-    case 'toggleExp': toggleExpandido(d.key); break;
-    case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
-    case 'guardarPrecio': guardarPrecio(d.key); break;
-    case 'togglePago': togglePago(d.servicio, d.cid, d.mes); break;
-    case 'abrirModal': abrirModal(d.servicio, d.cid); break;
-    case 'cerrarModal':
-      if (e.target === e.currentTarget) cerrarModal();
-      break;
-    case 'setTipoPago': actualizarForm('tipoPago', d.tipo); break;
-    case 'guardarCliente': guardarCliente(); break;
-    case 'eliminarCliente':
-      e.stopPropagation();
-      eliminarCliente(d.servicio, d.cid);
-      break;
-  }
-}
+            return Math.round((fechaVenc - hoyDate) / 86400000);
+        }
 
-// ============== INIT ==============
-cargarLocal();
-render();
+        function calcularVencimientos() {
+            const hoyDate = hoy();
+            const mesActual = getClaveMes(hoyDate);
+            const pagos = state.pagosMes[mesActual] || {};
+            const lista = [];
 
-// BUG FIX: si la app se queda abierta en segundo plano y cambia el día (o el mes),
-// el selector de mes y los "pagos por vencer" quedaban congelados con la fecha de
-// cuando se abrió la app. Revisamos cada minuto si cambió el día y volvemos a pintar.
-let ultimoDiaConocido = new Date().toDateString();
-setInterval(() => {
-  const ahora = new Date().toDateString();
-  if (ahora !== ultimoDiaConocido) {
-    ultimoDiaConocido = ahora;
-    render();
-  }
-}, 60000);
+            CONFIG.servicios.forEach(s => {
+                const clientes = state.data[s.id]?.clientes || [];
+                clientes.forEach(c => {
+                    if (pagos[s.id + ':' + c.id]) return; // ya pagó
+                    const dias = calcularDiasVencimiento(c, s.id);
+                    if (dias === null) return;
+                    if (dias <= CONFIG.diasVencimiento) {
+                        lista.push({
+                            servicioId: s.id,
+                            servicioNombre: s.nombre,
+                            servicioColor: s.color,
+                            cliente: c,
+                            dias: dias
+                        });
+                    }
+                });
+            });
 
-// ============== PWA: Service Worker ==============
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
-  });
-}
-</script>
+            lista.sort((a, b) => a.dias - b.dias);
+            return lista;
+        }
+
+        // ===== CÁLCULOS =====
+        function calcularTotalesMes() {
+            let cobrado = 0,
+                costoReal = 0,
+                mensualEsperado = 0;
+            const pagos = state.pagosMes[state.mesActual] || {};
+
+            CONFIG.servicios.forEach(s => {
+                const data = state.data[s.id];
+                if (!data) return;
+
+                let huboPagos = false;
+                data.clientes.forEach(c => {
+                    if (c.tipoPago === 'mensual') mensualEsperado += c.pago || 0;
+                    const entry = pagos[s.id + ':' + c.id];
+                    if (entry) {
+                        const monto = typeof entry === 'object' ? entry.monto : (c.pago || 0);
+                        cobrado += monto;
+                        huboPagos = true;
+                    }
+                });
+                if (huboPagos) costoReal += data.precioReal || 0;
+            });
+
+            return {
+                cobrado: Math.round(cobrado * 100) / 100,
+                costoReal: Math.round(costoReal * 100) / 100,
+                ganancia: Math.round((cobrado - costoReal) * 100) / 100,
+                mensualEsperado: Math.round(mensualEsperado * 100) / 100
+            };
+        }
+
+        function calcularDatosMensuales() {
+            const hoyDate = hoy();
+            const meses = [];
+
+            for (let i = 11; i >= 0; i--) {
+                const d = new Date(hoyDate.getFullYear(), hoyDate.getMonth() - i, 1);
+                const clave = getClaveMes(d);
+                const pagos = state.pagosMes[clave] || {};
+                let cobrado = 0,
+                    costo = 0;
+
+                CONFIG.servicios.forEach(s => {
+                    const data = state.data[s.id];
+                    if (!data) return;
+                    let hubo = false;
+                    data.clientes.forEach(c => {
+                        const entry = pagos[s.id + ':' + c.id];
+                        if (entry) {
+                            const monto = typeof entry === 'object' ? entry.monto : (c.pago || 0);
+                            cobrado += monto;
+                            hubo = true;
+                        }
+                    });
+                    if (hubo) costo += data.precioReal || 0;
+                });
+
+                meses.push({
+                    mes: formatoMesCorto(clave),
+                    cobrado: Math.round(cobrado * 100) / 100,
+                    costo: Math.round(costo * 100) / 100,
+                    ganancia: Math.round((cobrado - costo) * 100) / 100
+                });
+            }
+
+            return meses;
+        }
+
+        function calcularPorServicio() {
+            const mes = getClaveMes(hoy());
+            const pagos = state.pagosMes[mes] || {};
+            const resultado = [];
+
+            CONFIG.servicios.forEach(s => {
+                const data = state.data[s.id];
+                if (!data) return;
+                let cobrado = 0;
+                data.clientes.forEach(c => {
+                    const entry = pagos[s.id + ':' + c.id];
+                    if (entry) {
+                        const monto = typeof entry === 'object' ? entry.monto : (c.pago || 0);
+                        cobrado += monto;
+                    }
+                });
+                resultado.push({
+                    nombre: s.nombre,
+                    color: s.color,
+                    ganancia: Math.round((cobrado - (data.precioReal || 0)) * 100) / 100,
+                    cobrado: Math.round(cobrado * 100) / 100,
+                    costo: data.precioReal || 0
+                });
+            });
+
+            return resultado;
+        }
+
+        // ===== MODAL =====
+        function abrirModal(servicioId, clienteId) {
+            const cliente = clienteId ? state.data[servicioId]?.clientes.find(c => c.id === clienteId) : null;
+            state.form = {
+                nombre: cliente?.nombre || '',
+                pago: cliente?.pago != null ? String(cliente.pago) : '',
+                tipoPago: cliente?.tipoPago || 'mensual',
+                notas: cliente?.notas || '',
+                diaPago: cliente?.diaPago ? String(cliente.diaPago) : ''
+            };
+            state.modal = { servicioId, clienteId };
+            render();
+        }
+
+        function cerrarModal() {
+            state.modal = null;
+            state.form = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' };
+            render();
+        }
+
+        function actualizarForm(campo, valor) {
+            state.form[campo] = valor;
+            if (campo === 'tipoPago') render();
+        }
+
+        function guardarCliente() {
+            if (!state.form.nombre.trim()) {
+                mostrarToast('El nombre es obligatorio ⚠️', 'error');
+                return;
+            }
+
+            const { servicioId, clienteId } = state.modal;
+            const pago = parseFloat(state.form.pago) || 0;
+
+            const nuevo = {
+                id: clienteId || generarId(),
+                nombre: state.form.nombre.trim(),
+                pago: pago,
+                tipoPago: state.form.tipoPago,
+                notas: state.form.notas.trim(),
+                diaPago: state.form.diaPago ? Math.min(31, Math.max(1, parseInt(state.form.diaPago) || 1)) : null,
+                creado: clienteId ? state.data[servicioId].clientes.find(c => c.id === clienteId)?.creado || Date.now() :
+                    Date.now()
+            };
+
+            if (clienteId) {
+                state.data[servicioId].clientes = state.data[servicioId].clientes.map(c =>
+                    c.id === clienteId ? nuevo : c
+                );
+                mostrarToast('Cliente actualizado ✅');
+            } else {
+                state.data[servicioId].clientes.push(nuevo);
+                mostrarToast('Cliente agregado ✅');
+            }
+
+            guardarLocal();
+            cerrarModal();
+        }
+
+        function eliminarCliente(servicioId, clienteId) {
+            if (!confirm('¿Eliminar este cliente? Se borrará todo su historial.')) return;
+
+            state.data[servicioId].clientes = state.data[servicioId].clientes.filter(c => c.id !== clienteId);
+
+            // Limpiar pagos del cliente en todos los meses
+            const clave = servicioId + ':' + clienteId;
+            Object.keys(state.pagosMes).forEach(mes => {
+                if (state.pagosMes[mes] && clave in state.pagosMes[mes]) {
+                    delete state.pagosMes[mes][clave];
+                }
+            });
+
+            guardarLocal();
+            mostrarToast('Cliente eliminado 🗑️');
+            render();
+        }
+
+        // ===== RESPALDO =====
+        function exportarRespaldo() {
+            const respaldo = {
+                version: 2,
+                fecha: new Date().toISOString(),
+                data: state.data,
+                pagosMes: state.pagosMes
+            };
+
+            const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const f = new Date();
+            a.href = url;
+            a.download = `cobros-respaldo-${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            mostrarToast('Respaldo exportado 📦');
+        }
+
+        function importarRespaldo(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    if (!json.data || !json.pagosMes) {
+                        throw new Error('Formato inválido');
+                    }
+                    if (!confirm('Esto reemplazará TODOS los datos actuales. ¿Continuar?')) return;
+
+                    state.data = json.data;
+                    state.pagosMes = json.pagosMes;
+
+                    // Asegurar estructura
+                    CONFIG.servicios.forEach(s => {
+                        if (!state.data[s.id]) state.data[s.id] = { precioReal: 0, clientes: [] };
+                        if (!state.data[s.id].clientes) state.data[s.id].clientes = [];
+                        if (state.data[s.id].precioReal === undefined) state.data[s.id].precioReal = 0;
+                    });
+
+                    guardarLocal();
+                    render();
+                    mostrarToast('Respaldo restaurado ✅');
+                } catch (err) {
+                    mostrarToast('El archivo no es válido ❌', 'error');
+                }
+            };
+            reader.readAsText(file);
+            input.value = '';
+        }
+
+        // ===== RENDER =====
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = renderHeader() +
+                (state.vista === 'inicio' ? renderInicio() : renderDashboard()) +
+                renderNav() +
+                renderModal();
+            bindEvents();
+        }
+
+        // ===== RENDER: HEADER =====
+        function renderHeader() {
+            return `
+                    <div class="header">
+                        <div class="header-top">
+                            <div class="logo">💰</div>
+                            <div style="flex:1">
+                                <h1>Control de Cobros</h1>
+                                <p>${state.vista === 'inicio' ? 'Cobros del mes' : 'Estadísticas'}</p>
+                            </div>
+                        </div>
+                        ${state.vista === 'inicio' ? renderSelectorMes() : ''}
+                    </div>
+                `;
+        }
+
+        // ===== RENDER: SELECTOR MES =====
+        function renderSelectorMes() {
+            const hoyDate = hoy();
+            let html = '<div class="meses-scroll">';
+
+            for (let i = -6; i <= 2; i++) {
+                const d = new Date(hoyDate.getFullYear(), hoyDate.getMonth() + i, 1);
+                const clave = getClaveMes(d);
+                const activo = clave === state.mesActual ? 'activo' : '';
+                html += `<button class="mes-btn ${activo}" data-action="setMes" data-mes="${clave}">${formatoMes(clave)}</button>`;
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        // ===== RENDER: INICIO =====
+        function renderInicio() {
+            const totales = calcularTotalesMes();
+            let html = '<div class="fade-in">';
+
+            // Vencimientos
+            html += renderVencimientos();
+
+            // Resumen
+            html += `
+                    <div class="resumen">
+                        <div class="resumen-card destacado">
+                            <div class="resumen-label" style="color:#818cf8">Ganancia del mes</div>
+                            <div class="resumen-value" style="color:#818cf8">${fmt(totales.ganancia)}</div>
+                        </div>
+                        <div class="resumen-card">
+                            <div class="resumen-label" style="color:#06b6d4">Cobrado</div>
+                            <div class="resumen-value">${fmt(totales.cobrado)}</div>
+                        </div>
+                        <div class="resumen-card">
+                            <div class="resumen-label" style="color:#94a3b8">Costo real</div>
+                            <div class="resumen-value">${fmt(totales.costoReal)}</div>
+                        </div>
+                        <div class="resumen-card">
+                            <div class="resumen-label" style="color:#a78bfa">Esperado mensual</div>
+                            <div class="resumen-value">${fmt(totales.mensualEsperado)}</div>
+                        </div>
+                    </div>
+                `;
+
+            // Secciones de servicios
+            html += '<div class="secciones">';
+            CONFIG.servicios.forEach(s => {
+                html += renderSeccion(s);
+            });
+            html += '</div>';
+
+            html += '<div style="height:120px"></div></div>';
+            return html;
+        }
+
+        // ===== RENDER: SECCIÓN SERVICIO =====
+        function renderSeccion(servicio) {
+            const data = state.data[servicio.id];
+            if (!data) return '';
+
+            const pagos = state.pagosMes[state.mesActual] || {};
+            const cobrado = data.clientes.reduce((sum, c) => {
+                const entry = pagos[servicio.id + ':' + c.id];
+                return sum + (entry ? (typeof entry === 'object' ? entry.monto : (c.pago || 0)) : 0);
+            }, 0);
+
+            const ganancia = cobrado - (data.precioReal || 0);
+            const pagados = data.clientes.filter(c => !!pagos[servicio.id + ':' + c.id]).length;
+            const expandido = state.expandido[servicio.id] !== false;
+            const editando = state.editandoPrecio === servicio.id;
+
+            let html = `
+                    <div class="seccion">
+                        <div class="seccion-header" style="background: ${servicio.color}08;">
+                            <div class="seccion-top" data-action="toggleExp" data-id="${servicio.id}">
+                                <span style="font-size:14px;color:#94a3b8">${expandido ? '▼' : '▶'}</span>
+                                <div class="seccion-icon" style="background:${servicio.color}20;color:${servicio.color}">${servicio.icon}</div>
+                                <div class="seccion-info">
+                                    <h2>${servicio.nombre}</h2>
+                                    <p>${pagados}/${data.clientes.length} pagaron</p>
+                                </div>
+                                <div class="seccion-ganancia">
+                                    <div class="label">Ganancia</div>
+                                    <div class="value" style="color:${ganancia >= 0 ? servicio.color : '#ef4444'}">${fmt(ganancia)}</div>
+                                </div>
+                            </div>
+                            <div class="precio-real-row">
+                                <span class="label">Costo del servicio</span>
+                                ${editando ? `
+                                    <div style="display:flex;gap:6px;align-items:center">
+                                        <input id="precio-input" type="number" inputmode="decimal" class="input" style="width:120px;padding:8px 12px;font-size:14px;border-color:${servicio.color}40" value="${esc(state.precioTemp)}" />
+                                        <button class="guardar-btn" style="padding:8px 16px;width:auto;background:${servicio.color}" data-action="guardarPrecio" data-id="${servicio.id}">✓</button>
+                                    </div>
+                                ` : `
+                                    <button style="background:transparent;border:none;color:#e2e8f0;display:flex;align-items:center;gap:6px;cursor:pointer" data-action="iniciarPrecio" data-id="${servicio.id}">
+                                        <span class="monto">${fmt(data.precioReal)}</span>
+                                        <span style="color:#64748b;font-size:12px">✎</span>
+                                    </button>
+                                `}
+                            </div>
+                        </div>
+                        ${expandido ? `
+                            <div class="seccion-body">
+                                ${data.clientes.length === 0 ? `
+                                    <div class="vacio">Sin clientes en ${servicio.nombre}</div>
+                                ` : data.clientes.map(c => renderCliente(servicio, c)).join('')}
+                                <button class="add-cliente-btn" data-action="abrirModal" data-servicio="${servicio.id}">
+                                    + Agregar cliente
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+
+            return html;
+        }
+
+        // ===== RENDER: CLIENTE =====
+        function renderCliente(servicio, cliente) {
+            const pagado = !!state.pagosMes[state.mesActual]?.[servicio.id + ':' + cliente.id];
+            const dias = calcularDiasVencimiento(cliente, servicio.id);
+            const entry = state.pagosMes[state.mesActual]?.[servicio.id + ':' + cliente.id];
+            const fechaPago = (entry && typeof entry === 'object') ? entry.fecha || '' : '';
+
+            let tagDias = '';
+            if (dias !== null && !pagado) {
+                const vencido = dias < 0;
+                const texto = vencido ? `Vencido ${Math.abs(dias)}d` : dias === 0 ? 'Vence hoy' : `Faltan ${dias}d`;
+                tagDias = `<span class="tag tag-venc" style="${vencido ? 'background:rgba(239,68,68,0.15);color:#ef4444;' : ''}">${texto}</span>`;
+            }
+
+            return `
+                    <div class="cliente" style="${pagado ? `border-color:${servicio.color}30;background:${servicio.color}08;` : ''}">
+                        <button class="check-btn" data-action="togglePago" data-servicio="${servicio.id}" data-cliente="${cliente.id}">
+                            ${pagado ? `<span style="color:${servicio.color}">✅</span>` : '<span style="color:#475569">⭕</span>'}
+                        </button>
+                        <div class="cliente-info">
+                            <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(cliente.nombre)}</div>
+                            <div class="cliente-tags">
+                                <span class="tag ${cliente.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${cliente.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
+                                ${tagDias}
+                                ${cliente.notas ? `<span class="cliente-notas">${esc(cliente.notas)}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="cliente-pago">
+                            <div class="monto" style="${pagado ? `color:${servicio.color}` : ''}">${fmt(cliente.pago)}</div>
+                            ${pagado ? `
+                                <div class="fecha-pago-row">
+                                    <span class="fecha-label">Pagó:</span>
+                                    <input type="date" class="fecha-pago-input" value="${esc(fechaPago)}" onclick="event.stopPropagation()" onchange="event.stopPropagation(); cambiarFechaPago('${servicio.id}','${cliente.id}', this.value)" />
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="cliente-acciones">
+                            <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicio.id}" data-cliente="${cliente.id}">✎</button>
+                            <button class="icon-btn delete" data-action="eliminarCliente" data-servicio="${servicio.id}" data-cliente="${cliente.id}">🗑</button>
+                        </div>
+                    </div>
+                `;
+        }
+
+        // ===== RENDER: VENCIMIENTOS =====
+        function renderVencimientos() {
+            const vencimientos = calcularVencimientos();
+            if (vencimientos.length === 0) return '';
+
+            const mesActual = getClaveMes(hoy());
+
+            return `
+                    <div class="venc-card">
+                        <div class="venc-title">⏰ Pagos por vencer</div>
+                        ${vencimientos.map(v => {
+                            const vencido = v.dias < 0;
+                            const texto = vencido ? `Vencido hace ${Math.abs(v.dias)}d` : v.dias === 0 ? 'Vence hoy' : `En ${v.dias}d`;
+                            return `
+                                <div class="venc-row" data-action="togglePago" data-servicio="${v.servicioId}" data-cliente="${v.cliente.id}" data-mes="${mesActual}">
+                                    <span style="font-size:18px;flex-shrink:0">⭕</span>
+                                    <div class="venc-info">
+                                        <div class="nombre">${esc(v.cliente.nombre)}</div>
+                                        <span class="tag" style="background:${v.servicioColor}20;color:${v.servicioColor}">${v.servicioNombre}</span>
+                                    </div>
+                                    <div class="venc-dias ${vencido ? 'vencido' : ''}">${texto}</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                `;
+        }
+
+        // ===== RENDER: DASHBOARD =====
+        function renderDashboard() {
+            const datos = calcularDatosMensuales();
+            const conDatos = datos.filter(m => m.ganancia !== 0);
+            const totalAnual = conDatos.reduce((s, m) => s + m.ganancia, 0);
+            const promedio = conDatos.length > 0 ? totalAnual / conDatos.length : 0;
+            const mejorMes = conDatos.reduce((max, m) => m.ganancia > (max?.ganancia || -Infinity) ? m : max, null);
+            const mesActual = datos[datos.length - 1];
+            const mesAnt = datos[datos.length - 2];
+
+            let cambio = 0;
+            if (mesAnt && mesAnt.ganancia !== 0) {
+                cambio = ((mesActual.ganancia - mesAnt.ganancia) / Math.abs(mesAnt.ganancia)) * 100;
+            }
+
+            const porServicio = calcularPorServicio();
+            const maxAbs = Math.max(...porServicio.map(p => Math.abs(p.ganancia)), 1);
+
+            return `
+                    <div class="fade-in" style="padding:16px 20px">
+                        <div class="resumen" style="padding:0;margin-bottom:20px">
+                            <div class="resumen-card destacado">
+                                <div class="resumen-label" style="color:#818cf8">Total 12 meses</div>
+                                <div class="resumen-value" style="color:#818cf8">${fmt(totalAnual)}</div>
+                            </div>
+                            <div class="resumen-card">
+                                <div class="resumen-label" style="color:#06b6d4">Promedio mensual</div>
+                                <div class="resumen-value">${fmt(promedio)}</div>
+                            </div>
+                            <div class="resumen-card">
+                                <div class="resumen-label" style="color:${cambio >= 0 ? '#10b981' : '#ef4444'}">Mes actual</div>
+                                <div class="resumen-value">${fmt(mesActual?.ganancia || 0)}</div>
+                                ${cambio !== 0 ? `<div class="resumen-sub">${cambio >= 0 ? '↑' : '↓'} ${Math.abs(cambio).toFixed(0)}% vs mes anterior</div>` : '<div class="resumen-sub">sin datos previos</div>'}
+                            </div>
+                            <div class="resumen-card">
+                                <div class="resumen-label" style="color:#a78bfa">Mejor mes</div>
+                                <div class="resumen-value">${mejorMes ? fmt(mejorMes.ganancia) : '—'}</div>
+                                ${mejorMes ? `<div class="resumen-sub">${mejorMes.mes}</div>` : ''}
+                            </div>
+                        </div>
+
+                        <div class="dashboard-card">
+                            <div class="dashboard-title"><span style="color:#818cf8">📈</span> Ganancia mensual</div>
+                            ${renderLineChart(datos)}
+                        </div>
+
+                        <div class="dashboard-card">
+                            <div class="dashboard-title"><span style="color:#06b6d4">📊</span> Cobrado vs Costo (6 meses)</div>
+                            ${renderBarChart(datos.slice(-6))}
+                        </div>
+
+                        <div class="dashboard-card">
+                            <div class="dashboard-title"><span style="color:#a78bfa">📦</span> Por servicio (este mes)</div>
+                            ${porServicio.map(s => `
+                                <div class="servicio-bar">
+                                    <div class="servicio-bar-row">
+                                        <span class="nombre">${s.nombre}</span>
+                                        <span class="monto" style="color:${s.ganancia >= 0 ? s.color : '#ef4444'}">${fmt(s.ganancia)}</span>
+                                    </div>
+                                    <div class="servicio-bar-bg">
+                                        <div class="servicio-bar-fill" style="width:${(Math.abs(s.ganancia)/maxAbs)*100}%; background:linear-gradient(90deg, ${s.ganancia >= 0 ? s.color : '#ef4444'}80, ${s.ganancia >= 0 ? s.color : '#ef4444'})"></div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="dashboard-card">
+                            <div class="dashboard-title"><span style="color:#94a3b8">💾</span> Respaldo de datos</div>
+                            <p style="font-size:12px;color:#94a3b8;margin-bottom:12px">Los datos se guardan localmente. Exporta respaldos periódicamente.</p>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap">
+                                <button class="tipo-btn" style="flex:1;min-width:120px;cursor:pointer" onclick="exportarRespaldo()">⬇ Exportar</button>
+                                <button class="tipo-btn" style="flex:1;min-width:120px;cursor:pointer" onclick="document.getElementById('input-restaurar').click()">⬆ Restaurar</button>
+                            </div>
+                            <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
+                        </div>
+                    </div>
+                `;
+        }
+
+        // ===== RENDER: GRÁFICA LÍNEA =====
+        function renderLineChart(datos) {
+            const W = 320,
+                H = 200,
+                padL = 40,
+                padR = 10,
+                padT = 10,
+                padB = 30;
+            const cw = W - padL - padR,
+                ch = H - padT - padB;
+            const valores = datos.map(d => d.ganancia);
+            let minV = Math.min(...valores, 0);
+            let maxV = Math.max(...valores, 0);
+            if (minV === maxV) { maxV = minV + 100; }
+            const rango = maxV - minV;
+            const xStep = cw / (datos.length - 1 || 1);
+
+            const px = i => padL + i * xStep;
+            const py = v => padT + ch - ((v - minV) / rango) * ch;
+
+            let grid = '';
+            for (let i = 0; i <= 4; i++) {
+                const y = padT + (ch / 4) * i;
+                const val = maxV - (rango / 4) * i;
+                grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+                grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
+            }
+
+            if (minV < 0 && maxV > 0) {
+                const y0 = py(0);
+                grid += `<line x1="${padL}" y1="${y0}" x2="${W-padR}" y2="${y0}" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>`;
+            }
+
+            const pathD = datos.map((d, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(d.ganancia)}`).join(' ');
+            const areaD = pathD + ` L ${px(datos.length-1)} ${padT+ch} L ${px(0)} ${padT+ch} Z`;
+
+            let puntos = '',
+                labelsX = '';
+            datos.forEach((d, i) => {
+                puntos += `<circle cx="${px(i)}" cy="${py(d.ganancia)}" r="3.5" fill="#818cf8" stroke="#0f1117" stroke-width="2"/>`;
+                if (i % 2 === 0 || i === datos.length - 1) {
+                    labelsX += `<text x="${px(i)}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
+                }
+            });
+
+            return `
+                    <div class="chart-container">
+                        <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+                            <defs>
+                                <linearGradient id="areaGradLine" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="#818cf8" stop-opacity="0.3"/>
+                                    <stop offset="100%" stop-color="#818cf8" stop-opacity="0"/>
+                                </linearGradient>
+                            </defs>
+                            ${grid}
+                            <path d="${areaD}" fill="url(#areaGradLine)"/>
+                            <path d="${pathD}" fill="none" stroke="#818cf8" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+                            ${puntos}
+                            ${labelsX}
+                        </svg>
+                    </div>
+                `;
+        }
+
+        // ===== RENDER: GRÁFICA BARRAS =====
+        function renderBarChart(datos) {
+            const W = 320,
+                H = 200,
+                padL = 40,
+                padR = 10,
+                padT = 10,
+                padB = 30;
+            const cw = W - padL - padR,
+                ch = H - padT - padB;
+            const maxV = Math.max(...datos.flatMap(d => [d.cobrado, d.costo]), 1);
+            const groupW = cw / datos.length;
+            const barW = groupW * 0.35;
+            const gap = groupW * 0.05;
+
+            let grid = '';
+            for (let i = 0; i <= 4; i++) {
+                const y = padT + (ch / 4) * i;
+                const val = maxV - (maxV / 4) * i;
+                grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+                grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
+            }
+
+            let bars = '',
+                labelsX = '';
+            datos.forEach((d, i) => {
+                const gx = padL + i * groupW + groupW * 0.1;
+                const hCob = (d.cobrado / maxV) * ch;
+                const hCos = (d.costo / maxV) * ch;
+                bars += `<rect x="${gx}" y="${padT+ch-hCob}" width="${barW}" height="${hCob}" fill="#06b6d4" rx="3"/>`;
+                bars += `<rect x="${gx+barW+gap}" y="${padT+ch-hCos}" width="${barW}" height="${hCos}" fill="#64748b" rx="3"/>`;
+                labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
+            });
+
+            return `
+                    <div class="chart-container">
+                        <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+                            ${grid}
+                            ${bars}
+                            ${labelsX}
+                        </svg>
+                        <div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:11px;color:#94a3b8">
+                            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#06b6d4;border-radius:2px;display:inline-block"></span> Cobrado</span>
+                            <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#64748b;border-radius:2px;display:inline-block"></span> Costo</span>
+                        </div>
+                    </div>
+                `;
+        }
+
+        // ===== RENDER: NAV =====
+        function renderNav() {
+            return `
+                    <div class="nav-bottom">
+                        <button class="nav-btn ${state.vista === 'inicio' ? 'activo' : ''}" data-action="setVista" data-vista="inicio">
+                            <span class="icon">🏠</span> Inicio
+                        </button>
+                        <button class="nav-btn ${state.vista === 'dashboard' ? 'activo' : ''}" data-action="setVista" data-vista="dashboard">
+                            <span class="icon">📊</span> Dashboard
+                        </button>
+                    </div>
+                `;
+        }
+
+        // ===== RENDER: MODAL =====
+        function renderModal() {
+            if (!state.modal) return '';
+
+            const f = state.form;
+            const servicio = CONFIG.servicios.find(s => s.id === state.modal.servicioId);
+
+            return `
+                    <div class="modal-overlay" data-action="cerrarModal">
+                        <div class="modal" onclick="event.stopPropagation()">
+                            <div class="modal-header">
+                                <h3>${state.modal.clienteId ? 'Editar' : 'Nuevo'} cliente</h3>
+                                <button class="close-btn" data-action="cerrarModal">✕</button>
+                            </div>
+                            <div class="modal-subtitle">${servicio?.nombre || ''}</div>
+
+                            <div class="campo">
+                                <div class="campo-label"><label>Nombre <span class="required">*</span></label></div>
+                                <input class="input" type="text" value="${esc(f.nombre)}" placeholder="Ej. Juan Pérez" oninput="actualizarForm('nombre', this.value)" />
+                            </div>
+
+                            <div class="campo">
+                                <div class="campo-label"><label>Monto que paga ($)</label><span class="hint">Lo que te paga</span></div>
+                                <input class="input" type="number" inputmode="decimal" value="${esc(f.pago)}" placeholder="0.00" oninput="actualizarForm('pago', this.value)" />
+                            </div>
+
+                            <div class="campo">
+                                <div class="campo-label"><label>Tipo de pago</label></div>
+                                <div class="tipo-pago-grid">
+                                    <button class="tipo-btn ${f.tipoPago === 'mensual' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="mensual">Mensual</button>
+                                    <button class="tipo-btn ${f.tipoPago === 'unico' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="unico">Pago único</button>
+                                </div>
+                            </div>
+
+                            <div class="campo">
+                                <div class="campo-label"><label>Día de vencimiento</label><span class="hint">Opcional, 1-31</span></div>
+                                <input class="input" type="number" inputmode="numeric" min="1" max="31" value="${esc(f.diaPago)}" placeholder="Ej. 15" oninput="actualizarForm('diaPago', this.value)" />
+                            </div>
+
+                            <div class="campo">
+                                <div class="campo-label"><label>Notas</label><span class="hint">Opcional</span></div>
+                                <textarea class="input" rows="2" style="resize:vertical;min-height:60px" placeholder="Detalles adicionales" oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
+                            </div>
+
+                            <button class="guardar-btn" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarCliente">
+                                ✓ ${state.modal.clienteId ? 'Guardar cambios' : 'Agregar cliente'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+        }
+
+        // ===== EVENT BINDING =====
+        function bindEvents() {
+            document.querySelectorAll('[data-action]').forEach(el => {
+                el.addEventListener('click', handleClick);
+            });
+
+            const precioInput = document.getElementById('precio-input');
+            if (precioInput) {
+                precioInput.addEventListener('input', e => {
+                    state.precioTemp = e.target.value;
+                });
+                precioInput.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') guardarPrecio(state.editandoPrecio);
+                });
+            }
+        }
+
+        function handleClick(e) {
+            const action = e.currentTarget.dataset.action;
+            const d = e.currentTarget.dataset;
+
+            switch (action) {
+                case 'setVista':
+                    setVista(d.vista);
+                    break;
+                case 'setMes':
+                    setMes(d.mes);
+                    break;
+                case 'toggleExp':
+                    toggleExpandido(d.id);
+                    break;
+                case 'iniciarPrecio':
+                    iniciarEditarPrecio(d.id);
+                    break;
+                case 'guardarPrecio':
+                    guardarPrecio(d.id);
+                    break;
+                case 'togglePago':
+                    togglePago(d.servicio, d.cliente, d.mes);
+                    break;
+                case 'abrirModal':
+                    abrirModal(d.servicio, d.cliente);
+                    break;
+                case 'cerrarModal':
+                    if (e.target === e.currentTarget) cerrarModal();
+                    break;
+                case 'setTipoPago':
+                    actualizarForm('tipoPago', d.tipo);
+                    break;
+                case 'guardarCliente':
+                    guardarCliente();
+                    break;
+                case 'eliminarCliente':
+                    e.stopPropagation();
+                    eliminarCliente(d.servicio, d.cliente);
+                    break;
+            }
+        }
+
+        // ===== AUTO-ACTUALIZACIÓN DIARIA =====
+        let ultimoDia = new Date().toDateString();
+        setInterval(() => {
+            const ahora = new Date().toDateString();
+            if (ahora !== ultimoDia) {
+                ultimoDia = ahora;
+                render();
+            }
+        }, 60000);
+
+        // ===== INICIALIZACIÓN =====
+        cargarLocal();
+        render();
+
+        // Exponer funciones globales para eventos inline
+        window.exportarRespaldo = exportarRespaldo;
+        window.importarRespaldo = importarRespaldo;
+        window.cambiarFechaPago = cambiarFechaPago;
+        window.actualizarForm = actualizarForm;
+
+        console.log('💰 Control de Cobros iniciado correctamente');
+        console.log(`📊 ${CONFIG.servicios.length} servicios configurados`);
+        console.log(`👥 Total clientes: ${CONFIG.servicios.reduce((sum, s) => sum + (state.data[s.id]?.clientes?.length || 0), 0)}`);
+    </script>
+
 </body>
 </html>
