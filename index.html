@@ -163,7 +163,11 @@
   .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
   .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
   .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
-  .tag-venc { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .tag-venc { background: rgba(251,191,36,0.15); color: #fbbf24; cursor: pointer; }
+  .tag-venc.vencido { background: rgba(239,68,68,0.18); color: #ef4444; }
+  .fecha-edit { display: inline-flex; align-items: center; gap: 4px; }
+  .fecha-input { padding: 3px 6px; font-size: 11px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: #11151c; color: #e4e7eb; }
+  .mini-btn { width: 22px; height: 22px; border-radius: 6px; border: none; font-size: 12px; background: rgba(255,255,255,0.08); color: #e4e7eb; flex-shrink: 0; }
   .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cliente-pago { text-align: right; flex-shrink: 0; }
   .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
@@ -297,8 +301,10 @@ let state = {
   expandido: { internet: true, netflix: true, spotify: true, otros: true },
   editandoPrecio: null,
   precioTemp: '',
+  editandoFecha: null,
+  fechaTemp: '',
   modal: null,
-  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' }
+  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '', ultimoPago: '' }
 };
 
 // ============== HELPERS ==============
@@ -311,15 +317,7 @@ function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1)
 function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// Calcula cuándo toca el próximo pago después de marcar pagado el mes "mesClave"
-function proximaFechaPago(cliente, mesClave) {
-  const { year, month } = parseMes(mesClave); // month ya viene 0-indexado
-  let nextMonth = month + 1, nextYear = year;
-  if (nextMonth > 11) { nextMonth = 0; nextYear++; }
-  const diasEnMesSig = new Date(nextYear, nextMonth + 1, 0).getDate();
-  const dia = cliente.diaPago ? Math.min(cliente.diaPago, diasEnMesSig) : 1;
-  return new Date(nextYear, nextMonth, dia);
-}
+// Formatea una fecha tipo "15 de agosto"
 function formatoFechaCorta(d) {
   return `${d.getDate()} de ${MESES_NOMBRES[d.getMonth()].toLowerCase()}`;
 }
@@ -430,23 +428,55 @@ function guardarPrecio(k) {
   render();
 }
 
+function iniciarEditarFecha(sk, cid) {
+  const cliente = state.data[sk].clientes.find(c => c.id === cid);
+  state.editandoFecha = sk+':'+cid;
+  state.fechaTemp = cliente?.ultimoPago || '';
+  render();
+}
+function actualizarFechaTemp(v) { state.fechaTemp = v; }
+function guardarFecha(sk, cid) {
+  const cliente = state.data[sk].clientes.find(c => c.id === cid);
+  if (cliente && state.fechaTemp) {
+    cliente.ultimoPago = state.fechaTemp;
+    guardarLocal();
+    const info = calcularDiasVencimiento(cliente);
+    if (info) mostrarToast(`📅 Fecha actualizada. ${cliente.nombre} vence: ${formatoFechaCorta(info.vencimiento)}`);
+  }
+  state.editandoFecha = null;
+  state.fechaTemp = '';
+  render();
+}
+function cancelarEditarFecha() {
+  state.editandoFecha = null;
+  state.fechaTemp = '';
+  render();
+}
+
 function togglePago(sk, cid, mes) {
   const m = mes || state.mesActual;
   if (!state.pagosMes[m]) state.pagosMes[m] = {};
   const k = sk+':'+cid;
   const yaEstabaPagado = !!state.pagosMes[m][k];
   state.pagosMes[m][k] = !yaEstabaPagado;
+  const cliente = state.data[sk]?.clientes.find(c => c.id === cid);
+
+  // Si se acaba de marcar como pagado (no se está desmarcando) y es el mes en
+  // curso, tomamos hoy como la fecha real de pago (el usuario puede corregirla
+  // después tocando la etiqueta "Vence" o desde ✎ editar).
+  if (!yaEstabaPagado && state.pagosMes[m][k] && cliente && m === claveMes(new Date())) {
+    const hoy = new Date();
+    cliente.ultimoPago = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
+  }
   guardarLocal();
   render();
 
-  // Si se acaba de marcar como pagado (no se está desmarcando), avisar próxima fecha
-  if (!yaEstabaPagado && state.pagosMes[m][k]) {
-    const cliente = state.data[sk]?.clientes.find(c => c.id === cid);
-    if (cliente) {
-      const prox = proximaFechaPago(cliente, m);
-      const fechaTxt = formatoFechaCorta(prox);
-      mostrarToast(`✅ Pago de ${cliente.nombre} registrado. Próximo pago: ${fechaTxt}`);
-      enviarNotificacion('✅ Pago registrado', `${cliente.nombre} — próximo pago: ${fechaTxt}`);
+  if (!yaEstabaPagado && state.pagosMes[m][k] && cliente) {
+    const info = calcularDiasVencimiento(cliente);
+    if (info) {
+      const fechaTxt = formatoFechaCorta(info.vencimiento);
+      mostrarToast(`✅ Pago de ${cliente.nombre} registrado. Vence: ${fechaTxt}`);
+      enviarNotificacion('✅ Pago registrado', `${cliente.nombre} — vence: ${fechaTxt}`);
     }
   }
 }
@@ -458,14 +488,15 @@ function abrirModal(servicio, clienteId) {
     pago: cliente?.pago != null ? String(cliente.pago) : '',
     tipoPago: cliente?.tipoPago || 'mensual',
     notas: cliente?.notas || '',
-    diaPago: cliente?.diaPago ? String(cliente.diaPago) : ''
+    diaPago: cliente?.diaPago ? String(cliente.diaPago) : '',
+    ultimoPago: cliente?.ultimoPago || ''
   };
   state.modal = { servicio, clienteId };
   render();
 }
 function cerrarModal() {
   state.modal = null;
-  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' };
+  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '', ultimoPago: '' };
   render();
 }
 function actualizarForm(campo, valor) {
@@ -484,6 +515,7 @@ function guardarCliente() {
     tipoPago: state.formCliente.tipoPago,
     notas: state.formCliente.notas.trim(),
     diaPago: state.formCliente.diaPago ? Math.min(31, Math.max(1, parseInt(state.formCliente.diaPago) || 1)) : null,
+    ultimoPago: state.formCliente.ultimoPago || null,
     creado: clienteId ? state.data[servicio].clientes.find(c=>c.id===clienteId).creado : Date.now()
   };
   if (clienteId) {
@@ -583,23 +615,38 @@ function importarRespaldo(input) {
 }
 
 // ============== VENCIMIENTOS ==============
+// Si el cliente tiene una fecha real de último pago, la membresía vence 1 mes
+// después de esa fecha (más preciso). Si no, usa el día fijo de vencimiento
+// dentro del mes en curso (modo antiguo, menos exacto).
+function calcularDiasVencimiento(cliente) {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  if (cliente.ultimoPago) {
+    const [y, m, d] = cliente.ultimoPago.split('-').map(Number);
+    let vy = y, vm = m + 1; // próximo mes (m ya viene 1-indexado del input date)
+    if (vm > 12) { vm = 1; vy++; }
+    const diasEnMesVenc = new Date(vy, vm, 0).getDate();
+    const diaVenc = Math.min(d, diasEnMesVenc);
+    const vencimiento = new Date(vy, vm - 1, diaVenc);
+    return { vencimiento, diasRestantes: Math.round((vencimiento - hoy) / 86400000) };
+  }
+  if (cliente.diaPago) {
+    const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+    const dia = Math.min(cliente.diaPago, diasEnMes);
+    const vencimiento = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+    return { vencimiento, diasRestantes: Math.round((vencimiento - hoy) / 86400000) };
+  }
+  return null;
+}
 function calcularVencimientos() {
   const LIMITE_DIAS = 5; // avisar desde 5 días antes
-  const hoy = new Date();
-  hoy.setHours(0,0,0,0);
-  const claveReal = claveMes(hoy);
-  const pagosReales = state.pagosMes[claveReal] || {};
-  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
   const lista = [];
   Object.entries(state.data).forEach(([sk, s]) => {
     s.clientes.forEach(c => {
-      if (c.tipoPago !== 'mensual' || !c.diaPago) return;
-      if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
-      const dia = Math.min(c.diaPago, diasEnMes);
-      const fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
-      const diffDias = Math.round((fechaVenc - hoy) / 86400000);
-      if (diffDias <= LIMITE_DIAS) {
-        lista.push({ servicio: sk, cliente: c, diasRestantes: diffDias });
+      if (c.tipoPago !== 'mensual') return;
+      const info = calcularDiasVencimiento(c);
+      if (!info) return;
+      if (info.diasRestantes <= LIMITE_DIAS) {
+        lista.push({ servicio: sk, cliente: c, diasRestantes: info.diasRestantes, vencimiento: info.vencimiento });
       }
     });
   });
@@ -750,6 +797,16 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
+  const k = servicioKey+':'+c.id;
+  const editandoFecha = state.editandoFecha === k;
+  const info = c.tipoPago === 'mensual' ? calcularDiasVencimiento(c) : null;
+  let tagVencTexto = 'Poner fecha de pago';
+  let vencidoClase = '';
+  if (info) {
+    if (info.diasRestantes < 0) { tagVencTexto = `Vencido hace ${Math.abs(info.diasRestantes)}d`; vencidoClase = 'vencido'; }
+    else if (info.diasRestantes === 0) { tagVencTexto = 'Vence hoy'; vencidoClase = 'vencido'; }
+    else { tagVencTexto = `Vence en ${info.diasRestantes}d`; }
+  }
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -759,7 +816,15 @@ function renderClienteRow(servicioKey, c, color) {
         <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
         <div class="cliente-tags">
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
-          ${c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
+          ${c.tipoPago === 'mensual' ? (editandoFecha ? `
+            <span class="fecha-edit">
+              <input type="date" class="fecha-input" value="${esc(state.fechaTemp)}" oninput="actualizarFechaTemp(this.value)" />
+              <button class="mini-btn" data-action="guardarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">✓</button>
+              <button class="mini-btn" data-action="cancelarFecha">✕</button>
+            </span>
+          ` : `
+            <span class="tag tag-venc ${vencidoClase}" data-action="iniciarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">📅 ${tagVencTexto}</span>
+          `) : ''}
           ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
         </div>
       </div>
@@ -995,7 +1060,12 @@ function renderModal() {
       </div>
 
       <div class="campo">
-        <div class="campo-label"><label>Día de vencimiento (opcional)</label><span class="hint">Día del mes, 1-31</span></div>
+        <div class="campo-label"><label>Fecha del último pago (opcional)</label><span class="hint">La membresía vence 1 mes después</span></div>
+        <input class="input" type="date" value="${esc(f.ultimoPago)}" oninput="actualizarForm('ultimoPago', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Día de vencimiento fijo (opcional)</label><span class="hint">Solo si no usas la fecha exacta</span></div>
         <input class="input" type="number" inputmode="numeric" min="1" max="31" value="${esc(f.diaPago)}" placeholder="Ej. 15" oninput="actualizarForm('diaPago', this.value)" />
       </div>
 
@@ -1036,6 +1106,9 @@ function handleClick(e) {
     case 'guardarPrecio': guardarPrecio(d.key); break;
     case 'togglePago': togglePago(d.servicio, d.cid, d.mes); break;
     case 'toggleNotif': toggleNotif(); break;
+    case 'iniciarFecha': iniciarEditarFecha(d.servicio, d.cid); break;
+    case 'guardarFecha': guardarFecha(d.servicio, d.cid); break;
+    case 'cancelarFecha': cancelarEditarFecha(); break;
     case 'abrirModal': abrirModal(d.servicio, d.cid); break;
     case 'cerrarModal':
       if (e.target === e.currentTarget) cerrarModal();
