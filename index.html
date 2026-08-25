@@ -694,6 +694,44 @@ function calcularDatosMensuales() {
 }
 
 // ============== RESPALDO (exportar / importar) ==============
+function verRespaldoTexto() {
+  const respaldo = { data: state.data, pagosMes: state.pagosMes, productos: state.productos, ventas: state.ventas, version: 2, fecha: new Date().toISOString() };
+  const contenido = JSON.stringify(respaldo);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Respaldo en texto</h3>
+        <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#94a3b8">Copia este texto y guárdalo en Notas o mándatelo por WhatsApp. Para restaurar, pégalo tal cual en el mismo lugar.</div>
+      <textarea class="input" readonly rows="8" style="font-family:'JetBrains Mono',monospace; font-size:11px; resize:vertical" id="respaldo-texto-area">${esc(contenido)}</textarea>
+      <button class="guardar-btn" style="margin-top:10px" id="btn-copiar-respaldo">📋 Copiar al portapapeles</button>
+    </div>
+  `;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  const ta = overlay.querySelector('#respaldo-texto-area');
+  overlay.querySelector('#btn-copiar-respaldo').addEventListener('click', () => {
+    ta.removeAttribute('readonly');
+    ta.select();
+    ta.setSelectionRange(0, 999999);
+    let copiado = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(contenido);
+        copiado = true;
+      }
+    } catch(e) {}
+    if (!copiado) {
+      try { copiado = document.execCommand('copy'); } catch(e) {}
+    }
+    ta.setAttribute('readonly', 'true');
+    alert(copiado ? 'Copiado ✅ Ya lo puedes pegar donde quieras.' : 'No se pudo copiar solo. El texto ya está seleccionado, mantén presionado y elige "Copiar".');
+  });
+}
+
 async function exportarRespaldo() {
   const respaldo = { data: state.data, pagosMes: state.pagosMes, productos: state.productos, ventas: state.ventas, version: 2, fecha: new Date().toISOString() };
   const contenido = JSON.stringify(respaldo, null, 2);
@@ -926,8 +964,22 @@ function renderSeccion(key, info) {
   return html;
 }
 
+function calcularEstadoVencimiento(diaPago) {
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+  const dia = Math.min(diaPago, diasEnMes);
+  const fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+  const diff = Math.round((fechaVenc - hoy) / 86400000);
+  if (diff < 0) return { color: '#ef4444', texto: `Vencido ${Math.abs(diff)}d` };
+  if (diff === 0) return { color: '#fbbf24', texto: 'Vence hoy' };
+  if (diff <= 5) return { color: '#fbbf24', texto: `En ${diff}d` };
+  return { color: '#64748b', texto: `En ${diff}d` };
+}
+
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
+  const vencInfo = (c.tipoPago === 'mensual' && c.diaPago && !pagado) ? calcularEstadoVencimiento(c.diaPago) : null;
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -938,6 +990,7 @@ function renderClienteRow(servicioKey, c, color) {
         <div class="cliente-tags">
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
           ${c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
+          ${vencInfo ? `<span class="tag" style="background:${vencInfo.color}20; color:${vencInfo.color}">${vencInfo.texto}</span>` : ''}
           ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
         </div>
       </div>
@@ -1251,6 +1304,7 @@ function renderDashboard() {
         <button class="tipo-btn" style="flex:1" onclick="exportarRespaldo()">⬇ Exportar respaldo</button>
         <button class="tipo-btn" style="flex:1" onclick="document.getElementById('input-restaurar').click()">⬆ Restaurar</button>
       </div>
+      <button class="tipo-btn" style="width:100%; margin-top:8px" onclick="verRespaldoTexto()">📋 Ver como texto (si lo de arriba no funciona)</button>
       <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
     </div>
     <div style="height:120px"></div>
