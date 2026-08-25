@@ -1073,7 +1073,7 @@ function calcularEstadoVencimiento(c) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
-  const vencInfo = (c.tipoPago === 'mensual' && (c.diaPago || c.ultimoPago) && !pagado) ? calcularEstadoVencimiento(c) : null;
+  const vencInfo = (c.tipoPago === 'mensual' && (c.diaPago || c.ultimoPago)) ? calcularEstadoVencimiento(c) : null;
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
