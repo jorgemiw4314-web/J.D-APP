@@ -82,22 +82,6 @@
   .venc-dias { font-size: 12px; font-weight: 700; color: #fbbf24; flex-shrink: 0; }
   .venc-dias.vencido { color: #ef4444; }
 
-  /* Notificaciones */
-  .bell-btn {
-    width: 34px; height: 34px; border-radius: 10px; border: none; flex-shrink: 0;
-    background: rgba(255,255,255,0.06); color: #94a3b8; font-size: 16px;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .bell-btn.activo { background: rgba(16,185,129,0.15); color: #10b981; }
-  .toast {
-    position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px);
-    background: #1e2530; border: 1px solid rgba(255,255,255,0.1); color: #e4e7eb;
-    padding: 12px 16px; border-radius: 12px; font-size: 13px; max-width: 88%;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.35); z-index: 999; opacity: 0;
-    transition: opacity .25s ease, transform .25s ease; pointer-events: none;
-  }
-  .toast.mostrar { opacity: 1; transform: translateX(-50%) translateY(0); }
-
   /* Resumen */
   .resumen { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .resumen-card {
@@ -163,11 +147,7 @@
   .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
   .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
   .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
-  .tag-venc { background: rgba(251,191,36,0.15); color: #fbbf24; cursor: pointer; }
-  .tag-venc.vencido { background: rgba(239,68,68,0.18); color: #ef4444; }
-  .fecha-edit { display: inline-flex; align-items: center; gap: 4px; }
-  .fecha-input { padding: 3px 6px; font-size: 11px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); background: #11151c; color: #e4e7eb; }
-  .mini-btn { width: 22px; height: 22px; border-radius: 6px; border: none; font-size: 12px; background: rgba(255,255,255,0.08); color: #e4e7eb; flex-shrink: 0; }
+  .tag-venc { background: rgba(251,191,36,0.15); color: #fbbf24; }
   .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cliente-pago { text-align: right; flex-shrink: 0; }
   .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
@@ -276,7 +256,6 @@
 <body>
 
 <div id="app"></div>
-<div id="toast" class="toast"></div>
 
 <script>
 // ============== ESTADO ==============
@@ -296,15 +275,19 @@ let state = {
     otros: { precioReal: 0, clientes: [] }
   },
   pagosMes: {},
+  productos: [],
+  ventas: [],
   vista: 'inicio',
   mesActual: claveMes(new Date()),
   expandido: { internet: true, netflix: true, spotify: true, otros: true },
   editandoPrecio: null,
   precioTemp: '',
-  editandoFecha: null,
-  fechaTemp: '',
   modal: null,
-  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '', ultimoPago: '' }
+  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
+  modalProducto: null,
+  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '' },
+  modalVenta: null,
+  formVenta: { cantidad: '' }
 };
 
 // ============== HELPERS ==============
@@ -317,95 +300,25 @@ function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1)
 function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
 function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-// Formatea una fecha tipo "15 de agosto"
-function formatoFechaCorta(d) {
-  return `${d.getDate()} de ${MESES_NOMBRES[d.getMonth()].toLowerCase()}`;
-}
-
-// ============== TOAST ==============
-let toastTimeout = null;
-function mostrarToast(msg) {
-  const el = document.getElementById('toast');
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.add('mostrar');
-  clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => el.classList.remove('mostrar'), 4000);
-}
-
-// ============== NOTIFICACIONES ==============
-function notificacionesActivas() {
-  return ('Notification' in window) && Notification.permission === 'granted' && localStorage.getItem('notif-activas') === '1';
-}
-function toggleNotif() {
-  if (!('Notification' in window)) {
-    mostrarToast('Tu navegador no soporta notificaciones.');
-    return;
-  }
-  if (notificacionesActivas()) {
-    localStorage.setItem('notif-activas', '0');
-    render();
-    return;
-  }
-  Notification.requestPermission().then(p => {
-    if (p === 'granted') {
-      localStorage.setItem('notif-activas', '1');
-      mostrarToast('🔔 Avisos activados. Revisa la app cada día para recibirlos.');
-      revisarAvisosVencimiento();
-    } else {
-      mostrarToast('No se dieron permisos de notificación.');
-    }
-    render();
-  });
-}
-function enviarNotificacion(titulo, cuerpo) {
-  if (!notificacionesActivas()) return;
-  try {
-    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
-      navigator.serviceWorker.ready.then(reg => reg.showNotification(titulo, { body: cuerpo, icon: 'icon-192.png' })).catch(() => {
-        new Notification(titulo, { body: cuerpo, icon: 'icon-192.png' });
-      });
-    } else {
-      new Notification(titulo, { body: cuerpo, icon: 'icon-192.png' });
-    }
-  } catch (e) { console.log('Notif error:', e); }
-}
-// Revisa pagos por vencer y avisa una sola vez por cliente por día (evita spam).
-// OJO: esto solo dispara mientras la app/PWA está abierta; el navegador no
-// puede despertar la app en segundo plano sin un servidor de push.
-function revisarAvisosVencimiento() {
-  if (!notificacionesActivas()) return;
-  const venc = calcularVencimientos();
-  if (venc.length === 0) return;
-  const hoyStr = new Date().toDateString();
-  let avisados = {};
-  try { avisados = JSON.parse(localStorage.getItem('avisos-enviados') || '{}'); } catch(e) {}
-  let huboAviso = false;
-  venc.forEach(v => {
-    if (v.diasRestantes > 2) return; // avisa desde 2 días antes, hoy, o si ya venció
-    const clave = v.servicio + ':' + v.cliente.id + ':' + hoyStr;
-    if (avisados[clave]) return;
-    const texto = v.diasRestantes < 0 ? `Vencido hace ${Math.abs(v.diasRestantes)} día(s)` : v.diasRestantes === 0 ? 'Vence hoy' : `Vence en ${v.diasRestantes} día(s)`;
-    enviarNotificacion('⏰ Pago por vencer', `${v.cliente.nombre} — ${texto}`);
-    avisados[clave] = true;
-    huboAviso = true;
-  });
-  if (huboAviso) localStorage.setItem('avisos-enviados', JSON.stringify(avisados));
-}
-
 // ============== PERSISTENCIA (localStorage) ==============
 function guardarLocal() {
   try {
     localStorage.setItem('pagos-data', JSON.stringify(state.data));
     localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
+    localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
+    localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
   } catch(e) { console.error(e); }
 }
 function cargarLocal() {
   try {
     const d = localStorage.getItem('pagos-data');
     const p = localStorage.getItem('pagos-mes');
+    const pr = localStorage.getItem('tienda-productos');
+    const v = localStorage.getItem('tienda-ventas');
     if (d) state.data = { ...state.data, ...JSON.parse(d) };
     if (p) state.pagosMes = JSON.parse(p);
+    if (pr) state.productos = JSON.parse(pr);
+    if (v) state.ventas = JSON.parse(v);
   } catch(e) { console.error(e); }
 }
 
@@ -428,57 +341,13 @@ function guardarPrecio(k) {
   render();
 }
 
-function iniciarEditarFecha(sk, cid) {
-  const cliente = state.data[sk].clientes.find(c => c.id === cid);
-  state.editandoFecha = sk+':'+cid;
-  state.fechaTemp = cliente?.ultimoPago || '';
-  render();
-}
-function actualizarFechaTemp(v) { state.fechaTemp = v; }
-function guardarFecha(sk, cid) {
-  const cliente = state.data[sk].clientes.find(c => c.id === cid);
-  if (cliente && state.fechaTemp) {
-    cliente.ultimoPago = state.fechaTemp;
-    guardarLocal();
-    const info = calcularDiasVencimiento(cliente);
-    if (info) mostrarToast(`📅 Fecha actualizada. ${cliente.nombre} vence: ${formatoFechaCorta(info.vencimiento)}`);
-  }
-  state.editandoFecha = null;
-  state.fechaTemp = '';
-  render();
-}
-function cancelarEditarFecha() {
-  state.editandoFecha = null;
-  state.fechaTemp = '';
-  render();
-}
-
 function togglePago(sk, cid, mes) {
   const m = mes || state.mesActual;
   if (!state.pagosMes[m]) state.pagosMes[m] = {};
   const k = sk+':'+cid;
-  const yaEstabaPagado = !!state.pagosMes[m][k];
-  state.pagosMes[m][k] = !yaEstabaPagado;
-  const cliente = state.data[sk]?.clientes.find(c => c.id === cid);
-
-  // Si se acaba de marcar como pagado (no se está desmarcando) y es el mes en
-  // curso, tomamos hoy como la fecha real de pago (el usuario puede corregirla
-  // después tocando la etiqueta "Vence" o desde ✎ editar).
-  if (!yaEstabaPagado && state.pagosMes[m][k] && cliente && m === claveMes(new Date())) {
-    const hoy = new Date();
-    cliente.ultimoPago = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-${String(hoy.getDate()).padStart(2,'0')}`;
-  }
+  state.pagosMes[m][k] = !state.pagosMes[m][k];
   guardarLocal();
   render();
-
-  if (!yaEstabaPagado && state.pagosMes[m][k] && cliente) {
-    const info = calcularDiasVencimiento(cliente);
-    if (info) {
-      const fechaTxt = formatoFechaCorta(info.vencimiento);
-      mostrarToast(`✅ Pago de ${cliente.nombre} registrado. Vence: ${fechaTxt}`);
-      enviarNotificacion('✅ Pago registrado', `${cliente.nombre} — vence: ${fechaTxt}`);
-    }
-  }
 }
 
 function abrirModal(servicio, clienteId) {
@@ -488,15 +357,14 @@ function abrirModal(servicio, clienteId) {
     pago: cliente?.pago != null ? String(cliente.pago) : '',
     tipoPago: cliente?.tipoPago || 'mensual',
     notas: cliente?.notas || '',
-    diaPago: cliente?.diaPago ? String(cliente.diaPago) : '',
-    ultimoPago: cliente?.ultimoPago || ''
+    diaPago: cliente?.diaPago ? String(cliente.diaPago) : ''
   };
   state.modal = { servicio, clienteId };
   render();
 }
 function cerrarModal() {
   state.modal = null;
-  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '', ultimoPago: '' };
+  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' };
   render();
 }
 function actualizarForm(campo, valor) {
@@ -515,7 +383,6 @@ function guardarCliente() {
     tipoPago: state.formCliente.tipoPago,
     notas: state.formCliente.notas.trim(),
     diaPago: state.formCliente.diaPago ? Math.min(31, Math.max(1, parseInt(state.formCliente.diaPago) || 1)) : null,
-    ultimoPago: state.formCliente.ultimoPago || null,
     creado: clienteId ? state.data[servicio].clientes.find(c=>c.id===clienteId).creado : Date.now()
   };
   if (clienteId) {
@@ -539,6 +406,111 @@ function eliminarCliente(servicio, id) {
   });
   guardarLocal();
   render();
+}
+
+// ============== TIENDA (productos por pieza) ==============
+function abrirModalProducto(productoId) {
+  const p = productoId ? state.productos.find(pp => pp.id === productoId) : null;
+  state.formProducto = {
+    nombre: p?.nombre || '',
+    precioCosto: p?.precioCosto != null ? String(p.precioCosto) : '',
+    precioVenta: p?.precioVenta != null ? String(p.precioVenta) : '',
+    stock: p?.stock != null ? String(p.stock) : ''
+  };
+  state.modalProducto = { productoId };
+  render();
+}
+function cerrarModalProducto() {
+  state.modalProducto = null;
+  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '' };
+  render();
+}
+function actualizarFormProducto(campo, valor) {
+  state.formProducto[campo] = valor;
+}
+function guardarProducto() {
+  if (!state.formProducto.nombre.trim()) return;
+  const { productoId } = state.modalProducto;
+  const nuevo = {
+    id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
+    nombre: state.formProducto.nombre.trim(),
+    precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
+    precioVenta: parseFloat(state.formProducto.precioVenta) || 0,
+    stock: Math.max(0, parseInt(state.formProducto.stock) || 0),
+    creado: productoId ? state.productos.find(p => p.id === productoId).creado : Date.now()
+  };
+  if (productoId) {
+    state.productos = state.productos.map(p => p.id === productoId ? nuevo : p);
+  } else {
+    state.productos.push(nuevo);
+  }
+  guardarLocal();
+  cerrarModalProducto();
+}
+function eliminarProducto(id) {
+  if (!confirm('¿Eliminar este producto? También se borrará su historial de ventas.')) return;
+  state.productos = state.productos.filter(p => p.id !== id);
+  state.ventas = state.ventas.filter(v => v.productoId !== id);
+  guardarLocal();
+  render();
+}
+
+function abrirModalVenta(productoId) {
+  state.modalVenta = { productoId };
+  state.formVenta = { cantidad: '1' };
+  render();
+}
+function cerrarModalVenta() {
+  state.modalVenta = null;
+  state.formVenta = { cantidad: '' };
+  render();
+}
+function actualizarFormVenta(valor) {
+  state.formVenta.cantidad = valor;
+  const p = state.productos.find(pp => pp.id === state.modalVenta.productoId);
+  if (!p) return;
+  const cant = parseInt(valor) || 0;
+  const totalEstim = p.precioVenta * cant;
+  const gananciaEstim = (p.precioVenta - p.precioCosto) * cant;
+  const totalEl = document.getElementById('venta-total');
+  const gananciaEl = document.getElementById('venta-ganancia');
+  const btn = document.getElementById('btn-confirmar-venta');
+  if (totalEl) totalEl.textContent = fmt(totalEstim);
+  if (gananciaEl) gananciaEl.textContent = fmt(gananciaEstim);
+  if (btn) btn.disabled = cant < 1 || cant > p.stock;
+}
+function registrarVenta(productoId) {
+  const p = state.productos.find(pp => pp.id === productoId);
+  if (!p) return;
+  const cant = parseInt(state.formVenta.cantidad) || 0;
+  if (cant < 1 || cant > p.stock) return;
+  const venta = {
+    id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    productoId,
+    cantidad: cant,
+    total: Math.round(p.precioVenta * cant * 100) / 100,
+    ganancia: Math.round((p.precioVenta - p.precioCosto) * cant * 100) / 100,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  };
+  state.ventas.push(venta);
+  p.stock -= cant;
+  guardarLocal();
+  cerrarModalVenta();
+  render();
+}
+
+function calcularTotalesTienda() {
+  const mesActual = claveMes(new Date());
+  let ganancia = 0, vendido = 0, piezas = 0;
+  state.ventas.forEach(v => {
+    if (v.mes === mesActual) {
+      ganancia += v.ganancia;
+      vendido += v.total;
+      piezas += v.cantidad;
+    }
+  });
+  return { ganancia: Math.round(ganancia*100)/100, vendido: Math.round(vendido*100)/100, piezas };
 }
 
 // ============== CÁLCULOS ==============
@@ -582,7 +554,7 @@ function calcularDatosMensuales() {
 
 // ============== RESPALDO (exportar / importar) ==============
 function exportarRespaldo() {
-  const respaldo = { data: state.data, pagosMes: state.pagosMes, version: 1, fecha: new Date().toISOString() };
+  const respaldo = { data: state.data, pagosMes: state.pagosMes, productos: state.productos, ventas: state.ventas, version: 2, fecha: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -603,6 +575,8 @@ function importarRespaldo(input) {
       if (!confirm('Esto reemplazará todos los datos actuales con los del respaldo. ¿Continuar?')) return;
       state.data = json.data;
       state.pagosMes = json.pagosMes;
+      state.productos = json.productos || [];
+      state.ventas = json.ventas || [];
       guardarLocal();
       render();
       alert('Respaldo restaurado correctamente.');
@@ -615,38 +589,23 @@ function importarRespaldo(input) {
 }
 
 // ============== VENCIMIENTOS ==============
-// Si el cliente tiene una fecha real de último pago, la membresía vence 1 mes
-// después de esa fecha (más preciso). Si no, usa el día fijo de vencimiento
-// dentro del mes en curso (modo antiguo, menos exacto).
-function calcularDiasVencimiento(cliente) {
-  const hoy = new Date(); hoy.setHours(0,0,0,0);
-  if (cliente.ultimoPago) {
-    const [y, m, d] = cliente.ultimoPago.split('-').map(Number);
-    let vy = y, vm = m + 1; // próximo mes (m ya viene 1-indexado del input date)
-    if (vm > 12) { vm = 1; vy++; }
-    const diasEnMesVenc = new Date(vy, vm, 0).getDate();
-    const diaVenc = Math.min(d, diasEnMesVenc);
-    const vencimiento = new Date(vy, vm - 1, diaVenc);
-    return { vencimiento, diasRestantes: Math.round((vencimiento - hoy) / 86400000) };
-  }
-  if (cliente.diaPago) {
-    const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
-    const dia = Math.min(cliente.diaPago, diasEnMes);
-    const vencimiento = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
-    return { vencimiento, diasRestantes: Math.round((vencimiento - hoy) / 86400000) };
-  }
-  return null;
-}
 function calcularVencimientos() {
   const LIMITE_DIAS = 5; // avisar desde 5 días antes
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  const claveReal = claveMes(hoy);
+  const pagosReales = state.pagosMes[claveReal] || {};
+  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
   const lista = [];
   Object.entries(state.data).forEach(([sk, s]) => {
     s.clientes.forEach(c => {
-      if (c.tipoPago !== 'mensual') return;
-      const info = calcularDiasVencimiento(c);
-      if (!info) return;
-      if (info.diasRestantes <= LIMITE_DIAS) {
-        lista.push({ servicio: sk, cliente: c, diasRestantes: info.diasRestantes, vencimiento: info.vencimiento });
+      if (c.tipoPago !== 'mensual' || !c.diaPago) return;
+      if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
+      const dia = Math.min(c.diaPago, diasEnMes);
+      const fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+      const diffDias = Math.round((fechaVenc - hoy) / 86400000);
+      if (diffDias <= LIMITE_DIAS) {
+        lista.push({ servicio: sk, cliente: c, diasRestantes: diffDias });
       }
     });
   });
@@ -679,20 +638,24 @@ function renderVencimientos() {
 // ============== RENDER ==============
 function render() {
   const app = document.getElementById('app');
-  app.innerHTML = renderHeader() + (state.vista === 'inicio' ? renderInicio() : renderDashboard()) + renderNav() + renderModal();
+  let vista;
+  if (state.vista === 'inicio') vista = renderInicio();
+  else if (state.vista === 'tienda') vista = renderTienda();
+  else vista = renderDashboard();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta();
   bindEvents();
 }
 
 function renderHeader() {
+  const subtitulos = { inicio: 'Control por servicio', tienda: 'Ventas por pieza', dashboard: 'Ganancias mes a mes' };
   return `
     <div class="header">
       <div class="header-top">
         <div class="logo">$</div>
         <div style="flex:1">
           <h1>J.D Ventas</h1>
-          <p>${state.vista === 'inicio' ? 'Control por servicio' : 'Ganancias mes a mes'}</p>
+          <p>${subtitulos[state.vista]}</p>
         </div>
-        <button class="bell-btn ${notificacionesActivas() ? 'activo' : ''}" data-action="toggleNotif" title="Avisos de pago">${notificacionesActivas() ? '🔔' : '🔕'}</button>
       </div>
       ${state.vista === 'inicio' ? renderSelectorMes() : ''}
     </div>
@@ -797,16 +760,6 @@ function renderSeccion(key, info) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
-  const k = servicioKey+':'+c.id;
-  const editandoFecha = state.editandoFecha === k;
-  const info = c.tipoPago === 'mensual' ? calcularDiasVencimiento(c) : null;
-  let tagVencTexto = 'Poner fecha de pago';
-  let vencidoClase = '';
-  if (info) {
-    if (info.diasRestantes < 0) { tagVencTexto = `Vencido hace ${Math.abs(info.diasRestantes)}d`; vencidoClase = 'vencido'; }
-    else if (info.diasRestantes === 0) { tagVencTexto = 'Vence hoy'; vencidoClase = 'vencido'; }
-    else { tagVencTexto = `Vence en ${info.diasRestantes}d`; }
-  }
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -816,15 +769,7 @@ function renderClienteRow(servicioKey, c, color) {
         <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
         <div class="cliente-tags">
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
-          ${c.tipoPago === 'mensual' ? (editandoFecha ? `
-            <span class="fecha-edit">
-              <input type="date" class="fecha-input" value="${esc(state.fechaTemp)}" oninput="actualizarFechaTemp(this.value)" />
-              <button class="mini-btn" data-action="guardarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">✓</button>
-              <button class="mini-btn" data-action="cancelarFecha">✕</button>
-            </span>
-          ` : `
-            <span class="tag tag-venc ${vencidoClase}" data-action="iniciarFecha" data-servicio="${servicioKey}" data-cid="${c.id}">📅 ${tagVencTexto}</span>
-          `) : ''}
+          ${c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
           ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
         </div>
       </div>
@@ -837,6 +782,188 @@ function renderClienteRow(servicioKey, c, color) {
       </div>
     </div>
   `;
+}
+
+function renderTienda() {
+  const t = calcularTotalesTienda();
+  let html = '<div class="fade-in">';
+  html += `
+    <div class="resumen">
+      <div class="resumen-card destacado">
+        <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
+        <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
+        <div class="resumen-value">${fmt(t.vendido)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#f59e0b">Piezas vendidas</div>
+        <div class="resumen-value">${t.piezas}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#a78bfa">Productos</div>
+        <div class="resumen-value">${state.productos.length}</div>
+      </div>
+    </div>
+  `;
+
+  html += '<div class="secciones">';
+  html += `<div class="seccion">
+    <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
+      <div class="seccion-top">
+        <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
+        <div class="seccion-info">
+          <h2>Productos</h2>
+          <p>${state.productos.length} producto(s) en catálogo</p>
+        </div>
+      </div>
+    </div>
+    <div class="seccion-body">
+      ${state.productos.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
+        state.productos.map(p => renderProductoRow(p)).join('')
+      }
+      <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto">
+        + Agregar producto
+      </button>
+    </div>
+  </div>`;
+  html += '</div>';
+
+  if (state.ventas.length > 0) {
+    const recientes = [...state.ventas].sort((a,b) => b.fecha - a.fecha).slice(0, 10);
+    html += `<div class="secciones" style="margin-top:12px">
+      <div class="seccion">
+        <div class="seccion-header">
+          <div class="seccion-top">
+            <div class="seccion-icon" style="background: linear-gradient(135deg, #64748b, #475569)">🧾</div>
+            <div class="seccion-info">
+              <h2>Ventas recientes</h2>
+              <p>Últimas ${recientes.length}</p>
+            </div>
+          </div>
+        </div>
+        <div class="seccion-body">
+          ${recientes.map(v => renderVentaRow(v)).join('')}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  html += '<div style="height:120px"></div></div>';
+  return html;
+}
+
+function renderProductoRow(p) {
+  const gananciaPza = p.precioVenta - p.precioCosto;
+  const sinStock = p.stock <= 0;
+  return `
+    <div class="cliente card">
+      <div class="cliente-info">
+        <div class="nombre">${esc(p.nombre)}</div>
+        <div class="cliente-tags">
+          <span class="tag" style="background:${sinStock ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sinStock ? '#ef4444' : '#f59e0b'}">Stock: ${p.stock}</span>
+          <span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>
+        </div>
+        <div class="cliente-notas">Costo ${fmt(p.precioCosto)} · Venta ${fmt(p.precioVenta)}</div>
+      </div>
+      <div class="cliente-acciones" style="flex-direction:row">
+        <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock ? 'disabled' : ''}>🛒</button>
+        <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
+        <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderVentaRow(v) {
+  const p = state.productos.find(pp => pp.id === v.productoId);
+  const fechaStr = new Date(v.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+  return `
+    <div class="cliente" style="margin-bottom:8px">
+      <div class="cliente-info">
+        <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}</div>
+        <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr}</div>
+      </div>
+      <div class="cliente-pago">
+        <div class="monto" style="color:#10b981">+${fmt(v.ganancia)}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderModalProducto() {
+  if (!state.modalProducto) return '';
+  const f = state.formProducto;
+  return `<div class="modal-overlay" data-action="cerrarModalProducto">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>${state.modalProducto.productoId ? 'Editar' : 'Nuevo'} producto</h3>
+        <button class="close-btn" data-action="cerrarModalProducto">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#f59e0b">Tienda</div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Nombre del producto <span class="required">*</span></label></div>
+        <input class="input" type="text" value="${esc(f.nombre)}" placeholder="Ej. Playera talla M" oninput="actualizarFormProducto('nombre', this.value); document.getElementById('btn-guardar-producto').disabled = !this.value.trim()" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Precio total (costo) ($)</label><span class="hint">Lo que a ti te cuesta</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.precioCosto)}" placeholder="0.00" oninput="actualizarFormProducto('precioCosto', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Precio cliente ($)</label><span class="hint">Lo que le cobras</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.precioVenta)}" placeholder="0.00" oninput="actualizarFormProducto('precioVenta', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Piezas disponibles</label><span class="hint">Stock actual</span></div>
+        <input class="input" type="number" inputmode="numeric" min="0" value="${esc(f.stock)}" placeholder="0" oninput="actualizarFormProducto('stock', this.value)" />
+      </div>
+
+      <button id="btn-guardar-producto" class="guardar-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706)" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarProducto">
+        ✓ ${state.modalProducto.productoId ? 'Guardar cambios' : 'Agregar producto'}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderModalVenta() {
+  if (!state.modalVenta) return '';
+  const p = state.productos.find(pp => pp.id === state.modalVenta.productoId);
+  if (!p) return '';
+  const cant = parseInt(state.formVenta.cantidad) || 0;
+  const totalEstim = p.precioVenta * cant;
+  const gananciaEstim = (p.precioVenta - p.precioCosto) * cant;
+  return `<div class="modal-overlay" data-action="cerrarModalVenta">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Vender: ${esc(p.nombre)}</h3>
+        <button class="close-btn" data-action="cerrarModalVenta">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#10b981">Stock disponible: ${p.stock}</div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Piezas a vender <span class="required">*</span></label></div>
+        <input class="input" type="number" inputmode="numeric" min="1" max="${p.stock}" value="${esc(state.formVenta.cantidad)}" placeholder="1" oninput="actualizarFormVenta(this.value)" />
+      </div>
+
+      <div class="precio-real-row" style="margin-bottom:12px">
+        <span class="label">Total a cobrar</span>
+        <span class="monto mono" id="venta-total">${fmt(totalEstim)}</span>
+      </div>
+      <div class="precio-real-row" style="margin-bottom:16px">
+        <span class="label">Ganancia</span>
+        <span class="monto mono" id="venta-ganancia" style="color:#10b981">${fmt(gananciaEstim)}</span>
+      </div>
+
+      <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || cant > p.stock ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}">
+        ✓ Confirmar venta
+      </button>
+    </div>
+  </div>`;
 }
 
 function renderDashboard() {
@@ -1023,6 +1150,9 @@ function renderNav() {
     <button class="nav-btn ${state.vista === 'inicio' ? 'activo' : ''}" data-action="setVista" data-vista="inicio">
       <span class="icon">🏠</span> Inicio
     </button>
+    <button class="nav-btn ${state.vista === 'tienda' ? 'activo' : ''}" data-action="setVista" data-vista="tienda">
+      <span class="icon">🛒</span> Tienda
+    </button>
     <button class="nav-btn ${state.vista === 'dashboard' ? 'activo' : ''}" data-action="setVista" data-vista="dashboard">
       <span class="icon">📊</span> Dashboard
     </button>
@@ -1060,12 +1190,7 @@ function renderModal() {
       </div>
 
       <div class="campo">
-        <div class="campo-label"><label>Fecha del último pago (opcional)</label><span class="hint">La membresía vence 1 mes después</span></div>
-        <input class="input" type="date" value="${esc(f.ultimoPago)}" oninput="actualizarForm('ultimoPago', this.value)" />
-      </div>
-
-      <div class="campo">
-        <div class="campo-label"><label>Día de vencimiento fijo (opcional)</label><span class="hint">Solo si no usas la fecha exacta</span></div>
+        <div class="campo-label"><label>Día de vencimiento (opcional)</label><span class="hint">Día del mes, 1-31</span></div>
         <input class="input" type="number" inputmode="numeric" min="1" max="31" value="${esc(f.diaPago)}" placeholder="Ej. 15" oninput="actualizarForm('diaPago', this.value)" />
       </div>
 
@@ -1105,10 +1230,6 @@ function handleClick(e) {
     case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
     case 'guardarPrecio': guardarPrecio(d.key); break;
     case 'togglePago': togglePago(d.servicio, d.cid, d.mes); break;
-    case 'toggleNotif': toggleNotif(); break;
-    case 'iniciarFecha': iniciarEditarFecha(d.servicio, d.cid); break;
-    case 'guardarFecha': guardarFecha(d.servicio, d.cid); break;
-    case 'cancelarFecha': cancelarEditarFecha(); break;
     case 'abrirModal': abrirModal(d.servicio, d.cid); break;
     case 'cerrarModal':
       if (e.target === e.currentTarget) cerrarModal();
@@ -1119,13 +1240,26 @@ function handleClick(e) {
       e.stopPropagation();
       eliminarCliente(d.servicio, d.cid);
       break;
+    case 'abrirModalProducto': abrirModalProducto(d.pid); break;
+    case 'cerrarModalProducto':
+      if (e.target === e.currentTarget) cerrarModalProducto();
+      break;
+    case 'guardarProducto': guardarProducto(); break;
+    case 'eliminarProducto':
+      e.stopPropagation();
+      eliminarProducto(d.pid);
+      break;
+    case 'abrirModalVenta': abrirModalVenta(d.pid); break;
+    case 'cerrarModalVenta':
+      if (e.target === e.currentTarget) cerrarModalVenta();
+      break;
+    case 'registrarVenta': registrarVenta(d.pid); break;
   }
 }
 
 // ============== INIT ==============
 cargarLocal();
 render();
-revisarAvisosVencimiento();
 
 // BUG FIX: si la app se queda abierta en segundo plano y cambia el día (o el mes),
 // el selector de mes y los "pagos por vencer" quedaban congelados con la fecha de
@@ -1137,14 +1271,7 @@ setInterval(() => {
     ultimoDiaConocido = ahora;
     render();
   }
-  revisarAvisosVencimiento();
 }, 60000);
-
-// Revisa también cuando el usuario vuelve a abrir/enfocar la app (Huawei suele
-// pausar el tab; esto atrapa el momento en que la reabre).
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') revisarAvisosVencimiento();
-});
 
 // ============== PWA: Service Worker ==============
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
