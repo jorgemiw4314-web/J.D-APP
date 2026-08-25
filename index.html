@@ -251,6 +251,26 @@
   .servicio-bar-row .monto { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
   .servicio-bar-bg { height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
   .servicio-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease-out; }
+
+  /* Escáner de código de barras */
+  .scanner-video-wrap {
+    position: relative; width: 100%; aspect-ratio: 4/3;
+    border-radius: 16px; overflow: hidden; background: #000;
+    margin-bottom: 12px;
+  }
+  .scanner-video-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .scanner-frame { position: absolute; inset: 18% 10%; border: 2px solid #10b981; border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 2000px rgba(0,0,0,0.25); }
+  .scanner-status { text-align: center; font-size: 13px; font-weight: 700; padding: 8px 4px; min-height: 20px; color: #94a3b8; }
+  .scanner-manual { display: flex; gap: 8px; margin-top: 4px; }
+
+  .toast {
+    position: fixed; bottom: 100px; left: 20px; right: 20px;
+    background: #10b981; color: white; padding: 14px 18px;
+    border-radius: 14px; font-size: 13px; font-weight: 700; text-align: center;
+    z-index: 300; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    animation: slideUp 0.25s ease-out;
+  }
+  .toast.error { background: #ef4444; }
 </style>
 </head>
 <body>
@@ -285,10 +305,14 @@ let state = {
   modal: null,
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
   modalProducto: null,
-  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '' },
+  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '' },
   modalVenta: null,
-  formVenta: { cantidad: '' }
+  formVenta: { cantidad: '' },
+  scanner: null
 };
+
+let videoStreamActivo = null;
+let intervaloScanner = null;
 
 // ============== HELPERS ==============
 function claveMes(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
@@ -415,14 +439,15 @@ function abrirModalProducto(productoId) {
     nombre: p?.nombre || '',
     precioCosto: p?.precioCosto != null ? String(p.precioCosto) : '',
     precioVenta: p?.precioVenta != null ? String(p.precioVenta) : '',
-    stock: p?.stock != null ? String(p.stock) : ''
+    stock: p?.stock != null ? String(p.stock) : '',
+    codigo: p?.codigo || ''
   };
   state.modalProducto = { productoId };
   render();
 }
 function cerrarModalProducto() {
   state.modalProducto = null;
-  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '' };
+  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '' };
   render();
 }
 function actualizarFormProducto(campo, valor) {
@@ -437,6 +462,7 @@ function guardarProducto() {
     precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
     precioVenta: parseFloat(state.formProducto.precioVenta) || 0,
     stock: Math.max(0, parseInt(state.formProducto.stock) || 0),
+    codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
     creado: productoId ? state.productos.find(p => p.id === productoId).creado : Date.now()
   };
   if (productoId) {
@@ -511,6 +537,121 @@ function calcularTotalesTienda() {
     }
   });
   return { ganancia: Math.round(ganancia*100)/100, vendido: Math.round(vendido*100)/100, piezas };
+}
+
+// ============== ESCÁNER DE CÓDIGO DE BARRAS ==============
+function abrirScannerVenta() {
+  state.scanner = { modo: 'venta' };
+  render();
+  iniciarCamara();
+}
+function abrirScannerAsignar() {
+  state.scanner = { modo: 'asignar' };
+  render();
+  iniciarCamara();
+}
+function cerrarScanner() {
+  detenerCamara();
+  state.scanner = null;
+  render();
+}
+
+async function iniciarCamara() {
+  const statusEl = document.getElementById('scanner-status');
+  const videoWrap = document.querySelector('.scanner-video-wrap');
+  if (!('BarcodeDetector' in window)) {
+    if (statusEl) { statusEl.textContent = 'Tu navegador no soporta escaneo automático. Escribe el código abajo.'; statusEl.style.color = '#fbbf24'; }
+    if (videoWrap) videoWrap.style.display = 'none';
+    return;
+  }
+  try {
+    videoStreamActivo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('scanner-video');
+    if (!video) { detenerCamara(); return; }
+    video.srcObject = videoStreamActivo;
+    await video.play();
+    const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
+    let ultimoCodigo = null, ultimoTiempo = 0;
+    intervaloScanner = setInterval(async () => {
+      if (!video.videoWidth) return;
+      try {
+        const codigos = await detector.detect(video);
+        if (codigos.length > 0) {
+          const valor = codigos[0].rawValue;
+          const ahora = Date.now();
+          if (valor === ultimoCodigo && ahora - ultimoTiempo < 2500) return;
+          ultimoCodigo = valor; ultimoTiempo = ahora;
+          procesarCodigoDetectado(valor);
+        }
+      } catch(err) {}
+    }, 400);
+  } catch(err) {
+    if (statusEl) { statusEl.textContent = 'No se pudo acceder a la cámara. Revisa permisos o escribe el código abajo.'; statusEl.style.color = '#ef4444'; }
+    if (videoWrap) videoWrap.style.display = 'none';
+  }
+}
+
+function detenerCamara() {
+  if (intervaloScanner) { clearInterval(intervaloScanner); intervaloScanner = null; }
+  if (videoStreamActivo) { videoStreamActivo.getTracks().forEach(t => t.stop()); videoStreamActivo = null; }
+}
+
+function buscarCodigoManual() {
+  const input = document.getElementById('scanner-manual-input');
+  if (!input || !input.value.trim()) return;
+  procesarCodigoDetectado(input.value.trim());
+  input.value = '';
+}
+
+function procesarCodigoDetectado(codigo) {
+  if (!state.scanner) return;
+
+  if (state.scanner.modo === 'asignar') {
+    state.formProducto.codigo = codigo;
+    cerrarScanner();
+    return;
+  }
+
+  const statusEl = document.getElementById('scanner-status');
+  const p = state.productos.find(pp => pp.codigo && pp.codigo === codigo);
+
+  if (!p) {
+    if (statusEl) { statusEl.textContent = `⚠️ Código "${codigo}" no está asignado a ningún producto`; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+  if (p.stock <= 0) {
+    if (statusEl) { statusEl.textContent = `⚠️ ${p.nombre} no tiene piezas en stock`; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+
+  const venta = {
+    id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    productoId: p.id,
+    cantidad: 1,
+    total: Math.round(p.precioVenta * 100) / 100,
+    ganancia: Math.round((p.precioVenta - p.precioCosto) * 100) / 100,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  };
+  state.ventas.push(venta);
+  p.stock -= 1;
+  guardarLocal();
+
+  if (statusEl) { statusEl.textContent = `✅ ${p.nombre} vendido — +${fmt(venta.ganancia)}`; statusEl.style.color = '#10b981'; }
+  const lista = document.getElementById('scanner-lista');
+  if (lista) {
+    lista.insertAdjacentHTML('afterbegin', `
+      <div class="cliente" style="margin-bottom:6px">
+        <div class="cliente-info">
+          <div class="nombre">${esc(p.nombre)}</div>
+          <div class="cliente-notas">Stock restante: ${p.stock}</div>
+        </div>
+        <div class="cliente-pago">
+          <div class="monto" style="color:#10b981">+${fmt(venta.ganancia)}</div>
+        </div>
+      </div>
+    `);
+  }
 }
 
 // ============== CÁLCULOS ==============
@@ -642,7 +783,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner();
   bindEvents();
 }
 
@@ -808,6 +949,14 @@ function renderTienda() {
     </div>
   `;
 
+  html += `
+    <div style="padding: 0 20px 4px">
+      <button class="add-cliente-btn" style="background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(6,182,212,0.1)); color:#10b981; border: 1px solid rgba(16,185,129,0.3)" data-action="abrirScannerVenta">
+        📷 Escanear y vender
+      </button>
+    </div>
+  `;
+
   html += '<div class="secciones">';
   html += `<div class="seccion">
     <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
@@ -865,7 +1014,7 @@ function renderProductoRow(p) {
           <span class="tag" style="background:${sinStock ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sinStock ? '#ef4444' : '#f59e0b'}">Stock: ${p.stock}</span>
           <span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>
         </div>
-        <div class="cliente-notas">Costo ${fmt(p.precioCosto)} · Venta ${fmt(p.precioVenta)}</div>
+        <div class="cliente-notas">Costo ${fmt(p.precioCosto)} · Venta ${fmt(p.precioVenta)}${p.codigo ? ` · Cód: ${esc(p.codigo)}` : ''}</div>
       </div>
       <div class="cliente-acciones" style="flex-direction:row">
         <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock ? 'disabled' : ''}>🛒</button>
@@ -923,6 +1072,14 @@ function renderModalProducto() {
         <input class="input" type="number" inputmode="numeric" min="0" value="${esc(f.stock)}" placeholder="0" oninput="actualizarFormProducto('stock', this.value)" />
       </div>
 
+      <div class="campo">
+        <div class="campo-label"><label>Código de barras (opcional)</label><span class="hint">Para venta rápida</span></div>
+        <div style="display:flex; gap:8px">
+          <input class="input" style="flex:1" type="text" value="${esc(f.codigo || '')}" placeholder="Escanea o escribe" oninput="actualizarFormProducto('codigo', this.value)" />
+          <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar">📷</button>
+        </div>
+      </div>
+
       <button id="btn-guardar-producto" class="guardar-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706)" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarProducto">
         ✓ ${state.modalProducto.productoId ? 'Guardar cambios' : 'Agregar producto'}
       </button>
@@ -962,6 +1119,32 @@ function renderModalVenta() {
       <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || cant > p.stock ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}">
         ✓ Confirmar venta
       </button>
+    </div>
+  </div>`;
+}
+
+function renderModalScanner() {
+  if (!state.scanner) return '';
+  const esVenta = state.scanner.modo === 'venta';
+  return `<div class="modal-overlay" data-action="cerrarScanner">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>${esVenta ? 'Escanear y vender' : 'Escanear código'}</h3>
+        <button class="close-btn" data-action="cerrarScanner">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#10b981">${esVenta ? 'Apunta al código de barras — se vende 1 pieza automáticamente' : 'Apunta al código de barras del producto'}</div>
+
+      <div class="scanner-video-wrap">
+        <video id="scanner-video" muted playsinline></video>
+        <div class="scanner-frame"></div>
+      </div>
+      <div class="scanner-status" id="scanner-status">Buscando código…</div>
+
+      <div class="scanner-manual">
+        <input id="scanner-manual-input" class="input" type="text" placeholder="O escribe el código aquí" />
+        <button class="save-btn" style="width:48px; height:48px; background:#10b981" data-action="buscarCodigoManual">✓</button>
+      </div>
+      ${esVenta ? `<div id="scanner-lista" style="margin-top:14px"></div>` : ''}
     </div>
   </div>`;
 }
@@ -1043,6 +1226,7 @@ function renderDashboard() {
       </div>
       <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
     </div>
+    <div style="height:120px"></div>
   </div>`;
 }
 
@@ -1218,6 +1402,12 @@ function bindEvents() {
       if (e.key === 'Enter') guardarPrecio(state.editandoPrecio);
     });
   }
+  const smi = document.getElementById('scanner-manual-input');
+  if (smi) {
+    smi.addEventListener('keydown', e => {
+      if (e.key === 'Enter') buscarCodigoManual();
+    });
+  }
 }
 
 function handleClick(e) {
@@ -1254,6 +1444,12 @@ function handleClick(e) {
       if (e.target === e.currentTarget) cerrarModalVenta();
       break;
     case 'registrarVenta': registrarVenta(d.pid); break;
+    case 'abrirScannerVenta': abrirScannerVenta(); break;
+    case 'abrirScannerAsignar': abrirScannerAsignar(); break;
+    case 'cerrarScanner':
+      if (e.target === e.currentTarget) cerrarScanner();
+      break;
+    case 'buscarCodigoManual': buscarCodigoManual(); break;
   }
 }
 
