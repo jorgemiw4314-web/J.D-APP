@@ -369,7 +369,14 @@ function togglePago(sk, cid, mes) {
   const m = mes || state.mesActual;
   if (!state.pagosMes[m]) state.pagosMes[m] = {};
   const k = sk+':'+cid;
-  state.pagosMes[m][k] = !state.pagosMes[m][k];
+  const yaPagado = !!state.pagosMes[m][k];
+  state.pagosMes[m][k] = !yaPagado;
+  // Si se está marcando como pagado (y es el mes actual), guardamos la fecha real
+  // para calcular con precisión cuándo vence la siguiente membresía.
+  if (!yaPagado && m === claveMes(new Date())) {
+    const cliente = state.data[sk].clientes.find(c => c.id === cid);
+    if (cliente) cliente.ultimoPago = claveHoyISO();
+  }
   guardarLocal();
   render();
 }
@@ -381,14 +388,15 @@ function abrirModal(servicio, clienteId) {
     pago: cliente?.pago != null ? String(cliente.pago) : '',
     tipoPago: cliente?.tipoPago || 'mensual',
     notas: cliente?.notas || '',
-    diaPago: cliente?.diaPago ? String(cliente.diaPago) : ''
+    diaPago: cliente?.diaPago ? String(cliente.diaPago) : '',
+    ultimoPago: cliente?.ultimoPago || ''
   };
   state.modal = { servicio, clienteId };
   render();
 }
 function cerrarModal() {
   state.modal = null;
-  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' };
+  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '', ultimoPago: '' };
   render();
 }
 function actualizarForm(campo, valor) {
@@ -407,6 +415,7 @@ function guardarCliente() {
     tipoPago: state.formCliente.tipoPago,
     notas: state.formCliente.notas.trim(),
     diaPago: state.formCliente.diaPago ? Math.min(31, Math.max(1, parseInt(state.formCliente.diaPago) || 1)) : null,
+    ultimoPago: state.formCliente.ultimoPago || null,
     creado: clienteId ? state.data[servicio].clientes.find(c=>c.id===clienteId).creado : Date.now()
   };
   if (clienteId) {
@@ -801,17 +810,15 @@ function calcularVencimientos() {
   hoy.setHours(0,0,0,0);
   const claveReal = claveMes(hoy);
   const pagosReales = state.pagosMes[claveReal] || {};
-  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
   const lista = [];
   Object.entries(state.data).forEach(([sk, s]) => {
     s.clientes.forEach(c => {
-      if (c.tipoPago !== 'mensual' || !c.diaPago) return;
+      if (c.tipoPago !== 'mensual' || (!c.diaPago && !c.ultimoPago)) return;
       if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
-      const dia = Math.min(c.diaPago, diasEnMes);
-      const fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
-      const diffDias = Math.round((fechaVenc - hoy) / 86400000);
-      if (diffDias <= LIMITE_DIAS) {
-        lista.push({ servicio: sk, cliente: c, diasRestantes: diffDias });
+      const info = calcularEstadoVencimiento(c);
+      if (!info) return;
+      if (info.diff <= LIMITE_DIAS) {
+        lista.push({ servicio: sk, cliente: c, diasRestantes: info.diff });
       }
     });
   });
@@ -964,22 +971,109 @@ function renderSeccion(key, info) {
   return html;
 }
 
-function calcularEstadoVencimiento(diaPago) {
+// ============== NOTIFICACIONES DE VENCIMIENTO ==============
+const LIMITE_NOTIFICACION = 3; // avisar desde 3 días antes de vencer (y si ya venció)
+
+function cargarNotificados() {
+  try {
+    const raw = localStorage.getItem('notificados-hoy');
+    if (!raw) return { fecha: claveHoyISO(), ids: [] };
+    const obj = JSON.parse(raw);
+    if (obj.fecha !== claveHoyISO()) return { fecha: claveHoyISO(), ids: [] };
+    return obj;
+  } catch(e) { return { fecha: claveHoyISO(), ids: [] }; }
+}
+function guardarNotificados(obj) {
+  try { localStorage.setItem('notificados-hoy', JSON.stringify(obj)); } catch(e) {}
+}
+
+function dispararNotificacion(titulo, cuerpo) {
+  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(titulo, { body: cuerpo, icon: 'icon-192.png', badge: 'icon-192.png', tag: titulo });
+    }).catch(() => {
+      try { new Notification(titulo, { body: cuerpo }); } catch(e) {}
+    });
+  } else {
+    try { new Notification(titulo, { body: cuerpo }); } catch(e) {}
+  }
+}
+
+function revisarYNotificar() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const venc = calcularVencimientos();
+  const notif = cargarNotificados();
+  let huboNuevas = false;
+  venc.forEach(v => {
+    if (v.diasRestantes > LIMITE_NOTIFICACION) return;
+    const clave = v.servicio + ':' + v.cliente.id;
+    if (notif.ids.includes(clave)) return;
+    const info = SERVICIOS[v.servicio];
+    const texto = v.diasRestantes < 0
+      ? `Vencido hace ${Math.abs(v.diasRestantes)} día(s) — ${info.nombre}`
+      : v.diasRestantes === 0
+        ? `Vence hoy — ${info.nombre}`
+        : `Vence en ${v.diasRestantes} día(s) — ${info.nombre}`;
+    dispararNotificacion(`${v.cliente.nombre}`, texto);
+    notif.ids.push(clave);
+    huboNuevas = true;
+  });
+  if (huboNuevas) guardarNotificados(notif);
+}
+
+async function activarNotificaciones() {
+  if (!('Notification' in window)) {
+    alert('Este navegador no soporta notificaciones.');
+    return;
+  }
+  const permiso = await Notification.requestPermission();
+  if (permiso === 'granted') {
+    revisarYNotificar();
+    render();
+  } else {
+    alert('No se activaron las notificaciones. Puedes intentarlo de nuevo cuando quieras desde este mismo botón.');
+  }
+}
+
+function claveHoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function sumarMes(fecha) {
+  const dia = fecha.getDate();
+  const destino = new Date(fecha.getFullYear(), fecha.getMonth()+1, 1);
+  const diasEnDestino = new Date(destino.getFullYear(), destino.getMonth()+1, 0).getDate();
+  destino.setDate(Math.min(dia, diasEnDestino));
+  return destino;
+}
+
+// Calcula cuándo vence la membresía de un cliente. Si tiene fecha real del último
+// pago (ultimoPago), la usa (vence 1 mes después, con precisión de día exacto).
+// Si no, usa el día fijo de vencimiento (diaPago) sobre el mes actual.
+function calcularEstadoVencimiento(c) {
   const hoy = new Date();
   hoy.setHours(0,0,0,0);
-  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
-  const dia = Math.min(diaPago, diasEnMes);
-  const fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+  let fechaVenc;
+  if (c.ultimoPago) {
+    fechaVenc = sumarMes(new Date(c.ultimoPago + 'T00:00:00'));
+  } else if (c.diaPago) {
+    const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+    const dia = Math.min(c.diaPago, diasEnMes);
+    fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+  } else {
+    return null;
+  }
   const diff = Math.round((fechaVenc - hoy) / 86400000);
-  if (diff < 0) return { color: '#ef4444', texto: `Vencido ${Math.abs(diff)}d` };
-  if (diff === 0) return { color: '#fbbf24', texto: 'Vence hoy' };
-  if (diff <= 5) return { color: '#fbbf24', texto: `En ${diff}d` };
-  return { color: '#64748b', texto: `En ${diff}d` };
+  if (diff < 0) return { diff, color: '#ef4444', texto: `Vencido ${Math.abs(diff)}d` };
+  if (diff === 0) return { diff, color: '#fbbf24', texto: 'Vence hoy' };
+  if (diff <= 5) return { diff, color: '#fbbf24', texto: `En ${diff}d` };
+  return { diff, color: '#64748b', texto: `En ${diff}d` };
 }
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
-  const vencInfo = (c.tipoPago === 'mensual' && c.diaPago && !pagado) ? calcularEstadoVencimiento(c.diaPago) : null;
+  const vencInfo = (c.tipoPago === 'mensual' && (c.diaPago || c.ultimoPago) && !pagado) ? calcularEstadoVencimiento(c) : null;
   return `
     <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
       <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
@@ -1307,6 +1401,16 @@ function renderDashboard() {
       <button class="tipo-btn" style="width:100%; margin-top:8px" onclick="verRespaldoTexto()">📋 Ver como texto (si lo de arriba no funciona)</button>
       <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
     </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#f59e0b">🔔</span> Notificaciones</div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
+        Te avisa cuando falten 3 días o menos para que venza una membresía mensual, para que le marques al cliente a tiempo. Funciona mientras tengas la app abierta o recién en segundo plano — en teléfonos Huawei sin Google Play puede no llegar si la app lleva mucho tiempo cerrada, así que ábrela seguido.
+      </p>
+      <button class="tipo-btn" style="width:100%" onclick="activarNotificaciones()">
+        ${(typeof Notification !== 'undefined' && Notification.permission === 'granted') ? '🔔 Notificaciones activadas ✅' : '🔔 Activar notificaciones'}
+      </button>
+    </div>
     <div style="height:120px"></div>
   </div>`;
 }
@@ -1460,6 +1564,11 @@ function renderModal() {
       </div>
 
       <div class="campo">
+        <div class="campo-label"><label>Fecha del último pago (opcional)</label><span class="hint">Se llena sola al marcar pagado</span></div>
+        <input class="input" type="date" value="${esc(f.ultimoPago)}" oninput="actualizarForm('ultimoPago', this.value)" />
+      </div>
+
+      <div class="campo">
         <div class="campo-label"><label>Notas (opcional)</label></div>
         <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Detalles adicionales" oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
       </div>
@@ -1537,6 +1646,7 @@ function handleClick(e) {
 // ============== INIT ==============
 cargarLocal();
 render();
+revisarYNotificar(); // por si ya había permiso concedido de antes
 
 // BUG FIX: si la app se queda abierta en segundo plano y cambia el día (o el mes),
 // el selector de mes y los "pagos por vencer" quedaban congelados con la fecha de
@@ -1549,6 +1659,10 @@ setInterval(() => {
     render();
   }
 }, 60000);
+
+// Revisa membresías por vencer cada hora mientras la app esté abierta y avisa
+// con una notificación si ya se dieron permisos.
+setInterval(() => { revisarYNotificar(); }, 60 * 60 * 1000);
 
 // ============== PWA: Service Worker ==============
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
