@@ -694,16 +694,43 @@ function calcularDatosMensuales() {
 }
 
 // ============== RESPALDO (exportar / importar) ==============
-function exportarRespaldo() {
+async function exportarRespaldo() {
   const respaldo = { data: state.data, pagosMes: state.pagosMes, productos: state.productos, ventas: state.ventas, version: 2, fecha: new Date().toISOString() };
-  const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const contenido = JSON.stringify(respaldo, null, 2);
   const f = new Date();
   const nombre = `jd-ventas-respaldo-${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}.json`;
-  a.href = url; a.download = nombre;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+
+  // Intento 1: compartir el archivo con el menú nativo de Android (más confiable en navegadores móviles)
+  try {
+    if (navigator.canShare && navigator.share) {
+      const file = new File([contenido], nombre, { type: 'application/json' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Respaldo J.D Ventas' });
+        return;
+      }
+    }
+  } catch(err) {
+    // si el usuario cancela el share, o falla, seguimos con el siguiente intento
+  }
+
+  // Intento 2: descarga clásica con blob
+  try {
+    const blob = new Blob([contenido], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  } catch(err) {
+    // Intento 3: abrir en pestaña nueva para que el usuario lo guarde manualmente
+    try {
+      const blob = new Blob([contenido], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch(err2) {
+      alert('No se pudo generar el respaldo. Intenta con Chrome.');
+    }
+  }
 }
 function importarRespaldo(input) {
   const file = input.files[0];
