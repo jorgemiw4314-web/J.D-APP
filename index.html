@@ -15,6 +15,52 @@
 <title>J.D Ventas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+<script type="module">
+  // Conexión a Firebase / Firestore: guarda una copia de los datos en la nube
+  // para que no se pierdan si el teléfono borra el almacenamiento local.
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAmo1UwV1o_ifGErI0nr6bbx-bSIPJ7YEw",
+    authDomain: "jdventas-a6afa.firebaseapp.com",
+    projectId: "jdventas-a6afa",
+    storageBucket: "jdventas-a6afa.firebasestorage.app",
+    messagingSenderId: "924830739264",
+    appId: "1:924830739264:web:e1980ec2a8e2484075a8a5"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const refDatos = doc(db, 'jdventas', 'principal');
+
+  // Estas funciones quedan colgadas de "window" para que el resto de la app
+  // (que es un script normal, no un módulo) las pueda usar.
+  window.nubeGuardar = async function(datos) {
+    try {
+      await setDoc(refDatos, { ...datos, actualizado: Date.now() });
+      return true;
+    } catch (e) {
+      console.error('Error guardando en la nube:', e);
+      return false;
+    }
+  };
+
+  window.nubeLeer = async function() {
+    try {
+      const snap = await getDoc(refDatos);
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      console.error('Error leyendo de la nube:', e);
+      return null;
+    }
+  };
+
+  window.nubeListo = true;
+  window.dispatchEvent(new Event('nube-lista'));
+</script>
+
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -81,6 +127,20 @@
   .venc-info .tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
   .venc-dias { font-size: 12px; font-weight: 700; color: #fbbf24; flex-shrink: 0; }
   .venc-dias.vencido { color: #ef4444; }
+
+  /* Aviso de respaldo atrasado */
+  .respaldo-alert {
+    margin: 16px 20px 0;
+    background: rgba(6,182,212,0.08);
+    border: 1px solid rgba(6,182,212,0.25);
+    border-radius: 14px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .respaldo-alert .texto { flex: 1; font-size: 13px; font-weight: 600; color: #67e8f9; }
+  .respaldo-alert button {
+    background: #06b6d4; color: #04222a; border: none; border-radius: 10px;
+    padding: 8px 12px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  }
 
   /* Resumen */
   .resumen { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -331,7 +391,16 @@ function guardarLocal() {
     localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
     localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
     localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+    localStorage.setItem('local-actualizado', String(Date.now()));
   } catch(e) { console.error(e); }
+
+  // Sube a Firebase unos segundos después del último cambio (no en cada click,
+  // para no mandar de más escrituras si estás marcando varios pagos seguidos).
+  if (window.nubeListo) {
+    clearTimeout(nubeTimeout);
+    actualizarIndicadorNube('sincronizando');
+    nubeTimeout = setTimeout(subirANube, 1500);
+  }
 }
 function cargarLocal() {
   try {
@@ -344,6 +413,62 @@ function cargarLocal() {
     if (pr) state.productos = JSON.parse(pr);
     if (v) state.ventas = JSON.parse(v);
   } catch(e) { console.error(e); }
+}
+
+// ============== SINCRONIZACIÓN CON LA NUBE (FIREBASE) ==============
+let nubeTimeout = null;
+
+function actualizarIndicadorNube(estado) {
+  const el = document.getElementById('nube-status');
+  if (!el) return;
+  const mapa = {
+    sincronizando: { icono: '🔄', titulo: 'Sincronizando…' },
+    ok: { icono: '☁️', titulo: 'Sincronizado con la nube' },
+    error: { icono: '⚠️', titulo: 'Sin conexión — solo guardado en el teléfono' }
+  };
+  const m = mapa[estado] || mapa.error;
+  el.textContent = m.icono;
+  el.title = m.titulo;
+}
+
+async function subirANube() {
+  if (!window.nubeListo) return;
+  const ok = await window.nubeGuardar({
+    data: state.data,
+    pagosMes: state.pagosMes,
+    productos: state.productos,
+    ventas: state.ventas
+  });
+  actualizarIndicadorNube(ok ? 'ok' : 'error');
+}
+
+async function sincronizarNube() {
+  if (!window.nubeListo) return;
+  actualizarIndicadorNube('sincronizando');
+  const remoto = await window.nubeLeer();
+  const remotoTs = remoto?.actualizado || 0;
+  const localTs = parseInt(localStorage.getItem('local-actualizado') || '0');
+
+  if (remoto && remotoTs > localTs) {
+    // La nube tiene algo más nuevo que este teléfono (p. ej. se perdieron los
+    // datos locales, o los editaste desde otro dispositivo). Traemos la nube.
+    state.data = remoto.data || state.data;
+    state.pagosMes = remoto.pagosMes || state.pagosMes;
+    state.productos = remoto.productos || state.productos;
+    state.ventas = remoto.ventas || state.ventas;
+    try {
+      localStorage.setItem('pagos-data', JSON.stringify(state.data));
+      localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
+      localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
+      localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+      localStorage.setItem('local-actualizado', String(remotoTs));
+    } catch(e) {}
+    actualizarIndicadorNube('ok');
+    render();
+  } else {
+    // Este teléfono está igual o más al día: subimos para que la nube quede sincronizada.
+    subirANube();
+  }
 }
 
 // ============== ACCIONES ==============
@@ -737,6 +862,7 @@ function verRespaldoTexto() {
       try { copiado = document.execCommand('copy'); } catch(e) {}
     }
     ta.setAttribute('readonly', 'true');
+    if (copiado) { registrarRespaldoHecho(); render(); }
     alert(copiado ? 'Copiado ✅ Ya lo puedes pegar donde quieras.' : 'No se pudo copiar solo. El texto ya está seleccionado, mantén presionado y elige "Copiar".');
   });
 }
@@ -753,6 +879,8 @@ async function exportarRespaldo() {
       const file = new File([contenido], nombre, { type: 'application/json' });
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'Respaldo J.D Ventas' });
+        registrarRespaldoHecho();
+        render();
         return;
       }
     }
@@ -768,12 +896,16 @@ async function exportarRespaldo() {
     a.href = url; a.download = nombre;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1500);
+    registrarRespaldoHecho();
+    render();
   } catch(err) {
     // Intento 3: abrir en pestaña nueva para que el usuario lo guarde manualmente
     try {
       const blob = new Blob([contenido], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
+      registrarRespaldoHecho();
+      render();
     } catch(err2) {
       alert('No se pudo generar el respaldo. Intenta con Chrome.');
     }
@@ -826,6 +958,29 @@ function calcularVencimientos() {
   return lista;
 }
 
+// ============== SEGUIMIENTO DE RESPALDO ==============
+const DIAS_AVISO_RESPALDO = 7;
+
+function registrarRespaldoHecho() {
+  try { localStorage.setItem('ultimo-respaldo', String(Date.now())); } catch(e) {}
+}
+function diasDesdeUltimoRespaldo() {
+  try {
+    const raw = localStorage.getItem('ultimo-respaldo');
+    if (!raw) return null;
+    return Math.floor((Date.now() - parseInt(raw)) / 86400000);
+  } catch(e) { return null; }
+}
+function renderAvisoRespaldo() {
+  const dias = diasDesdeUltimoRespaldo();
+  if (dias !== null && dias < DIAS_AVISO_RESPALDO) return '';
+  const texto = dias === null ? '💾 Nunca has hecho un respaldo de tus datos' : `💾 Tu último respaldo fue hace ${dias} días`;
+  return `<div class="respaldo-alert">
+    <div class="texto">${texto}</div>
+    <button data-action="setVista" data-vista="dashboard">Respaldar</button>
+  </div>`;
+}
+
 function renderVencimientos() {
   const venc = calcularVencimientos();
   if (venc.length === 0) return '';
@@ -869,6 +1024,7 @@ function renderHeader() {
           <h1>J.D Ventas</h1>
           <p>${subtitulos[state.vista]}</p>
         </div>
+        <span id="nube-status" style="font-size:18px; opacity:0.8"></span>
       </div>
       ${state.vista === 'inicio' ? renderSelectorMes() : ''}
     </div>
@@ -891,6 +1047,7 @@ function renderInicio() {
   const t = calcularTotalesMes();
   let html = '<div class="fade-in">';
   html += renderVencimientos();
+  html += renderAvisoRespaldo();
   html += `
     <div class="resumen">
       <div class="resumen-card destacado">
@@ -1393,7 +1550,10 @@ function renderDashboard() {
 
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#94a3b8">💾</span> Respaldo de datos</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:8px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
+      <p style="font-size:12px; font-weight:700; margin-bottom:12px; color:${(() => { const d = diasDesdeUltimoRespaldo(); return d !== null && d < DIAS_AVISO_RESPALDO ? '#10b981' : '#fbbf24'; })()}">
+        ${(() => { const d = diasDesdeUltimoRespaldo(); return d === null ? '⚠️ Nunca has hecho un respaldo' : `Último respaldo: hace ${d} día(s)`; })()}
+      </p>
       <div style="display:flex; gap:8px">
         <button class="tipo-btn" style="flex:1" onclick="exportarRespaldo()">⬇ Exportar respaldo</button>
         <button class="tipo-btn" style="flex:1" onclick="document.getElementById('input-restaurar').click()">⬆ Restaurar</button>
@@ -1647,6 +1807,22 @@ function handleClick(e) {
 cargarLocal();
 render();
 revisarYNotificar(); // por si ya había permiso concedido de antes
+
+// El módulo de Firebase carga por separado y puede tardar un poco más que
+// el resto del código; esperamos a que avise que ya está listo.
+if (window.nubeListo) {
+  sincronizarNube();
+} else {
+  window.addEventListener('nube-lista', () => sincronizarNube(), { once: true });
+}
+
+// Le pedimos al navegador que marque el almacenamiento como "persistente":
+// esto reduce (no elimina del todo) el riesgo de que Android borre los datos
+// solo para liberar espacio. No evita que el usuario borre los datos a mano
+// desde Ajustes, ni sustituye al respaldo — es una capa extra de protección.
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
+}
 
 // BUG FIX: si la app se queda abierta en segundo plano y cambia el día (o el mes),
 // el selector de mes y los "pagos por vencer" quedaban congelados con la fecha de
