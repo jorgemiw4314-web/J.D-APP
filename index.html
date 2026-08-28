@@ -357,6 +357,8 @@ let state = {
   pagosMes: {},
   productos: [],
   ventas: [],
+  config: { pinAdmin: '1234' },
+  rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
   expandido: { internet: true, netflix: true, spotify: true, otros: true },
@@ -391,6 +393,7 @@ function guardarLocal() {
     localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
     localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
     localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+    localStorage.setItem('app-config', JSON.stringify(state.config));
     localStorage.setItem('local-actualizado', String(Date.now()));
   } catch(e) { console.error(e); }
 
@@ -408,11 +411,15 @@ function cargarLocal() {
     const p = localStorage.getItem('pagos-mes');
     const pr = localStorage.getItem('tienda-productos');
     const v = localStorage.getItem('tienda-ventas');
+    const cfg = localStorage.getItem('app-config');
     if (d) state.data = { ...state.data, ...JSON.parse(d) };
     if (p) state.pagosMes = JSON.parse(p);
     if (pr) state.productos = JSON.parse(pr);
     if (v) state.ventas = JSON.parse(v);
+    if (cfg) state.config = { ...state.config, ...JSON.parse(cfg) };
   } catch(e) { console.error(e); }
+  // La sesión (rol) es propia de este dispositivo, no se sincroniza con la nube.
+  try { state.rol = localStorage.getItem('sesion-rol') || null; } catch(e) {}
 }
 
 // ============== SINCRONIZACIÓN CON LA NUBE (FIREBASE) ==============
@@ -437,7 +444,8 @@ async function subirANube() {
     data: state.data,
     pagosMes: state.pagosMes,
     productos: state.productos,
-    ventas: state.ventas
+    ventas: state.ventas,
+    config: state.config
   });
   actualizarIndicadorNube(ok ? 'ok' : 'error');
 }
@@ -456,11 +464,13 @@ async function sincronizarNube() {
     state.pagosMes = remoto.pagosMes || state.pagosMes;
     state.productos = remoto.productos || state.productos;
     state.ventas = remoto.ventas || state.ventas;
+    state.config = remoto.config || state.config;
     try {
       localStorage.setItem('pagos-data', JSON.stringify(state.data));
       localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
       localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
       localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+      localStorage.setItem('app-config', JSON.stringify(state.config));
       localStorage.setItem('local-actualizado', String(remotoTs));
     } catch(e) {}
     actualizarIndicadorNube('ok');
@@ -507,6 +517,7 @@ function togglePago(sk, cid, mes) {
 }
 
 function abrirModal(servicio, clienteId) {
+  if (state.rol !== 'admin') return;
   const cliente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
   state.formCliente = {
     nombre: cliente?.nombre || '',
@@ -531,6 +542,7 @@ function actualizarForm(campo, valor) {
 }
 
 function guardarCliente() {
+  if (state.rol !== 'admin') return;
   if (!state.formCliente.nombre.trim()) return;
   const { servicio, clienteId } = state.modal;
   const nuevo = {
@@ -553,6 +565,7 @@ function guardarCliente() {
 }
 
 function eliminarCliente(servicio, id) {
+  if (state.rol !== 'admin') return;
   if (!confirm('¿Eliminar este cliente? También se borrará su historial de pagos.')) return;
   state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
   // BUG FIX: antes los registros de pago (pagosMes) de un cliente eliminado se quedaban
@@ -568,6 +581,7 @@ function eliminarCliente(servicio, id) {
 
 // ============== TIENDA (productos por pieza) ==============
 function abrirModalProducto(productoId) {
+  if (state.rol !== 'admin') return;
   const p = productoId ? state.productos.find(pp => pp.id === productoId) : null;
   state.formProducto = {
     nombre: p?.nombre || '',
@@ -588,6 +602,7 @@ function actualizarFormProducto(campo, valor) {
   state.formProducto[campo] = valor;
 }
 function guardarProducto() {
+  if (state.rol !== 'admin') return;
   if (!state.formProducto.nombre.trim()) return;
   const { productoId } = state.modalProducto;
   const nuevo = {
@@ -608,6 +623,7 @@ function guardarProducto() {
   cerrarModalProducto();
 }
 function eliminarProducto(id) {
+  if (state.rol !== 'admin') return;
   if (!confirm('¿Eliminar este producto? También se borrará su historial de ventas.')) return;
   state.productos = state.productos.filter(p => p.id !== id);
   state.ventas = state.ventas.filter(v => v.productoId !== id);
@@ -680,6 +696,7 @@ function abrirScannerVenta() {
   iniciarCamara();
 }
 function abrirScannerAsignar() {
+  if (state.rol !== 'admin') return;
   state.scanner = { modo: 'asignar' };
   render();
   iniciarCamara();
@@ -771,7 +788,12 @@ function procesarCodigoDetectado(codigo) {
   p.stock -= 1;
   guardarLocal();
 
-  if (statusEl) { statusEl.textContent = `✅ ${p.nombre} vendido — +${fmt(venta.ganancia)}`; statusEl.style.color = '#10b981'; }
+  if (statusEl) {
+    statusEl.textContent = state.rol === 'admin'
+      ? `✅ ${p.nombre} vendido — +${fmt(venta.ganancia)}`
+      : `✅ ${p.nombre} vendido — cobrar ${fmt(venta.total)}`;
+    statusEl.style.color = '#10b981';
+  }
   const lista = document.getElementById('scanner-lista');
   if (lista) {
     lista.insertAdjacentHTML('afterbegin', `
@@ -781,7 +803,7 @@ function procesarCodigoDetectado(codigo) {
           <div class="cliente-notas">Stock restante: ${p.stock}</div>
         </div>
         <div class="cliente-pago">
-          <div class="monto" style="color:#10b981">+${fmt(venta.ganancia)}</div>
+          <div class="monto" style="color:${state.rol === 'admin' ? '#10b981' : '#94a3b8'}">${state.rol === 'admin' ? '+' + fmt(venta.ganancia) : fmt(venta.total)}</div>
         </div>
       </div>
     `);
@@ -958,7 +980,67 @@ function calcularVencimientos() {
   return lista;
 }
 
-// ============== SEGUIMIENTO DE RESPALDO ==============
+// ============== SESIÓN (ADMIN / VENDEDOR) ==============
+async function intentarLogin(rol) {
+  if (rol === 'vendedor') {
+    state.rol = 'vendedor';
+    try { localStorage.setItem('sesion-rol', 'vendedor'); } catch(e) {}
+    state.vista = 'cobros';
+    render();
+    return;
+  }
+
+  // Admin sí requiere PIN
+  const pin = prompt('Ingresa el PIN de Admin:');
+  if (pin === null) return;
+
+  // Verificamos contra el PIN más reciente de la nube (si hay internet), no solo
+  // el que esté en memoria en este momento — importante la primera vez que se
+  // abre la app en un teléfono nuevo, antes de que termine de sincronizar.
+  let pinVigente = state.config.pinAdmin;
+  if (window.nubeListo) {
+    try {
+      const remoto = await window.nubeLeer();
+      if (remoto?.config?.pinAdmin) pinVigente = remoto.config.pinAdmin;
+    } catch(e) { /* sin internet: seguimos con el PIN que ya teníamos guardado */ }
+  }
+
+  if (pin.trim() === pinVigente) {
+    state.rol = 'admin';
+    try { localStorage.setItem('sesion-rol', 'admin'); } catch(e) {}
+    state.vista = 'inicio';
+    render();
+  } else {
+    alert('PIN incorrecto.');
+  }
+}
+function cerrarSesion() {
+  state.rol = null;
+  try { localStorage.removeItem('sesion-rol'); } catch(e) {}
+  render();
+}
+function cambiarPinAdmin() {
+  const nuevo = prompt('Nuevo PIN de Admin (solo números):', state.config.pinAdmin);
+  if (nuevo === null || !nuevo.trim()) return;
+  state.config.pinAdmin = nuevo.trim();
+  guardarLocal();
+  render();
+  alert('✅ PIN actualizado.');
+}
+
+function renderLogin() {
+  return `
+    <div class="fade-in" style="min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; gap:14px; background:#0a0e1a">
+      <div class="logo" style="width:64px; height:64px; font-size:28px; margin-bottom:8px">$</div>
+      <h1 style="font-size:22px; color:#f1f5f9">J.D Ventas</h1>
+      <p style="color:#64748b; font-size:13px; margin-bottom:16px">¿Quién eres?</p>
+      <button class="guardar-btn" style="width:85%; max-width:320px" data-action="intentarLogin" data-rol="admin">🔒 Soy Admin</button>
+      <button class="tipo-btn" style="width:85%; max-width:320px; padding:14px" data-action="intentarLogin" data-rol="vendedor">🧾 Soy Vendedor</button>
+    </div>
+  `;
+}
+
+
 const DIAS_AVISO_RESPALDO = 7;
 
 function registrarRespaldoHecho() {
@@ -1006,6 +1088,22 @@ function renderVencimientos() {
 // ============== RENDER ==============
 function render() {
   const app = document.getElementById('app');
+
+  if (!state.rol) {
+    app.innerHTML = renderLogin();
+    bindEvents();
+    return;
+  }
+
+  if (state.rol === 'vendedor') {
+    if (state.vista !== 'cobros' && state.vista !== 'tienda') state.vista = 'cobros';
+    const vista = state.vista === 'tienda' ? renderTienda() : renderCobros();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner();
+    bindEvents();
+    return;
+  }
+
+  // Admin: control total
   let vista;
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
@@ -1015,20 +1113,83 @@ function render() {
 }
 
 function renderHeader() {
-  const subtitulos = { inicio: 'Control por servicio', tienda: 'Ventas por pieza', dashboard: 'Ganancias mes a mes' };
+  const subtitulos = { inicio: 'Control por servicio', tienda: 'Ventas por pieza', dashboard: 'Ganancias mes a mes', cobros: 'Lo que hay que cobrar' };
   return `
     <div class="header">
       <div class="header-top">
         <div class="logo">$</div>
         <div style="flex:1">
           <h1>J.D Ventas</h1>
-          <p>${subtitulos[state.vista]}</p>
+          <p>${subtitulos[state.vista] || ''}</p>
         </div>
         <span id="nube-status" style="font-size:18px; opacity:0.8"></span>
       </div>
       ${state.vista === 'inicio' ? renderSelectorMes() : ''}
     </div>
   `;
+}
+
+function renderNavRecepcion() {
+  return `<div class="nav-bottom">
+    <button class="nav-btn ${state.vista === 'cobros' ? 'activo' : ''}" data-action="setVista" data-vista="cobros">
+      <span class="icon">🧾</span> Cobros
+    </button>
+    <button class="nav-btn ${state.vista === 'tienda' ? 'activo' : ''}" data-action="setVista" data-vista="tienda">
+      <span class="icon">🛒</span> Tienda
+    </button>
+    <button class="nav-btn" data-action="cerrarSesion">
+      <span class="icon">🚪</span> Salir
+    </button>
+  </div>`;
+}
+
+// Vista de recepción: solo lo que hay que cobrar, sin costos ni ganancias
+function renderCobros() {
+  let totalCobrado = 0, totalPendiente = 0;
+  Object.entries(state.data).forEach(([sk, s]) => {
+    s.clientes.forEach(c => {
+      if (estaPagado(sk, c.id)) totalCobrado += c.pago;
+      else totalPendiente += c.pago;
+    });
+  });
+
+  let html = '<div class="fade-in">';
+  html += renderVencimientos();
+  html += `
+    <div class="resumen">
+      <div class="resumen-card destacado">
+        <div class="resumen-label" style="color:#10b981">Cobrado este mes</div>
+        <div class="resumen-value" style="color:#10b981">${fmt(totalCobrado)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#fbbf24">Falta por cobrar</div>
+        <div class="resumen-value" style="color:#fbbf24">${fmt(totalPendiente)}</div>
+      </div>
+    </div>
+  `;
+
+  html += '<div class="secciones">';
+  Object.entries(SERVICIOS).forEach(([sk, info]) => {
+    const s = state.data[sk];
+    if (!s.clientes.length) return;
+    const pagaron = s.clientes.filter(c => estaPagado(sk, c.id)).length;
+    html += `<div class="seccion">
+      <div class="seccion-header" style="background: linear-gradient(135deg, ${info.color}15, ${info.color}05); border-bottom: 1px solid ${info.color}25;">
+        <div class="seccion-top">
+          <div class="seccion-icon" style="background:${info.gradient}">${info.icon}</div>
+          <div class="seccion-info">
+            <h2>${info.nombre}</h2>
+            <p>${pagaron}/${s.clientes.length} pagaron</p>
+          </div>
+        </div>
+      </div>
+      <div class="seccion-body">
+        ${s.clientes.map(c => renderClienteRow(sk, c, info.color)).join('')}
+      </div>
+    </div>`;
+  });
+  html += '</div><div style="height:120px"></div></div>';
+  return html;
 }
 
 function renderSelectorMes() {
@@ -1248,24 +1409,27 @@ function renderClienteRow(servicioKey, c, color) {
       <div class="cliente-pago">
         <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
       </div>
+      ${state.rol === 'admin' ? `
       <div class="cliente-acciones">
         <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
         <button class="icon-btn delete" data-action="eliminarCliente" data-servicio="${servicioKey}" data-cid="${c.id}">🗑</button>
-      </div>
+      </div>` : ''}
     </div>
   `;
 }
 
 function renderTienda() {
   const t = calcularTotalesTienda();
+  const esAdmin = state.rol === 'admin';
   let html = '<div class="fade-in">';
   html += `
     <div class="resumen">
+      ${esAdmin ? `
       <div class="resumen-card destacado">
         <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
         <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
-      </div>
-      <div class="resumen-card">
+      </div>` : ''}
+      <div class="resumen-card ${esAdmin ? '' : 'destacado'}">
         <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
         <div class="resumen-value">${fmt(t.vendido)}</div>
       </div>
@@ -1303,9 +1467,10 @@ function renderTienda() {
       ${state.productos.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
         state.productos.map(p => renderProductoRow(p)).join('')
       }
+      ${esAdmin ? `
       <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto">
         + Agregar producto
-      </button>
+      </button>` : ''}
     </div>
   </div>`;
   html += '</div>';
@@ -1337,20 +1502,22 @@ function renderTienda() {
 function renderProductoRow(p) {
   const gananciaPza = p.precioVenta - p.precioCosto;
   const sinStock = p.stock <= 0;
+  const esAdmin = state.rol === 'admin';
   return `
     <div class="cliente card">
       <div class="cliente-info">
         <div class="nombre">${esc(p.nombre)}</div>
         <div class="cliente-tags">
           <span class="tag" style="background:${sinStock ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sinStock ? '#ef4444' : '#f59e0b'}">Stock: ${p.stock}</span>
-          <span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>
+          ${esAdmin ? `<span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>` : ''}
         </div>
-        <div class="cliente-notas">Costo ${fmt(p.precioCosto)} · Venta ${fmt(p.precioVenta)}${p.codigo ? ` · Cód: ${esc(p.codigo)}` : ''}</div>
+        <div class="cliente-notas">${esAdmin ? `Costo ${fmt(p.precioCosto)} · ` : ''}Venta ${fmt(p.precioVenta)}${p.codigo ? ` · Cód: ${esc(p.codigo)}` : ''}</div>
       </div>
       <div class="cliente-acciones" style="flex-direction:row">
         <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock ? 'disabled' : ''}>🛒</button>
+        ${esAdmin ? `
         <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
-        <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>
+        <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>` : ''}
       </div>
     </div>
   `;
@@ -1359,6 +1526,7 @@ function renderProductoRow(p) {
 function renderVentaRow(v) {
   const p = state.productos.find(pp => pp.id === v.productoId);
   const fechaStr = new Date(v.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+  const esAdmin = state.rol === 'admin';
   return `
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
@@ -1366,7 +1534,7 @@ function renderVentaRow(v) {
         <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr}</div>
       </div>
       <div class="cliente-pago">
-        <div class="monto" style="color:#10b981">+${fmt(v.ganancia)}</div>
+        <div class="monto" style="color:${esAdmin ? '#10b981' : '#94a3b8'}">${esAdmin ? '+' + fmt(v.ganancia) : fmt(v.total)}</div>
       </div>
     </div>
   `;
@@ -1438,14 +1606,15 @@ function renderModalVenta() {
         <input class="input" type="number" inputmode="numeric" min="1" max="${p.stock}" value="${esc(state.formVenta.cantidad)}" placeholder="1" oninput="actualizarFormVenta(this.value)" />
       </div>
 
-      <div class="precio-real-row" style="margin-bottom:12px">
+      <div class="precio-real-row" style="margin-bottom:${state.rol === 'admin' ? '12px' : '16px'}">
         <span class="label">Total a cobrar</span>
         <span class="monto mono" id="venta-total">${fmt(totalEstim)}</span>
       </div>
+      ${state.rol === 'admin' ? `
       <div class="precio-real-row" style="margin-bottom:16px">
         <span class="label">Ganancia</span>
         <span class="monto mono" id="venta-ganancia" style="color:#10b981">${fmt(gananciaEstim)}</span>
-      </div>
+      </div>` : ''}
 
       <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || cant > p.stock ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}">
         ✓ Confirmar venta
@@ -1570,6 +1739,17 @@ function renderDashboard() {
       <button class="tipo-btn" style="width:100%" onclick="activarNotificaciones()">
         ${(typeof Notification !== 'undefined' && Notification.permission === 'granted') ? '🔔 Notificaciones activadas ✅' : '🔔 Activar notificaciones'}
       </button>
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a78bfa">👤</span> Usuarios</div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
+        Tu Vendedor entra con solo tocar "Soy Vendedor" (sin PIN) y ve la pestaña "Cobros" — solo lo que hay que cobrar a cada cliente, sin ganancias ni costos. El PIN de aquí es el que te pedirá a ti para entrar como Admin en cualquier teléfono.
+      </p>
+      <div style="display:flex; gap:8px">
+        <button class="tipo-btn" style="flex:1" onclick="cambiarPinAdmin()">🔑 Cambiar PIN de Admin</button>
+        <button class="tipo-btn" style="flex:1" onclick="cerrarSesion()">🚪 Cerrar sesión</button>
+      </div>
     </div>
     <div style="height:120px"></div>
   </div>`;
@@ -1800,6 +1980,8 @@ function handleClick(e) {
       if (e.target === e.currentTarget) cerrarScanner();
       break;
     case 'buscarCodigoManual': buscarCodigoManual(); break;
+    case 'intentarLogin': intentarLogin(d.rol); break;
+    case 'cerrarSesion': cerrarSesion(); break;
   }
 }
 
