@@ -361,13 +361,15 @@ let state = {
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
-  expandido: { internet: true, netflix: true, spotify: true, otros: true },
+  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false },
+  productoExpandido: {},
+  ventasProductoExpandido: {},
   editandoPrecio: null,
   precioTemp: '',
   modal: null,
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
   modalProducto: null,
-  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '' },
+  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general' },
   modalVenta: null,
   formVenta: { cantidad: '' },
   scanner: null
@@ -375,6 +377,7 @@ let state = {
 
 let videoStreamActivo = null;
 let intervaloScanner = null;
+let scannerPendiente = null; // productoId detectado en espera de confirmación de cobro
 
 // ============== HELPERS ==============
 function claveMes(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
@@ -485,6 +488,8 @@ async function sincronizarNube() {
 function setVista(v) { state.vista = v; render(); }
 function setMes(m) { state.mesActual = m; render(); }
 function toggleExpandido(k) { state.expandido[k] = !state.expandido[k]; render(); }
+function toggleProductoExpandido(pid) { state.productoExpandido[pid] = !state.productoExpandido[pid]; render(); }
+function toggleVentasProducto(pid) { state.ventasProductoExpandido[pid] = !state.ventasProductoExpandido[pid]; render(); }
 
 function iniciarEditarPrecio(k) {
   state.editandoPrecio = k;
@@ -580,7 +585,7 @@ function eliminarCliente(servicio, id) {
 }
 
 // ============== TIENDA (productos por pieza) ==============
-function abrirModalProducto(productoId) {
+function abrirModalProducto(productoId, categoriaDefault) {
   if (state.rol !== 'admin') return;
   const p = productoId ? state.productos.find(pp => pp.id === productoId) : null;
   state.formProducto = {
@@ -588,14 +593,15 @@ function abrirModalProducto(productoId) {
     precioCosto: p?.precioCosto != null ? String(p.precioCosto) : '',
     precioVenta: p?.precioVenta != null ? String(p.precioVenta) : '',
     stock: p?.stock != null ? String(p.stock) : '',
-    codigo: p?.codigo || ''
+    codigo: p?.codigo || '',
+    categoria: p?.categoria || categoriaDefault || 'general'
   };
   state.modalProducto = { productoId };
   render();
 }
 function cerrarModalProducto() {
   state.modalProducto = null;
-  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '' };
+  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general' };
   render();
 }
 function actualizarFormProducto(campo, valor) {
@@ -612,6 +618,7 @@ function guardarProducto() {
     precioVenta: parseFloat(state.formProducto.precioVenta) || 0,
     stock: Math.max(0, parseInt(state.formProducto.stock) || 0),
     codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
+    categoria: state.formProducto.categoria === 'perfumes' ? 'perfumes' : 'general',
     creado: productoId ? state.productos.find(p => p.id === productoId).creado : Date.now()
   };
   if (productoId) {
@@ -691,18 +698,21 @@ function calcularTotalesTienda() {
 
 // ============== ESCÁNER DE CÓDIGO DE BARRAS ==============
 function abrirScannerVenta() {
+  scannerPendiente = null;
   state.scanner = { modo: 'venta' };
   render();
   iniciarCamara();
 }
 function abrirScannerAsignar() {
   if (state.rol !== 'admin') return;
+  scannerPendiente = null;
   state.scanner = { modo: 'asignar' };
   render();
   iniciarCamara();
 }
 function cerrarScanner() {
   detenerCamara();
+  scannerPendiente = null;
   state.scanner = null;
   render();
 }
@@ -725,6 +735,7 @@ async function iniciarCamara() {
     let ultimoCodigo = null, ultimoTiempo = 0;
     intervaloScanner = setInterval(async () => {
       if (!video.videoWidth) return;
+      if (scannerPendiente) return; // pausado: hay una venta esperando confirmación
       try {
         const codigos = await detector.detect(video);
         if (codigos.length > 0) {
@@ -763,6 +774,12 @@ function procesarCodigoDetectado(codigo) {
     return;
   }
 
+  if (scannerPendiente) {
+    const statusEl = document.getElementById('scanner-status');
+    if (statusEl) { statusEl.textContent = '⚠️ Termina de cobrar el producto actual primero'; statusEl.style.color = '#fbbf24'; }
+    return; // ya hay una venta esperando confirmación
+  }
+
   const statusEl = document.getElementById('scanner-status');
   const p = state.productos.find(pp => pp.codigo && pp.codigo === codigo);
 
@@ -772,6 +789,43 @@ function procesarCodigoDetectado(codigo) {
   }
   if (p.stock <= 0) {
     if (statusEl) { statusEl.textContent = `⚠️ ${p.nombre} no tiene piezas en stock`; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+
+  scannerPendiente = p.id;
+  if (statusEl) { statusEl.textContent = 'Producto detectado — confirma para cobrar'; statusEl.style.color = '#06b6d4'; }
+
+  const confirmarEl = document.getElementById('scanner-confirmar');
+  if (confirmarEl) {
+    confirmarEl.style.display = 'block';
+    confirmarEl.innerHTML = `
+      <div class="cliente card" style="border: 1px solid rgba(16,185,129,0.4); flex-direction:column; align-items:stretch; gap:10px">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div class="cliente-info">
+            <div class="nombre">${esc(p.nombre)}</div>
+            <div class="cliente-notas">Stock disponible: ${p.stock}</div>
+          </div>
+          <div class="monto" style="color:#10b981; font-size:22px; font-family:'JetBrains Mono', monospace">${fmt(p.precioVenta)}</div>
+        </div>
+        <div style="display:flex; gap:8px">
+          <button class="tipo-btn" style="flex:1" onclick="cancelarVentaScanner()">Cancelar</button>
+          <button class="guardar-btn" style="flex:1.4; margin-top:0; background:#10b981" onclick="confirmarVentaScanner()">💰 Cobrar ${fmt(p.precioVenta)}</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+function confirmarVentaScanner() {
+  if (!scannerPendiente) return;
+  const p = state.productos.find(pp => pp.id === scannerPendiente);
+  const statusEl = document.getElementById('scanner-status');
+  const confirmarEl = document.getElementById('scanner-confirmar');
+
+  if (!p || p.stock <= 0) {
+    scannerPendiente = null;
+    if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+    if (statusEl) { statusEl.textContent = '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
     return;
   }
 
@@ -788,6 +842,8 @@ function procesarCodigoDetectado(codigo) {
   p.stock -= 1;
   guardarLocal();
 
+  scannerPendiente = null;
+  if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
   if (statusEl) {
     statusEl.textContent = state.rol === 'admin'
       ? `✅ ${p.nombre} vendido — +${fmt(venta.ganancia)}`
@@ -808,6 +864,14 @@ function procesarCodigoDetectado(codigo) {
       </div>
     `);
   }
+}
+
+function cancelarVentaScanner() {
+  scannerPendiente = null;
+  const statusEl = document.getElementById('scanner-status');
+  const confirmarEl = document.getElementById('scanner-confirmar');
+  if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+  if (statusEl) { statusEl.textContent = 'Buscando código…'; statusEl.style.color = ''; }
 }
 
 // ============== CÁLCULOS ==============
@@ -1135,7 +1199,7 @@ function renderNavRecepcion() {
       <span class="icon">🧾</span> Cobros
     </button>
     <button class="nav-btn ${state.vista === 'tienda' ? 'activo' : ''}" data-action="setVista" data-vista="tienda">
-      <span class="icon">🛒</span> Tienda
+      <span class="icon">🛒</span> Productos
     </button>
     <button class="nav-btn" data-action="cerrarSesion">
       <span class="icon">🚪</span> Salir
@@ -1421,6 +1485,8 @@ function renderClienteRow(servicioKey, c, color) {
 function renderTienda() {
   const t = calcularTotalesTienda();
   const esAdmin = state.rol === 'admin';
+  const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes');
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
   let html = '<div class="fade-in">';
   html += `
     <div class="resumen">
@@ -1459,41 +1525,22 @@ function renderTienda() {
         <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
         <div class="seccion-info">
           <h2>Productos</h2>
-          <p>${state.productos.length} producto(s) en catálogo</p>
+          <p>${productosGenerales.length} producto(s) en catálogo</p>
         </div>
       </div>
     </div>
     <div class="seccion-body">
-      ${state.productos.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
-        state.productos.map(p => renderProductoRow(p)).join('')
+      ${productosGenerales.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
+        productosGenerales.map(p => renderProductoRow(p)).join('')
       }
       ${esAdmin ? `
-      <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto">
+      <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
         + Agregar producto
       </button>` : ''}
     </div>
   </div>`;
+  html += renderSeccionPerfumes(perfumes, esAdmin);
   html += '</div>';
-
-  if (state.ventas.length > 0) {
-    const recientes = [...state.ventas].sort((a,b) => b.fecha - a.fecha).slice(0, 10);
-    html += `<div class="secciones" style="margin-top:12px">
-      <div class="seccion">
-        <div class="seccion-header">
-          <div class="seccion-top">
-            <div class="seccion-icon" style="background: linear-gradient(135deg, #64748b, #475569)">🧾</div>
-            <div class="seccion-info">
-              <h2>Ventas recientes</h2>
-              <p>Últimas ${recientes.length}</p>
-            </div>
-          </div>
-        </div>
-        <div class="seccion-body">
-          ${recientes.map(v => renderVentaRow(v)).join('')}
-        </div>
-      </div>
-    </div>`;
-  }
 
   html += '<div style="height:120px"></div></div>';
   return html;
@@ -1503,22 +1550,85 @@ function renderProductoRow(p) {
   const gananciaPza = p.precioVenta - p.precioCosto;
   const sinStock = p.stock <= 0;
   const esAdmin = state.rol === 'admin';
+  const ventasProducto = [...state.ventas].filter(v => v.productoId === p.id).sort((a,b) => b.fecha - a.fecha);
+  const ventasAbiertas = !!state.ventasProductoExpandido[p.id];
   return `
-    <div class="cliente card">
+    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:8px">
+      <div style="display:flex; gap:12px; align-items:center">
+        <div class="cliente-info">
+          <div class="nombre">${esc(p.nombre)}</div>
+          <div class="cliente-tags">
+            <span class="tag" style="background:${sinStock ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sinStock ? '#ef4444' : '#f59e0b'}">Stock: ${p.stock}</span>
+            ${esAdmin ? `<span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>` : ''}
+          </div>
+          <div class="cliente-notas">${esAdmin ? `Costo ${fmt(p.precioCosto)} · ` : ''}Venta ${fmt(p.precioVenta)}${p.codigo ? ` · Cód: ${esc(p.codigo)}` : ''}</div>
+        </div>
+        <div class="cliente-acciones" style="flex-direction:row">
+          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock ? 'disabled' : ''}>🛒</button>
+          ${esAdmin ? `
+          <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
+          <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>` : ''}
+        </div>
+      </div>
+      <div data-action="toggleVentasProducto" data-pid="${p.id}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,0.1); color:#64748b; font-size:12px">
+        <span>${ventasAbiertas ? '▼' : '▶'}</span>
+        <span>🧾 Ventas recientes (${ventasProducto.length})</span>
+      </div>
+      ${ventasAbiertas ? `
+      <div style="display:flex; flex-direction:column; gap:6px">
+        ${ventasProducto.length === 0 ? '<div class="vacio" style="padding:8px 0">Aún no hay ventas de este producto</div>' :
+          ventasProducto.slice(0, 10).map(v => renderVentaRow(v)).join('')
+        }
+      </div>` : ''}
+    </div>
+  `;
+}
+
+// Sección de Perfumes: acordeón oculto por defecto (igual que Netflix/Spotify),
+// y dentro cada perfume también aparece colapsado (solo nombre) hasta tocarlo.
+function renderSeccionPerfumes(perfumes, esAdmin) {
+  const abierto = state.expandido.perfumes;
+  return `<div class="seccion" style="margin-top:12px">
+    <div class="seccion-header" style="background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(168,85,247,0.02)); ${abierto ? 'border-bottom: 1px solid rgba(168,85,247,0.15);' : ''}">
+      <div class="seccion-top" data-action="toggleExp" data-key="perfumes" style="cursor:pointer">
+        <span class="chevron-btn" style="font-size:14px">${abierto ? '▼' : '▶'}</span>
+        <div class="seccion-icon" style="background: linear-gradient(135deg, #a855f7, #7c3aed)">🌸</div>
+        <div class="seccion-info">
+          <h2>Perfumes</h2>
+          <p>${perfumes.length} producto(s) en catálogo</p>
+        </div>
+      </div>
+    </div>
+    ${abierto ? `
+    <div class="seccion-body">
+      ${perfumes.length === 0 ? '<div class="vacio">Sin perfumes, agrega el primero</div>' :
+        perfumes.map(p => renderProductoRowColapsable(p)).join('')
+      }
+      ${esAdmin ? `
+      <button class="add-cliente-btn" style="background: rgba(168,85,247,0.1); color: #a855f7; border: 1px dashed rgba(168,85,247,0.4)" data-action="abrirModalProducto" data-categoria="perfumes">
+        + Agregar perfume
+      </button>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+// Cada perfume inicia colapsado (solo el nombre); al tocarlo se expande
+// mostrando el detalle completo (igual a renderProductoRow) y sus acciones.
+function renderProductoRowColapsable(p) {
+  const abierto = !!state.productoExpandido[p.id];
+  if (!abierto) {
+    return `
+    <div class="cliente card" data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
       <div class="cliente-info">
         <div class="nombre">${esc(p.nombre)}</div>
-        <div class="cliente-tags">
-          <span class="tag" style="background:${sinStock ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sinStock ? '#ef4444' : '#f59e0b'}">Stock: ${p.stock}</span>
-          ${esAdmin ? `<span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>` : ''}
-        </div>
-        <div class="cliente-notas">${esAdmin ? `Costo ${fmt(p.precioCosto)} · ` : ''}Venta ${fmt(p.precioVenta)}${p.codigo ? ` · Cód: ${esc(p.codigo)}` : ''}</div>
       </div>
-      <div class="cliente-acciones" style="flex-direction:row">
-        <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock ? 'disabled' : ''}>🛒</button>
-        ${esAdmin ? `
-        <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
-        <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>` : ''}
-      </div>
+      <div style="color:#64748b; font-size:14px">▶ Ver</div>
+    </div>
+    `;
+  }
+  return `
+    <div data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
+      ${renderProductoRow(p)}
     </div>
   `;
 }
@@ -1549,11 +1659,19 @@ function renderModalProducto() {
         <h3>${state.modalProducto.productoId ? 'Editar' : 'Nuevo'} producto</h3>
         <button class="close-btn" data-action="cerrarModalProducto">✕</button>
       </div>
-      <div class="modal-subtitle" style="color:#f59e0b">Tienda</div>
+      <div class="modal-subtitle" style="color:#f59e0b">Productos</div>
 
       <div class="campo">
         <div class="campo-label"><label>Nombre del producto <span class="required">*</span></label></div>
         <input class="input" type="text" value="${esc(f.nombre)}" placeholder="Ej. Playera talla M" oninput="actualizarFormProducto('nombre', this.value); document.getElementById('btn-guardar-producto').disabled = !this.value.trim()" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Categoría</label></div>
+        <div class="tipo-pago-grid">
+          <button type="button" class="tipo-btn ${f.categoria !== 'perfumes' ? 'activo' : ''}" data-action="setCategoriaProducto" data-categoria="general">📦 Productos</button>
+          <button type="button" class="tipo-btn ${f.categoria === 'perfumes' ? 'activo' : ''}" data-action="setCategoriaProducto" data-categoria="perfumes">🌸 Perfumes</button>
+        </div>
       </div>
 
       <div class="campo">
@@ -1632,13 +1750,14 @@ function renderModalScanner() {
         <h3>${esVenta ? 'Escanear y vender' : 'Escanear código'}</h3>
         <button class="close-btn" data-action="cerrarScanner">✕</button>
       </div>
-      <div class="modal-subtitle" style="color:#10b981">${esVenta ? 'Apunta al código de barras — se vende 1 pieza automáticamente' : 'Apunta al código de barras del producto'}</div>
+      <div class="modal-subtitle" style="color:#10b981">${esVenta ? 'Apunta al código de barras — vas a confirmar el precio antes de cobrar' : 'Apunta al código de barras del producto'}</div>
 
       <div class="scanner-video-wrap">
         <video id="scanner-video" muted playsinline></video>
         <div class="scanner-frame"></div>
       </div>
       <div class="scanner-status" id="scanner-status">Buscando código…</div>
+      ${esVenta ? `<div id="scanner-confirmar" style="display:none; margin-top:10px"></div>` : ''}
 
       <div class="scanner-manual">
         <input id="scanner-manual-input" class="input" type="text" placeholder="O escribe el código aquí" />
@@ -1860,7 +1979,7 @@ function renderNav() {
       <span class="icon">🏠</span> Inicio
     </button>
     <button class="nav-btn ${state.vista === 'tienda' ? 'activo' : ''}" data-action="setVista" data-vista="tienda">
-      <span class="icon">🛒</span> Tienda
+      <span class="icon">🛒</span> Productos
     </button>
     <button class="nav-btn ${state.vista === 'dashboard' ? 'activo' : ''}" data-action="setVista" data-vista="dashboard">
       <span class="icon">📊</span> Dashboard
@@ -1960,7 +2079,19 @@ function handleClick(e) {
       e.stopPropagation();
       eliminarCliente(d.servicio, d.cid);
       break;
-    case 'abrirModalProducto': abrirModalProducto(d.pid); break;
+    case 'abrirModalProducto':
+      e.stopPropagation();
+      abrirModalProducto(d.pid, d.categoria);
+      break;
+    case 'setCategoriaProducto': actualizarFormProducto('categoria', d.categoria); render(); break;
+    case 'toggleProdExp':
+      e.stopPropagation();
+      toggleProductoExpandido(d.pid);
+      break;
+    case 'toggleVentasProducto':
+      e.stopPropagation();
+      toggleVentasProducto(d.pid);
+      break;
     case 'cerrarModalProducto':
       if (e.target === e.currentTarget) cerrarModalProducto();
       break;
@@ -1969,7 +2100,10 @@ function handleClick(e) {
       e.stopPropagation();
       eliminarProducto(d.pid);
       break;
-    case 'abrirModalVenta': abrirModalVenta(d.pid); break;
+    case 'abrirModalVenta':
+      e.stopPropagation();
+      abrirModalVenta(d.pid);
+      break;
     case 'cerrarModalVenta':
       if (e.target === e.currentTarget) cerrarModalVenta();
       break;
