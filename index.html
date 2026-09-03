@@ -369,7 +369,9 @@ let state = {
   modal: null,
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
   modalProducto: null,
-  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general' },
+  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general',
+    variantes: { '5ml': { precioCosto: '', precioVenta: '', stock: '', codigo: '' }, '10ml': { precioCosto: '', precioVenta: '', stock: '', codigo: '' } }
+  },
   modalVenta: null,
   formVenta: { cantidad: '' },
   scanner: null
@@ -585,42 +587,83 @@ function eliminarCliente(servicio, id) {
 }
 
 // ============== TIENDA (productos por pieza) ==============
+function variantesFormVacias() {
+  return { '5ml': { precioCosto: '', precioVenta: '', codigo: '' }, '10ml': { precioCosto: '', precioVenta: '', codigo: '' } };
+}
 function abrirModalProducto(productoId, categoriaDefault) {
   if (state.rol !== 'admin') return;
   const p = productoId ? state.productos.find(pp => pp.id === productoId) : null;
+  const variantesForm = variantesFormVacias();
+  if (p && p.categoria === 'perfumes' && Array.isArray(p.variantes)) {
+    p.variantes.forEach(v => {
+      if (variantesForm[v.tamano]) {
+        variantesForm[v.tamano] = {
+          precioCosto: v.precioCosto != null ? String(v.precioCosto) : '',
+          precioVenta: v.precioVenta != null ? String(v.precioVenta) : '',
+          codigo: v.codigo || ''
+        };
+      }
+    });
+  }
   state.formProducto = {
     nombre: p?.nombre || '',
     precioCosto: p?.precioCosto != null ? String(p.precioCosto) : '',
     precioVenta: p?.precioVenta != null ? String(p.precioVenta) : '',
     stock: p?.stock != null ? String(p.stock) : '',
     codigo: p?.codigo || '',
-    categoria: p?.categoria || categoriaDefault || 'general'
+    categoria: p?.categoria || categoriaDefault || 'general',
+    variantes: variantesForm
   };
   state.modalProducto = { productoId };
   render();
 }
 function cerrarModalProducto() {
   state.modalProducto = null;
-  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general' };
+  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general', variantes: variantesFormVacias() };
   render();
 }
 function actualizarFormProducto(campo, valor) {
   state.formProducto[campo] = valor;
 }
+function actualizarFormProductoVariante(tamano, campo, valor) {
+  state.formProducto.variantes[tamano][campo] = valor;
+}
 function guardarProducto() {
   if (state.rol !== 'admin') return;
   if (!state.formProducto.nombre.trim()) return;
   const { productoId } = state.modalProducto;
-  const nuevo = {
-    id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
-    nombre: state.formProducto.nombre.trim(),
-    precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
-    precioVenta: parseFloat(state.formProducto.precioVenta) || 0,
-    stock: Math.max(0, parseInt(state.formProducto.stock) || 0),
-    codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
-    categoria: state.formProducto.categoria === 'perfumes' ? 'perfumes' : 'general',
-    creado: productoId ? state.productos.find(p => p.id === productoId).creado : Date.now()
-  };
+  const esPerfume = state.formProducto.categoria === 'perfumes';
+  const creado = productoId ? state.productos.find(p => p.id === productoId).creado : Date.now();
+  let nuevo;
+  if (esPerfume) {
+    const variantes = ['5ml', '10ml'].map(tam => {
+      const v = state.formProducto.variantes[tam];
+      return {
+        tamano: tam,
+        precioCosto: parseFloat(v.precioCosto) || 0,
+        precioVenta: parseFloat(v.precioVenta) || 0,
+        codigo: v.codigo ? v.codigo.trim() : ''
+      };
+    });
+    nuevo = {
+      id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
+      nombre: state.formProducto.nombre.trim(),
+      categoria: 'perfumes',
+      variantes,
+      creado
+    };
+  } else {
+    nuevo = {
+      id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
+      nombre: state.formProducto.nombre.trim(),
+      precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
+      precioVenta: parseFloat(state.formProducto.precioVenta) || 0,
+      stock: Math.max(0, parseInt(state.formProducto.stock) || 0),
+      codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
+      categoria: 'general',
+      creado
+    };
+  }
   if (productoId) {
     state.productos = state.productos.map(p => p.id === productoId ? nuevo : p);
   } else {
@@ -638,8 +681,15 @@ function eliminarProducto(id) {
   render();
 }
 
-function abrirModalVenta(productoId) {
-  state.modalVenta = { productoId };
+function obtenerInfoVenta(p, tamano) {
+  if (tamano) {
+    const v = (p.variantes || []).find(vv => vv.tamano === tamano);
+    return v ? { precioCosto: v.precioCosto, precioVenta: v.precioVenta, stock: null } : null; // stock null = sin límite (perfumes)
+  }
+  return { precioCosto: p.precioCosto, precioVenta: p.precioVenta, stock: p.stock };
+}
+function abrirModalVenta(productoId, tamano) {
+  state.modalVenta = { productoId, tamano: tamano || null };
   state.formVenta = { cantidad: '1' };
   render();
 }
@@ -652,32 +702,46 @@ function actualizarFormVenta(valor) {
   state.formVenta.cantidad = valor;
   const p = state.productos.find(pp => pp.id === state.modalVenta.productoId);
   if (!p) return;
+  const info = obtenerInfoVenta(p, state.modalVenta.tamano);
+  if (!info) return;
+  const sinLimite = info.stock === null;
   const cant = parseInt(valor) || 0;
-  const totalEstim = p.precioVenta * cant;
-  const gananciaEstim = (p.precioVenta - p.precioCosto) * cant;
+  const totalEstim = info.precioVenta * cant;
+  const gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
   const totalEl = document.getElementById('venta-total');
   const gananciaEl = document.getElementById('venta-ganancia');
   const btn = document.getElementById('btn-confirmar-venta');
   if (totalEl) totalEl.textContent = fmt(totalEstim);
   if (gananciaEl) gananciaEl.textContent = fmt(gananciaEstim);
-  if (btn) btn.disabled = cant < 1 || cant > p.stock;
+  if (btn) btn.disabled = cant < 1 || (!sinLimite && cant > info.stock);
 }
-function registrarVenta(productoId) {
+function registrarVenta(productoId, tamano) {
   const p = state.productos.find(pp => pp.id === productoId);
   if (!p) return;
+  const info = obtenerInfoVenta(p, tamano);
+  if (!info) return;
+  const sinLimite = info.stock === null;
   const cant = parseInt(state.formVenta.cantidad) || 0;
-  if (cant < 1 || cant > p.stock) return;
+  if (cant < 1 || (!sinLimite && cant > info.stock)) return;
   const venta = {
     id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     productoId,
+    tamano: tamano || null,
     cantidad: cant,
-    total: Math.round(p.precioVenta * cant * 100) / 100,
-    ganancia: Math.round((p.precioVenta - p.precioCosto) * cant * 100) / 100,
+    total: Math.round(info.precioVenta * cant * 100) / 100,
+    ganancia: Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
   state.ventas.push(venta);
-  p.stock -= cant;
+  if (!sinLimite) {
+    if (tamano) {
+      const v = p.variantes.find(vv => vv.tamano === tamano);
+      if (v && v.stock != null) v.stock -= cant;
+    } else {
+      p.stock -= cant;
+    }
+  }
   guardarLocal();
   cerrarModalVenta();
   render();
@@ -703,10 +767,10 @@ function abrirScannerVenta() {
   render();
   iniciarCamara();
 }
-function abrirScannerAsignar() {
+function abrirScannerAsignar(tamano) {
   if (state.rol !== 'admin') return;
   scannerPendiente = null;
-  state.scanner = { modo: 'asignar' };
+  state.scanner = { modo: 'asignar', tamano: tamano || null };
   render();
   iniciarCamara();
 }
@@ -765,11 +829,27 @@ function buscarCodigoManual() {
   input.value = '';
 }
 
+function buscarProductoPorCodigo(codigo) {
+  for (const p of state.productos) {
+    if (p.categoria === 'perfumes' && Array.isArray(p.variantes)) {
+      const v = p.variantes.find(vv => vv.codigo && vv.codigo === codigo);
+      if (v) return { producto: p, variante: v };
+    } else if (p.codigo && p.codigo === codigo) {
+      return { producto: p, variante: null };
+    }
+  }
+  return null;
+}
+
 function procesarCodigoDetectado(codigo) {
   if (!state.scanner) return;
 
   if (state.scanner.modo === 'asignar') {
-    state.formProducto.codigo = codigo;
+    if (state.scanner.tamano) {
+      state.formProducto.variantes[state.scanner.tamano].codigo = codigo;
+    } else {
+      state.formProducto.codigo = codigo;
+    }
     cerrarScanner();
     return;
   }
@@ -781,18 +861,24 @@ function procesarCodigoDetectado(codigo) {
   }
 
   const statusEl = document.getElementById('scanner-status');
-  const p = state.productos.find(pp => pp.codigo && pp.codigo === codigo);
+  const match = buscarProductoPorCodigo(codigo);
 
-  if (!p) {
+  if (!match) {
     if (statusEl) { statusEl.textContent = `⚠️ Código "${codigo}" no está asignado a ningún producto`; statusEl.style.color = '#ef4444'; }
     return;
   }
-  if (p.stock <= 0) {
-    if (statusEl) { statusEl.textContent = `⚠️ ${p.nombre} no tiene piezas en stock`; statusEl.style.color = '#ef4444'; }
+  const { producto: p, variante: v } = match;
+  const sinLimiteStock = !!v; // las presentaciones de perfume ya no llevan stock
+  const stockActual = sinLimiteStock ? null : p.stock;
+  const precioVenta = v ? v.precioVenta : p.precioVenta;
+  const nombreMostrado = v ? `${p.nombre} (${v.tamano})` : p.nombre;
+
+  if (!sinLimiteStock && stockActual <= 0) {
+    if (statusEl) { statusEl.textContent = `⚠️ ${nombreMostrado} no tiene piezas en stock`; statusEl.style.color = '#ef4444'; }
     return;
   }
 
-  scannerPendiente = p.id;
+  scannerPendiente = { productoId: p.id, tamano: v ? v.tamano : null };
   if (statusEl) { statusEl.textContent = 'Producto detectado — confirma para cobrar'; statusEl.style.color = '#06b6d4'; }
 
   const confirmarEl = document.getElementById('scanner-confirmar');
@@ -802,14 +888,14 @@ function procesarCodigoDetectado(codigo) {
       <div class="cliente card" style="border: 1px solid rgba(16,185,129,0.4); flex-direction:column; align-items:stretch; gap:10px">
         <div style="display:flex; justify-content:space-between; align-items:center">
           <div class="cliente-info">
-            <div class="nombre">${esc(p.nombre)}</div>
-            <div class="cliente-notas">Stock disponible: ${p.stock}</div>
+            <div class="nombre">${esc(nombreMostrado)}</div>
+            ${sinLimiteStock ? '' : `<div class="cliente-notas">Stock disponible: ${stockActual}</div>`}
           </div>
-          <div class="monto" style="color:#10b981; font-size:22px; font-family:'JetBrains Mono', monospace">${fmt(p.precioVenta)}</div>
+          <div class="monto" style="color:#10b981; font-size:22px; font-family:'JetBrains Mono', monospace">${fmt(precioVenta)}</div>
         </div>
         <div style="display:flex; gap:8px">
           <button class="tipo-btn" style="flex:1" onclick="cancelarVentaScanner()">Cancelar</button>
-          <button class="guardar-btn" style="flex:1.4; margin-top:0; background:#10b981" onclick="confirmarVentaScanner()">💰 Cobrar ${fmt(p.precioVenta)}</button>
+          <button class="guardar-btn" style="flex:1.4; margin-top:0; background:#10b981" onclick="confirmarVentaScanner()">💰 Cobrar ${fmt(precioVenta)}</button>
         </div>
       </div>
     `;
@@ -818,36 +904,45 @@ function procesarCodigoDetectado(codigo) {
 
 function confirmarVentaScanner() {
   if (!scannerPendiente) return;
-  const p = state.productos.find(pp => pp.id === scannerPendiente);
+  const { productoId, tamano } = scannerPendiente;
+  const p = state.productos.find(pp => pp.id === productoId);
   const statusEl = document.getElementById('scanner-status');
   const confirmarEl = document.getElementById('scanner-confirmar');
+  const variante = tamano && p ? (p.variantes || []).find(v => v.tamano === tamano) : null;
+  const sinLimiteStock = !!variante;
+  const stockActual = sinLimiteStock ? null : p?.stock;
+  const precioVenta = tamano ? variante?.precioVenta : p?.precioVenta;
+  const precioCosto = tamano ? variante?.precioCosto : p?.precioCosto;
 
-  if (!p || p.stock <= 0) {
+  if (!p || (tamano && !variante) || (!sinLimiteStock && !(stockActual > 0))) {
     scannerPendiente = null;
     if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
     if (statusEl) { statusEl.textContent = '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
     return;
   }
 
+  const nombreMostrado = tamano ? `${p.nombre} (${tamano})` : p.nombre;
   const venta = {
     id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     productoId: p.id,
+    tamano: tamano || null,
     cantidad: 1,
-    total: Math.round(p.precioVenta * 100) / 100,
-    ganancia: Math.round((p.precioVenta - p.precioCosto) * 100) / 100,
+    total: Math.round(precioVenta * 100) / 100,
+    ganancia: Math.round((precioVenta - precioCosto) * 100) / 100,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
   state.ventas.push(venta);
-  p.stock -= 1;
+  let stockRestante = null;
+  if (!sinLimiteStock) { p.stock -= 1; stockRestante = p.stock; }
   guardarLocal();
 
   scannerPendiente = null;
   if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
   if (statusEl) {
     statusEl.textContent = state.rol === 'admin'
-      ? `✅ ${p.nombre} vendido — +${fmt(venta.ganancia)}`
-      : `✅ ${p.nombre} vendido — cobrar ${fmt(venta.total)}`;
+      ? `✅ ${nombreMostrado} vendido — +${fmt(venta.ganancia)}`
+      : `✅ ${nombreMostrado} vendido — cobrar ${fmt(venta.total)}`;
     statusEl.style.color = '#10b981';
   }
   const lista = document.getElementById('scanner-lista');
@@ -855,8 +950,8 @@ function confirmarVentaScanner() {
     lista.insertAdjacentHTML('afterbegin', `
       <div class="cliente" style="margin-bottom:6px">
         <div class="cliente-info">
-          <div class="nombre">${esc(p.nombre)}</div>
-          <div class="cliente-notas">Stock restante: ${p.stock}</div>
+          <div class="nombre">${esc(nombreMostrado)}</div>
+          <div class="cliente-notas">${stockRestante !== null ? `Stock restante: ${stockRestante}` : 'Venta registrada'}</div>
         </div>
         <div class="cliente-pago">
           <div class="monto" style="color:${state.rol === 'admin' ? '#10b981' : '#94a3b8'}">${state.rol === 'admin' ? '+' + fmt(venta.ganancia) : fmt(venta.total)}</div>
@@ -911,6 +1006,36 @@ function calcularDatosMensuales() {
     });
   }
   return meses;
+}
+
+// Ventas de la tienda (productos + perfumes) día por día, del mes en curso.
+// Se incluyen TODOS los días del mes (aunque no hayan tenido ventas) para
+// que el rango de fechas en la gráfica se vea correcto.
+function calcularVentasPorDia() {
+  const hoy = new Date();
+  const anio = hoy.getFullYear(), mes = hoy.getMonth();
+  const ultimoDia = new Date(anio, mes + 1, 0).getDate();
+  const mesK = claveMes(hoy);
+  const porDia = {};
+  for (let d = 1; d <= ultimoDia; d++) {
+    const key = `${anio}-${String(mes+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    porDia[key] = { fecha: key, piezas: 0, vendido: 0, ganancia: 0 };
+  }
+  state.ventas.forEach(v => {
+    if (v.mes !== mesK) return;
+    const dt = new Date(v.fecha);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    if (porDia[key]) {
+      porDia[key].piezas += v.cantidad;
+      porDia[key].vendido += v.total;
+      porDia[key].ganancia += v.ganancia;
+    }
+  });
+  return Object.values(porDia);
+}
+function formatearFechaCorta(fechaKey) {
+  const [y, m, d] = fechaKey.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
 }
 
 // ============== RESPALDO (exportar / importar) ==============
@@ -1613,7 +1738,7 @@ function renderSeccionPerfumes(perfumes, esAdmin) {
 }
 
 // Cada perfume inicia colapsado (solo el nombre); al tocarlo se expande
-// mostrando el detalle completo (igual a renderProductoRow) y sus acciones.
+// mostrando sus 2 presentaciones (5ml y 10ml) con su propio precio/stock/código.
 function renderProductoRowColapsable(p) {
   const abierto = !!state.productoExpandido[p.id];
   if (!abierto) {
@@ -1628,7 +1753,63 @@ function renderProductoRowColapsable(p) {
   }
   return `
     <div data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
-      ${renderProductoRow(p)}
+      ${renderPerfumeExpandido(p)}
+    </div>
+  `;
+}
+
+function renderPerfumeExpandido(p) {
+  const esAdmin = state.rol === 'admin';
+  // Compatibilidad: si por alguna razón el perfume no tiene variantes (dato viejo),
+  // se muestra como una sola presentación "Único" para no romper la vista.
+  const variantes = (Array.isArray(p.variantes) && p.variantes.length > 0)
+    ? p.variantes
+    : [{ tamano: 'Único', precioCosto: p.precioCosto || 0, precioVenta: p.precioVenta || 0, stock: p.stock || 0, codigo: p.codigo || '' }];
+  return `
+    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:10px">
+      <div style="display:flex; gap:12px; align-items:center">
+        <div class="cliente-info">
+          <div class="nombre">🌸 ${esc(p.nombre)}</div>
+        </div>
+        ${esAdmin ? `
+        <div class="cliente-acciones" style="flex-direction:row">
+          <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
+          <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>
+        </div>` : ''}
+      </div>
+      ${variantes.map(v => renderVarianteRow(p, v)).join('')}
+    </div>
+  `;
+}
+
+function renderVarianteRow(p, v) {
+  const gananciaPza = v.precioVenta - v.precioCosto;
+  const esAdmin = state.rol === 'admin';
+  const key = p.id + ':' + v.tamano;
+  const ventasVariante = [...state.ventas].filter(vv => vv.productoId === p.id && (vv.tamano || null) === (v.tamano === 'Único' ? null : v.tamano)).sort((a,b) => b.fecha - a.fecha);
+  const ventasAbiertas = !!state.ventasProductoExpandido[key];
+  return `
+    <div style="border-top:1px solid rgba(148,163,184,0.12); padding-top:10px">
+      <div style="display:flex; gap:12px; align-items:center">
+        <div class="cliente-info">
+          <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}</div>
+          ${esAdmin ? `<div class="cliente-tags"><span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span></div>` : ''}
+          <div class="cliente-notas">${esAdmin ? `Costo ${fmt(v.precioCosto)} · ` : ''}Venta ${fmt(v.precioVenta)}${v.codigo ? ` · Cód: ${esc(v.codigo)}` : ''}</div>
+        </div>
+        <div class="cliente-acciones" style="flex-direction:row">
+          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}">🛒</button>
+        </div>
+      </div>
+      <div data-action="toggleVentasProducto" data-pid="${key}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:8px; color:#64748b; font-size:12px">
+        <span>${ventasAbiertas ? '▼' : '▶'}</span>
+        <span>🧾 Ventas recientes (${ventasVariante.length})</span>
+      </div>
+      ${ventasAbiertas ? `
+      <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px">
+        ${ventasVariante.length === 0 ? '<div class="vacio" style="padding:8px 0">Aún no hay ventas de esta presentación</div>' :
+          ventasVariante.slice(0, 10).map(vv => renderVentaRow(vv)).join('')
+        }
+      </div>` : ''}
     </div>
   `;
 }
@@ -1640,7 +1821,7 @@ function renderVentaRow(v) {
   return `
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
-        <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}</div>
+        <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}${v.tamano ? ` (${esc(v.tamano)})` : ''}</div>
         <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr}</div>
       </div>
       <div class="cliente-pago">
@@ -1653,17 +1834,18 @@ function renderVentaRow(v) {
 function renderModalProducto() {
   if (!state.modalProducto) return '';
   const f = state.formProducto;
+  const esPerfume = f.categoria === 'perfumes';
   return `<div class="modal-overlay" data-action="cerrarModalProducto">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-header">
-        <h3>${state.modalProducto.productoId ? 'Editar' : 'Nuevo'} producto</h3>
+        <h3>${state.modalProducto.productoId ? 'Editar' : 'Nuevo'} ${esPerfume ? 'perfume' : 'producto'}</h3>
         <button class="close-btn" data-action="cerrarModalProducto">✕</button>
       </div>
       <div class="modal-subtitle" style="color:#f59e0b">Productos</div>
 
       <div class="campo">
-        <div class="campo-label"><label>Nombre del producto <span class="required">*</span></label></div>
-        <input class="input" type="text" value="${esc(f.nombre)}" placeholder="Ej. Playera talla M" oninput="actualizarFormProducto('nombre', this.value); document.getElementById('btn-guardar-producto').disabled = !this.value.trim()" />
+        <div class="campo-label"><label>Nombre del ${esPerfume ? 'perfume' : 'producto'} <span class="required">*</span></label></div>
+        <input class="input" type="text" value="${esc(f.nombre)}" placeholder="${esPerfume ? 'Ej. Bleu de Chanel' : 'Ej. Playera talla M'}" oninput="actualizarFormProducto('nombre', this.value); document.getElementById('btn-guardar-producto').disabled = !this.value.trim()" />
       </div>
 
       <div class="campo">
@@ -1674,6 +1856,17 @@ function renderModalProducto() {
         </div>
       </div>
 
+      ${esPerfume ? renderCamposVariantesPerfume(f) : renderCamposProductoGeneral(f)}
+
+      <button id="btn-guardar-producto" class="guardar-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706)" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarProducto">
+        ✓ ${state.modalProducto.productoId ? 'Guardar cambios' : (esPerfume ? 'Agregar perfume' : 'Agregar producto')}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderCamposProductoGeneral(f) {
+  return `
       <div class="campo">
         <div class="campo-label"><label>Precio total (costo) ($)</label><span class="hint">Lo que a ti te cuesta</span></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(f.precioCosto)}" placeholder="0.00" oninput="actualizarFormProducto('precioCosto', this.value)" />
@@ -1696,32 +1889,54 @@ function renderModalProducto() {
           <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar">📷</button>
         </div>
       </div>
+  `;
+}
 
-      <button id="btn-guardar-producto" class="guardar-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706)" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarProducto">
-        ✓ ${state.modalProducto.productoId ? 'Guardar cambios' : 'Agregar producto'}
-      </button>
-    </div>
-  </div>`;
+function renderCamposVariantesPerfume(f) {
+  return ['5ml', '10ml'].map(tam => {
+    const v = f.variantes[tam];
+    return `
+      <div class="campo" style="border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:12px; margin-top:4px">
+        <div style="font-weight:700; color:#a855f7; margin-bottom:10px">🧴 Presentación ${tam}</div>
+
+        <div class="campo-label"><label>Precio costo ($)</label></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(v.precioCosto)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioCosto', this.value)" />
+
+        <div class="campo-label" style="margin-top:10px"><label>Precio cliente ($)</label></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(v.precioVenta)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioVenta', this.value)" />
+
+        <div class="campo-label" style="margin-top:10px"><label>Código de barras</label></div>
+        <div style="display:flex; gap:8px">
+          <input class="input" style="flex:1" type="text" value="${esc(v.codigo || '')}" placeholder="Escanea o escribe" oninput="actualizarFormProductoVariante('${tam}', 'codigo', this.value)" />
+          <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar" data-tam="${tam}">📷</button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function renderModalVenta() {
   if (!state.modalVenta) return '';
   const p = state.productos.find(pp => pp.id === state.modalVenta.productoId);
   if (!p) return '';
+  const tamano = state.modalVenta.tamano;
+  const info = obtenerInfoVenta(p, tamano);
+  if (!info) return '';
+  const sinLimite = info.stock === null;
   const cant = parseInt(state.formVenta.cantidad) || 0;
-  const totalEstim = p.precioVenta * cant;
-  const gananciaEstim = (p.precioVenta - p.precioCosto) * cant;
+  const totalEstim = info.precioVenta * cant;
+  const gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
   return `<div class="modal-overlay" data-action="cerrarModalVenta">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-header">
-        <h3>Vender: ${esc(p.nombre)}</h3>
+        <h3>Vender: ${esc(p.nombre)}${tamano ? ` (${esc(tamano)})` : ''}</h3>
         <button class="close-btn" data-action="cerrarModalVenta">✕</button>
       </div>
-      <div class="modal-subtitle" style="color:#10b981">Stock disponible: ${p.stock}</div>
+      ${sinLimite ? '' : `<div class="modal-subtitle" style="color:#10b981">Stock disponible: ${info.stock}</div>`}
 
       <div class="campo">
         <div class="campo-label"><label>Piezas a vender <span class="required">*</span></label></div>
-        <input class="input" type="number" inputmode="numeric" min="1" max="${p.stock}" value="${esc(state.formVenta.cantidad)}" placeholder="1" oninput="actualizarFormVenta(this.value)" />
+        <input class="input" type="number" inputmode="numeric" min="1" ${sinLimite ? '' : `max="${info.stock}"`} value="${esc(state.formVenta.cantidad)}" placeholder="1" oninput="actualizarFormVenta(this.value)" />
       </div>
 
       <div class="precio-real-row" style="margin-bottom:${state.rol === 'admin' ? '12px' : '16px'}">
@@ -1734,7 +1949,7 @@ function renderModalVenta() {
         <span class="monto mono" id="venta-ganancia" style="color:#10b981">${fmt(gananciaEstim)}</span>
       </div>` : ''}
 
-      <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || cant > p.stock ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}">
+      <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || (!sinLimite && cant > info.stock) ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}" data-tam="${tamano || ''}">
         ✓ Confirmar venta
       </button>
     </div>
@@ -1789,6 +2004,11 @@ function renderDashboard() {
   });
   const maxAbs = Math.max(...porServicio.map(p => Math.abs(p.ganancia)), 1);
 
+  // Ventas de la tienda día por día (mes en curso)
+  const ventasPorDia = calcularVentasPorDia();
+  const totalPiezasMes = ventasPorDia.reduce((s, d) => s + d.piezas, 0);
+  const mejorDia = ventasPorDia.reduce((max, d) => d.piezas > (max?.piezas || 0) ? d : max, null);
+
   return `<div class="fade-in" style="padding: 16px 20px">
     <div class="resumen" style="padding: 0; margin-bottom: 20px">
       <div class="resumen-card destacado">
@@ -1819,6 +2039,18 @@ function renderDashboard() {
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#06b6d4">📊</span> Cobrado vs Costo (6 meses)</div>
       ${renderBarChart(datos.slice(-6))}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#f59e0b">🗓️</span> Ventas por día (tienda, este mes)</div>
+      ${totalPiezasMes === 0 ? '<div class="vacio">Aún no hay ventas de tienda este mes</div>' : `
+      <div class="resumen-card destacado" style="margin-bottom:14px">
+        <div class="resumen-label" style="color:#f59e0b">Mejor día</div>
+        <div class="resumen-value">${mejorDia.piezas} pza(s)</div>
+        <div class="resumen-sub">${formatearFechaCorta(mejorDia.fecha)} · ${fmt(mejorDia.vendido)}</div>
+      </div>
+      ${renderBarChartDias(ventasPorDia)}
+      `}
     </div>
 
     <div class="dashboard-card">
@@ -1973,6 +2205,45 @@ function renderBarChart(datos) {
   </div>`;
 }
 
+// Gráfica de piezas vendidas por día (mes en curso). El día con más piezas
+// se resalta en un color distinto para identificarlo de un vistazo.
+function renderBarChartDias(datos) {
+  const W = 320, H = 170, padL = 26, padR = 8, padT = 10, padB = 20;
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const maxV = Math.max(...datos.map(d => d.piezas), 1);
+  const groupW = cw / datos.length;
+  const barW = Math.max(2, groupW * 0.55);
+  const maxPiezas = maxV;
+
+  let grid = '';
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + (ch / 3) * i;
+    const val = maxV - (maxV / 3) * i;
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="8" text-anchor="end" font-family="JetBrains Mono">${Math.round(val)}</text>`;
+  }
+
+  let bars = '', labelsX = '';
+  datos.forEach((d, i) => {
+    const gx = padL + i * groupW + (groupW - barW) / 2;
+    const h = (d.piezas / maxV) * ch;
+    const diaNum = Number(d.fecha.split('-')[2]);
+    const esMejor = d.piezas > 0 && d.piezas === maxPiezas;
+    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? '#f59e0b' : '#f59e0b60'}" rx="2"/>`;
+    if (diaNum === 1 || diaNum % 5 === 0 || i === datos.length - 1) {
+      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle">${diaNum}</text>`;
+    }
+  });
+
+  return `<div class="chart-container">
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      ${grid}
+      ${bars}
+      ${labelsX}
+    </svg>
+  </div>`;
+}
+
 function renderNav() {
   return `<div class="nav-bottom">
     <button class="nav-btn ${state.vista === 'inicio' ? 'activo' : ''}" data-action="setVista" data-vista="inicio">
@@ -2102,14 +2373,14 @@ function handleClick(e) {
       break;
     case 'abrirModalVenta':
       e.stopPropagation();
-      abrirModalVenta(d.pid);
+      abrirModalVenta(d.pid, d.tam || null);
       break;
     case 'cerrarModalVenta':
       if (e.target === e.currentTarget) cerrarModalVenta();
       break;
-    case 'registrarVenta': registrarVenta(d.pid); break;
+    case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
-    case 'abrirScannerAsignar': abrirScannerAsignar(); break;
+    case 'abrirScannerAsignar': abrirScannerAsignar(d.tam || null); break;
     case 'cerrarScanner':
       if (e.target === e.currentTarget) cerrarScanner();
       break;
