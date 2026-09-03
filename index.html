@@ -588,7 +588,43 @@ function eliminarCliente(servicio, id) {
 
 // ============== TIENDA (productos por pieza) ==============
 function variantesFormVacias() {
-  return { '5ml': { precioVenta: '', codigo: '' }, '10ml': { precioVenta: '', codigo: '' } };
+  return { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' } };
+}
+
+// Un frasco de perfume se asume de 100ml. Estas funciones llevan la cuenta de
+// cuánto se ha vendido (en ml y en dinero) desde que empezó el frasco actual
+// (p.cicloInicio), para saber cuándo ya se recuperó el costo y cuándo el
+// frasco se terminó (100ml vendidos) para reiniciar el conteo con el siguiente.
+function mlDeTamano(tamano) { return parseInt(tamano) || 0; } // '5ml' -> 5, '10ml' -> 10
+
+function calcularCicloPerfume(p) {
+  const desde = p.cicloInicio || p.creado || 0;
+  const ventasCiclo = state.ventas.filter(v => v.productoId === p.id && v.fecha >= desde);
+  const mlVendidos = ventasCiclo.reduce((s, v) => s + mlDeTamano(v.tamano) * v.cantidad, 0);
+  const ingresoAcumulado = ventasCiclo.reduce((s, v) => s + v.total, 0);
+  return { mlVendidos, ingresoAcumulado };
+}
+
+// Calcula el total a cobrar y la ganancia real de una venta de perfume,
+// tomando en cuenta cuánto del costo del frasco ya se había recuperado antes
+// de esta venta (lo que falte por recuperar no cuenta como ganancia).
+function calcularVentaPerfume(p, tamano, cantidad) {
+  const v = (p.variantes || []).find(vv => vv.tamano === tamano);
+  if (!v) return null;
+  const total = Math.round(v.precioVenta * cantidad * 100) / 100;
+  const { ingresoAcumulado } = calcularCicloPerfume(p);
+  const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
+  const ganancia = Math.round(Math.max(0, total - costoRestante) * 100) / 100;
+  return { precioVenta: v.precioVenta, total, ganancia };
+}
+
+// Después de registrar una venta de perfume, si ya se llegó a 100ml vendidos
+// en este ciclo, se reinicia: empieza a contarse un frasco nuevo desde cero.
+function actualizarCicloPerfume(p, ventaFecha) {
+  const { mlVendidos } = calcularCicloPerfume(p);
+  if (mlVendidos >= 100) {
+    p.cicloInicio = ventaFecha + 1;
+  }
 }
 function abrirModalProducto(productoId, categoriaDefault) {
   if (state.rol !== 'admin') return;
@@ -597,10 +633,7 @@ function abrirModalProducto(productoId, categoriaDefault) {
   if (p && p.categoria === 'perfumes' && Array.isArray(p.variantes)) {
     p.variantes.forEach(v => {
       if (variantesForm[v.tamano]) {
-        variantesForm[v.tamano] = {
-          precioVenta: v.precioVenta != null ? String(v.precioVenta) : '',
-          codigo: v.codigo || ''
-        };
+        variantesForm[v.tamano] = { precioVenta: v.precioVenta != null ? String(v.precioVenta) : '' };
       }
     });
   }
@@ -632,23 +665,25 @@ function guardarProducto() {
   if (!state.formProducto.nombre.trim()) return;
   const { productoId } = state.modalProducto;
   const esPerfume = state.formProducto.categoria === 'perfumes';
-  const creado = productoId ? state.productos.find(p => p.id === productoId).creado : Date.now();
+  const existente = productoId ? state.productos.find(p => p.id === productoId) : null;
+  const creado = existente ? existente.creado : Date.now();
   let nuevo;
   if (esPerfume) {
     const variantes = ['5ml', '10ml'].map(tam => {
       const v = state.formProducto.variantes[tam];
       return {
         tamano: tam,
-        precioVenta: parseFloat(v.precioVenta) || 0,
-        codigo: v.codigo ? v.codigo.trim() : ''
+        precioVenta: parseFloat(v.precioVenta) || 0
       };
     });
     nuevo = {
       id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
       nombre: state.formProducto.nombre.trim(),
       precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
+      codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
       categoria: 'perfumes',
       variantes,
+      cicloInicio: (existente && existente.cicloInicio) || creado,
       creado
     };
   } else {
@@ -683,7 +718,7 @@ function eliminarProducto(id) {
 function obtenerInfoVenta(p, tamano) {
   if (tamano) {
     const v = (p.variantes || []).find(vv => vv.tamano === tamano);
-    return v ? { precioCosto: p.precioCosto, precioVenta: v.precioVenta, stock: null } : null; // stock null = sin límite (perfumes); costo compartido del perfume
+    return v ? { precioVenta: v.precioVenta, stock: null } : null; // stock null = sin límite (perfumes)
   }
   return { precioCosto: p.precioCosto, precioVenta: p.precioVenta, stock: p.stock };
 }
@@ -701,12 +736,20 @@ function actualizarFormVenta(valor) {
   state.formVenta.cantidad = valor;
   const p = state.productos.find(pp => pp.id === state.modalVenta.productoId);
   if (!p) return;
-  const info = obtenerInfoVenta(p, state.modalVenta.tamano);
+  const tamano = state.modalVenta.tamano;
+  const info = obtenerInfoVenta(p, tamano);
   if (!info) return;
   const sinLimite = info.stock === null;
   const cant = parseInt(valor) || 0;
-  const totalEstim = info.precioVenta * cant;
-  const gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+  let totalEstim, gananciaEstim;
+  if (tamano) {
+    const calc = calcularVentaPerfume(p, tamano, cant || 0);
+    totalEstim = calc ? calc.total : 0;
+    gananciaEstim = calc ? calc.ganancia : 0;
+  } else {
+    totalEstim = info.precioVenta * cant;
+    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+  }
   const totalEl = document.getElementById('venta-total');
   const gananciaEl = document.getElementById('venta-ganancia');
   const btn = document.getElementById('btn-confirmar-venta');
@@ -722,13 +765,24 @@ function registrarVenta(productoId, tamano) {
   const sinLimite = info.stock === null;
   const cant = parseInt(state.formVenta.cantidad) || 0;
   if (cant < 1 || (!sinLimite && cant > info.stock)) return;
+
+  let total, ganancia;
+  if (tamano) {
+    const calc = calcularVentaPerfume(p, tamano, cant);
+    if (!calc) return;
+    total = calc.total;
+    ganancia = calc.ganancia;
+  } else {
+    total = Math.round(info.precioVenta * cant * 100) / 100;
+    ganancia = Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100;
+  }
   const venta = {
     id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     productoId,
     tamano: tamano || null,
     cantidad: cant,
-    total: Math.round(info.precioVenta * cant * 100) / 100,
-    ganancia: Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100,
+    total,
+    ganancia,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
@@ -736,6 +790,7 @@ function registrarVenta(productoId, tamano) {
   // sinLimite es true siempre que haya "tamano" (perfumes ya no llevan stock),
   // así que aquí solo se descuenta stock de productos generales.
   if (!sinLimite) p.stock -= cant;
+  if (tamano) actualizarCicloPerfume(p, venta.fecha);
   guardarLocal();
   cerrarModalVenta();
   render();
@@ -761,10 +816,10 @@ function abrirScannerVenta() {
   render();
   iniciarCamara();
 }
-function abrirScannerAsignar(tamano) {
+function abrirScannerAsignar() {
   if (state.rol !== 'admin') return;
   scannerPendiente = null;
-  state.scanner = { modo: 'asignar', tamano: tamano || null };
+  state.scanner = { modo: 'asignar' };
   render();
   iniciarCamara();
 }
@@ -824,26 +879,14 @@ function buscarCodigoManual() {
 }
 
 function buscarProductoPorCodigo(codigo) {
-  for (const p of state.productos) {
-    if (p.categoria === 'perfumes' && Array.isArray(p.variantes)) {
-      const v = p.variantes.find(vv => vv.codigo && vv.codigo === codigo);
-      if (v) return { producto: p, variante: v };
-    } else if (p.codigo && p.codigo === codigo) {
-      return { producto: p, variante: null };
-    }
-  }
-  return null;
+  return state.productos.find(p => p.codigo && p.codigo === codigo) || null;
 }
 
 function procesarCodigoDetectado(codigo) {
   if (!state.scanner) return;
 
   if (state.scanner.modo === 'asignar') {
-    if (state.scanner.tamano) {
-      state.formProducto.variantes[state.scanner.tamano].codigo = codigo;
-    } else {
-      state.formProducto.codigo = codigo;
-    }
+    state.formProducto.codigo = codigo;
     cerrarScanner();
     return;
   }
@@ -855,27 +898,55 @@ function procesarCodigoDetectado(codigo) {
   }
 
   const statusEl = document.getElementById('scanner-status');
-  const match = buscarProductoPorCodigo(codigo);
+  const p = buscarProductoPorCodigo(codigo);
 
-  if (!match) {
+  if (!p) {
     if (statusEl) { statusEl.textContent = `⚠️ Código "${codigo}" no está asignado a ningún producto`; statusEl.style.color = '#ef4444'; }
     return;
   }
-  const { producto: p, variante: v } = match;
-  const sinLimiteStock = !!v; // las presentaciones de perfume ya no llevan stock
-  const stockActual = sinLimiteStock ? null : p.stock;
-  const precioVenta = v ? v.precioVenta : p.precioVenta;
-  const nombreMostrado = v ? `${p.nombre} (${v.tamano})` : p.nombre;
 
-  if (!sinLimiteStock && stockActual <= 0) {
+  const esPerfumeConVariantes = p.categoria === 'perfumes' && Array.isArray(p.variantes) && p.variantes.length > 0;
+  const confirmarEl = document.getElementById('scanner-confirmar');
+
+  if (esPerfumeConVariantes) {
+    // Un solo código para el perfume: pedimos que elija la presentación,
+    // mostrando de una vez el precio de cada una.
+    scannerPendiente = { productoId: p.id, eligiendoTamano: true };
+    if (statusEl) { statusEl.textContent = '¿5ml o 10ml?'; statusEl.style.color = '#06b6d4'; }
+    if (confirmarEl) {
+      confirmarEl.style.display = 'block';
+      confirmarEl.innerHTML = `
+        <div class="cliente card" style="border: 1px solid rgba(168,85,247,0.4); flex-direction:column; align-items:stretch; gap:10px">
+          <div class="cliente-info">
+            <div class="nombre">🌸 ${esc(p.nombre)}</div>
+            <div class="cliente-notas">¿Qué presentación vendiste?</div>
+          </div>
+          <div style="display:flex; gap:8px">
+            ${p.variantes.map(v => `
+              <button class="guardar-btn" style="flex:1; margin-top:0; background:#a855f7" onclick="elegirTamanoScanner('${v.tamano}')">
+                ${esc(v.tamano)}<br>${fmt(v.precioVenta)}
+              </button>
+            `).join('')}
+          </div>
+          <button class="tipo-btn" onclick="cancelarVentaScanner()">Cancelar</button>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  // Producto general (o un perfume viejo sin variantes): flujo normal de confirmar y cobrar
+  const precioVenta = p.precioVenta;
+  const nombreMostrado = p.nombre;
+
+  if (!(p.stock > 0)) {
     if (statusEl) { statusEl.textContent = `⚠️ ${nombreMostrado} no tiene piezas en stock`; statusEl.style.color = '#ef4444'; }
     return;
   }
 
-  scannerPendiente = { productoId: p.id, tamano: v ? v.tamano : null };
+  scannerPendiente = { productoId: p.id, tamano: null };
   if (statusEl) { statusEl.textContent = 'Producto detectado — confirma para cobrar'; statusEl.style.color = '#06b6d4'; }
 
-  const confirmarEl = document.getElementById('scanner-confirmar');
   if (confirmarEl) {
     confirmarEl.style.display = 'block';
     confirmarEl.innerHTML = `
@@ -883,7 +954,7 @@ function procesarCodigoDetectado(codigo) {
         <div style="display:flex; justify-content:space-between; align-items:center">
           <div class="cliente-info">
             <div class="nombre">${esc(nombreMostrado)}</div>
-            ${sinLimiteStock ? '' : `<div class="cliente-notas">Stock disponible: ${stockActual}</div>`}
+            <div class="cliente-notas">Stock disponible: ${p.stock}</div>
           </div>
           <div class="monto" style="color:#10b981; font-size:22px; font-family:'JetBrains Mono', monospace">${fmt(precioVenta)}</div>
         </div>
@@ -896,39 +967,35 @@ function procesarCodigoDetectado(codigo) {
   }
 }
 
+// Confirma la venta de un producto GENERAL detectado por escáner (los perfumes
+// usan elegirTamanoScanner, ya que primero hay que elegir la presentación).
 function confirmarVentaScanner() {
   if (!scannerPendiente) return;
-  const { productoId, tamano } = scannerPendiente;
+  const { productoId } = scannerPendiente;
   const p = state.productos.find(pp => pp.id === productoId);
   const statusEl = document.getElementById('scanner-status');
   const confirmarEl = document.getElementById('scanner-confirmar');
-  const variante = tamano && p ? (p.variantes || []).find(v => v.tamano === tamano) : null;
-  const sinLimiteStock = !!variante;
-  const stockActual = sinLimiteStock ? null : p?.stock;
-  const precioVenta = tamano ? variante?.precioVenta : p?.precioVenta;
-  const precioCosto = p?.precioCosto; // el costo siempre es del perfume/producto completo, compartido entre presentaciones
 
-  if (!p || (tamano && !variante) || (!sinLimiteStock && !(stockActual > 0))) {
+  if (!p || !(p.stock > 0)) {
     scannerPendiente = null;
     if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
     if (statusEl) { statusEl.textContent = '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
     return;
   }
 
-  const nombreMostrado = tamano ? `${p.nombre} (${tamano})` : p.nombre;
+  const nombreMostrado = p.nombre;
   const venta = {
     id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     productoId: p.id,
-    tamano: tamano || null,
+    tamano: null,
     cantidad: 1,
-    total: Math.round(precioVenta * 100) / 100,
-    ganancia: Math.round((precioVenta - precioCosto) * 100) / 100,
+    total: Math.round(p.precioVenta * 100) / 100,
+    ganancia: Math.round((p.precioVenta - p.precioCosto) * 100) / 100,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
   state.ventas.push(venta);
-  let stockRestante = null;
-  if (!sinLimiteStock) { p.stock -= 1; stockRestante = p.stock; }
+  p.stock -= 1;
   guardarLocal();
 
   scannerPendiente = null;
@@ -945,7 +1012,63 @@ function confirmarVentaScanner() {
       <div class="cliente" style="margin-bottom:6px">
         <div class="cliente-info">
           <div class="nombre">${esc(nombreMostrado)}</div>
-          <div class="cliente-notas">${stockRestante !== null ? `Stock restante: ${stockRestante}` : 'Venta registrada'}</div>
+          <div class="cliente-notas">Stock restante: ${p.stock}</div>
+        </div>
+        <div class="cliente-pago">
+          <div class="monto" style="color:${state.rol === 'admin' ? '#10b981' : '#94a3b8'}">${state.rol === 'admin' ? '+' + fmt(venta.ganancia) : fmt(venta.total)}</div>
+        </div>
+      </div>
+    `);
+  }
+}
+
+// Se llama cuando, tras escanear el código único del perfume, el usuario elige
+// si la venta fue de la presentación de 5ml o de 10ml.
+function elegirTamanoScanner(tamano) {
+  if (!scannerPendiente) return;
+  const { productoId } = scannerPendiente;
+  const p = state.productos.find(pp => pp.id === productoId);
+  const statusEl = document.getElementById('scanner-status');
+  const confirmarEl = document.getElementById('scanner-confirmar');
+  const calc = p ? calcularVentaPerfume(p, tamano, 1) : null;
+
+  if (!p || !calc) {
+    scannerPendiente = null;
+    if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+    if (statusEl) { statusEl.textContent = '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+
+  const nombreMostrado = `${p.nombre} (${tamano})`;
+  const venta = {
+    id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    productoId: p.id,
+    tamano,
+    cantidad: 1,
+    total: calc.total,
+    ganancia: calc.ganancia,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  };
+  state.ventas.push(venta);
+  actualizarCicloPerfume(p, venta.fecha);
+  guardarLocal();
+
+  scannerPendiente = null;
+  if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+  if (statusEl) {
+    statusEl.textContent = state.rol === 'admin'
+      ? `✅ ${nombreMostrado} vendido — +${fmt(venta.ganancia)}`
+      : `✅ ${nombreMostrado} vendido — cobrar ${fmt(venta.total)}`;
+    statusEl.style.color = '#10b981';
+  }
+  const lista = document.getElementById('scanner-lista');
+  if (lista) {
+    lista.insertAdjacentHTML('afterbegin', `
+      <div class="cliente" style="margin-bottom:6px">
+        <div class="cliente-info">
+          <div class="nombre">${esc(nombreMostrado)}</div>
+          <div class="cliente-notas">Venta registrada</div>
         </div>
         <div class="cliente-pago">
           <div class="monto" style="color:${state.rol === 'admin' ? '#10b981' : '#94a3b8'}">${state.rol === 'admin' ? '+' + fmt(venta.ganancia) : fmt(venta.total)}</div>
@@ -1758,13 +1881,17 @@ function renderPerfumeExpandido(p) {
   // se muestra como una sola presentación "Único" para no romper la vista.
   const variantes = (Array.isArray(p.variantes) && p.variantes.length > 0)
     ? p.variantes
-    : [{ tamano: 'Único', precioVenta: p.precioVenta || 0, codigo: p.codigo || '' }];
+    : [{ tamano: 'Único', precioVenta: p.precioVenta || 0 }];
+  const { mlVendidos, ingresoAcumulado } = calcularCicloPerfume(p);
+  const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
   return `
     <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:10px">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
           <div class="nombre">🌸 ${esc(p.nombre)}</div>
-          ${esAdmin ? `<div class="cliente-notas">Costo del frasco: ${fmt(p.precioCosto)}</div>` : ''}
+          ${p.codigo ? `<div class="cliente-notas">Cód: ${esc(p.codigo)}</div>` : ''}
+          ${esAdmin ? `<div class="cliente-notas">Costo del frasco: ${fmt(p.precioCosto)} · ${costoRestante > 0 ? `faltan ${fmt(costoRestante)} por recuperar` : 'costo ya recuperado ✅'}</div>` : ''}
+          ${esAdmin ? `<div class="cliente-notas">Frasco actual: ${mlVendidos}/100 ml vendidos</div>` : ''}
         </div>
         ${esAdmin ? `
         <div class="cliente-acciones" style="flex-direction:row">
@@ -1778,8 +1905,6 @@ function renderPerfumeExpandido(p) {
 }
 
 function renderVarianteRow(p, v) {
-  const gananciaPza = v.precioVenta - p.precioCosto;
-  const esAdmin = state.rol === 'admin';
   const key = p.id + ':' + v.tamano;
   const ventasVariante = [...state.ventas].filter(vv => vv.productoId === p.id && (vv.tamano || null) === (v.tamano === 'Único' ? null : v.tamano)).sort((a,b) => b.fecha - a.fecha);
   const ventasAbiertas = !!state.ventasProductoExpandido[key];
@@ -1788,8 +1913,7 @@ function renderVarianteRow(p, v) {
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
           <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}</div>
-          ${esAdmin ? `<div class="cliente-tags"><span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span></div>` : ''}
-          <div class="cliente-notas">Venta ${fmt(v.precioVenta)}${v.codigo ? ` · Cód: ${esc(v.codigo)}` : ''}</div>
+          <div class="cliente-notas">Venta ${fmt(v.precioVenta)}</div>
         </div>
         <div class="cliente-acciones" style="flex-direction:row">
           <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}">🛒</button>
@@ -1856,6 +1980,13 @@ function renderModalProducto() {
         <div class="campo-label"><label>Precio costo del frasco ($)</label><span class="hint">Es el mismo frasco, solo un costo</span></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(f.precioCosto)}" placeholder="0.00" oninput="actualizarFormProducto('precioCosto', this.value)" />
       </div>
+      <div class="campo">
+        <div class="campo-label"><label>Código de barras</label><span class="hint">Uno solo, sirve para las 2 presentaciones</span></div>
+        <div style="display:flex; gap:8px">
+          <input class="input" style="flex:1" type="text" value="${esc(f.codigo || '')}" placeholder="Escanea o escribe" oninput="actualizarFormProducto('codigo', this.value)" />
+          <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar">📷</button>
+        </div>
+      </div>
       ${renderCamposVariantesPerfume(f)}
       ` : renderCamposProductoGeneral(f)}
 
@@ -1902,12 +2033,6 @@ function renderCamposVariantesPerfume(f) {
 
         <div class="campo-label"><label>Precio cliente ($)</label></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(v.precioVenta)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioVenta', this.value)" />
-
-        <div class="campo-label" style="margin-top:10px"><label>Código de barras</label></div>
-        <div style="display:flex; gap:8px">
-          <input class="input" style="flex:1" type="text" value="${esc(v.codigo || '')}" placeholder="Escanea o escribe" oninput="actualizarFormProductoVariante('${tam}', 'codigo', this.value)" />
-          <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar" data-tam="${tam}">📷</button>
-        </div>
       </div>
     `;
   }).join('');
@@ -1922,8 +2047,15 @@ function renderModalVenta() {
   if (!info) return '';
   const sinLimite = info.stock === null;
   const cant = parseInt(state.formVenta.cantidad) || 0;
-  const totalEstim = info.precioVenta * cant;
-  const gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+  let totalEstim, gananciaEstim;
+  if (tamano) {
+    const calc = calcularVentaPerfume(p, tamano, cant || 0);
+    totalEstim = calc ? calc.total : 0;
+    gananciaEstim = calc ? calc.ganancia : 0;
+  } else {
+    totalEstim = info.precioVenta * cant;
+    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+  }
   return `<div class="modal-overlay" data-action="cerrarModalVenta">
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modal-header">
@@ -2378,7 +2510,7 @@ function handleClick(e) {
       break;
     case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
-    case 'abrirScannerAsignar': abrirScannerAsignar(d.tam || null); break;
+    case 'abrirScannerAsignar': abrirScannerAsignar(); break;
     case 'cerrarScanner':
       if (e.target === e.currentTarget) cerrarScanner();
       break;
