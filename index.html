@@ -370,7 +370,7 @@ let state = {
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
   modalProducto: null,
   formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general',
-    variantes: { '5ml': { precioCosto: '', precioVenta: '', stock: '', codigo: '' }, '10ml': { precioCosto: '', precioVenta: '', stock: '', codigo: '' } }
+    variantes: { '5ml': { precioVenta: '', codigo: '' }, '10ml': { precioVenta: '', codigo: '' } }
   },
   modalVenta: null,
   formVenta: { cantidad: '' },
@@ -588,7 +588,7 @@ function eliminarCliente(servicio, id) {
 
 // ============== TIENDA (productos por pieza) ==============
 function variantesFormVacias() {
-  return { '5ml': { precioCosto: '', precioVenta: '', codigo: '' }, '10ml': { precioCosto: '', precioVenta: '', codigo: '' } };
+  return { '5ml': { precioVenta: '', codigo: '' }, '10ml': { precioVenta: '', codigo: '' } };
 }
 function abrirModalProducto(productoId, categoriaDefault) {
   if (state.rol !== 'admin') return;
@@ -598,7 +598,6 @@ function abrirModalProducto(productoId, categoriaDefault) {
     p.variantes.forEach(v => {
       if (variantesForm[v.tamano]) {
         variantesForm[v.tamano] = {
-          precioCosto: v.precioCosto != null ? String(v.precioCosto) : '',
           precioVenta: v.precioVenta != null ? String(v.precioVenta) : '',
           codigo: v.codigo || ''
         };
@@ -640,7 +639,6 @@ function guardarProducto() {
       const v = state.formProducto.variantes[tam];
       return {
         tamano: tam,
-        precioCosto: parseFloat(v.precioCosto) || 0,
         precioVenta: parseFloat(v.precioVenta) || 0,
         codigo: v.codigo ? v.codigo.trim() : ''
       };
@@ -648,6 +646,7 @@ function guardarProducto() {
     nuevo = {
       id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
       nombre: state.formProducto.nombre.trim(),
+      precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
       categoria: 'perfumes',
       variantes,
       creado
@@ -684,7 +683,7 @@ function eliminarProducto(id) {
 function obtenerInfoVenta(p, tamano) {
   if (tamano) {
     const v = (p.variantes || []).find(vv => vv.tamano === tamano);
-    return v ? { precioCosto: v.precioCosto, precioVenta: v.precioVenta, stock: null } : null; // stock null = sin límite (perfumes)
+    return v ? { precioCosto: p.precioCosto, precioVenta: v.precioVenta, stock: null } : null; // stock null = sin límite (perfumes); costo compartido del perfume
   }
   return { precioCosto: p.precioCosto, precioVenta: p.precioVenta, stock: p.stock };
 }
@@ -734,14 +733,9 @@ function registrarVenta(productoId, tamano) {
     mes: claveMes(new Date())
   };
   state.ventas.push(venta);
-  if (!sinLimite) {
-    if (tamano) {
-      const v = p.variantes.find(vv => vv.tamano === tamano);
-      if (v && v.stock != null) v.stock -= cant;
-    } else {
-      p.stock -= cant;
-    }
-  }
+  // sinLimite es true siempre que haya "tamano" (perfumes ya no llevan stock),
+  // así que aquí solo se descuenta stock de productos generales.
+  if (!sinLimite) p.stock -= cant;
   guardarLocal();
   cerrarModalVenta();
   render();
@@ -912,7 +906,7 @@ function confirmarVentaScanner() {
   const sinLimiteStock = !!variante;
   const stockActual = sinLimiteStock ? null : p?.stock;
   const precioVenta = tamano ? variante?.precioVenta : p?.precioVenta;
-  const precioCosto = tamano ? variante?.precioCosto : p?.precioCosto;
+  const precioCosto = p?.precioCosto; // el costo siempre es del perfume/producto completo, compartido entre presentaciones
 
   if (!p || (tamano && !variante) || (!sinLimiteStock && !(stockActual > 0))) {
     scannerPendiente = null;
@@ -1764,12 +1758,13 @@ function renderPerfumeExpandido(p) {
   // se muestra como una sola presentación "Único" para no romper la vista.
   const variantes = (Array.isArray(p.variantes) && p.variantes.length > 0)
     ? p.variantes
-    : [{ tamano: 'Único', precioCosto: p.precioCosto || 0, precioVenta: p.precioVenta || 0, stock: p.stock || 0, codigo: p.codigo || '' }];
+    : [{ tamano: 'Único', precioVenta: p.precioVenta || 0, codigo: p.codigo || '' }];
   return `
     <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:10px">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
           <div class="nombre">🌸 ${esc(p.nombre)}</div>
+          ${esAdmin ? `<div class="cliente-notas">Costo del frasco: ${fmt(p.precioCosto)}</div>` : ''}
         </div>
         ${esAdmin ? `
         <div class="cliente-acciones" style="flex-direction:row">
@@ -1783,7 +1778,7 @@ function renderPerfumeExpandido(p) {
 }
 
 function renderVarianteRow(p, v) {
-  const gananciaPza = v.precioVenta - v.precioCosto;
+  const gananciaPza = v.precioVenta - p.precioCosto;
   const esAdmin = state.rol === 'admin';
   const key = p.id + ':' + v.tamano;
   const ventasVariante = [...state.ventas].filter(vv => vv.productoId === p.id && (vv.tamano || null) === (v.tamano === 'Único' ? null : v.tamano)).sort((a,b) => b.fecha - a.fecha);
@@ -1794,7 +1789,7 @@ function renderVarianteRow(p, v) {
         <div class="cliente-info">
           <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}</div>
           ${esAdmin ? `<div class="cliente-tags"><span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span></div>` : ''}
-          <div class="cliente-notas">${esAdmin ? `Costo ${fmt(v.precioCosto)} · ` : ''}Venta ${fmt(v.precioVenta)}${v.codigo ? ` · Cód: ${esc(v.codigo)}` : ''}</div>
+          <div class="cliente-notas">Venta ${fmt(v.precioVenta)}${v.codigo ? ` · Cód: ${esc(v.codigo)}` : ''}</div>
         </div>
         <div class="cliente-acciones" style="flex-direction:row">
           <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}">🛒</button>
@@ -1856,7 +1851,13 @@ function renderModalProducto() {
         </div>
       </div>
 
-      ${esPerfume ? renderCamposVariantesPerfume(f) : renderCamposProductoGeneral(f)}
+      ${esPerfume ? `
+      <div class="campo">
+        <div class="campo-label"><label>Precio costo del frasco ($)</label><span class="hint">Es el mismo frasco, solo un costo</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.precioCosto)}" placeholder="0.00" oninput="actualizarFormProducto('precioCosto', this.value)" />
+      </div>
+      ${renderCamposVariantesPerfume(f)}
+      ` : renderCamposProductoGeneral(f)}
 
       <button id="btn-guardar-producto" class="guardar-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706)" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarProducto">
         ✓ ${state.modalProducto.productoId ? 'Guardar cambios' : (esPerfume ? 'Agregar perfume' : 'Agregar producto')}
@@ -1899,10 +1900,7 @@ function renderCamposVariantesPerfume(f) {
       <div class="campo" style="border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:12px; margin-top:4px">
         <div style="font-weight:700; color:#a855f7; margin-bottom:10px">🧴 Presentación ${tam}</div>
 
-        <div class="campo-label"><label>Precio costo ($)</label></div>
-        <input class="input" type="number" inputmode="decimal" value="${esc(v.precioCosto)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioCosto', this.value)" />
-
-        <div class="campo-label" style="margin-top:10px"><label>Precio cliente ($)</label></div>
+        <div class="campo-label"><label>Precio cliente ($)</label></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(v.precioVenta)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioVenta', this.value)" />
 
         <div class="campo-label" style="margin-top:10px"><label>Código de barras</label></div>
