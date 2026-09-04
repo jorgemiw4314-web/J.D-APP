@@ -370,7 +370,7 @@ let state = {
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
   modalProducto: null,
   formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general',
-    variantes: { '5ml': { precioVenta: '', codigo: '' }, '10ml': { precioVenta: '', codigo: '' } }
+    variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' } }
   },
   modalVenta: null,
   formVenta: { cantidad: '' },
@@ -711,6 +711,20 @@ function eliminarProducto(id) {
   if (!confirm('¿Eliminar este producto? También se borrará su historial de ventas.')) return;
   state.productos = state.productos.filter(p => p.id !== id);
   state.ventas = state.ventas.filter(v => v.productoId !== id);
+  guardarLocal();
+  render();
+}
+
+// Reinicia manualmente el ciclo de recuperación de costo de un perfume
+// (por ejemplo, cuando se compra un frasco nuevo antes de llegar a 100ml,
+// o simplemente para empezar a contar de cero). No borra ventas ni historial,
+// solo cambia desde cuándo se cuentan los ml y el dinero recuperado.
+function reiniciarFrascoPerfume(id) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === id);
+  if (!p) return;
+  if (!confirm(`¿Registrar un frasco nuevo de "${p.nombre}"?\n\nEsto reinicia el conteo de ml vendidos y de costo recuperado (empieza de cero). Si el costo del frasco nuevo cambió, edítalo con ✎ después de esto.`)) return;
+  p.cicloInicio = Date.now();
   guardarLocal();
   render();
 }
@@ -1153,6 +1167,29 @@ function calcularVentasPorDia() {
 function formatearFechaCorta(fechaKey) {
   const [y, m, d] = fechaKey.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+}
+
+// Flujo de dinero de la Tienda (productos + perfumes), mes por mes.
+// "reinvertido" es la parte de lo cobrado que fue a cubrir el costo
+// (del producto o, en perfumes, del frasco compartido); "ganancia" es lo
+// que realmente quedó limpio, usando el mismo valor ya guardado en cada venta.
+function calcularFlujoTiendaMensual() {
+  const hoy = new Date();
+  const meses = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const key = claveMes(d);
+    const ventasMes = state.ventas.filter(v => v.mes === key);
+    const cobrado = ventasMes.reduce((s, v) => s + v.total, 0);
+    const ganancia = ventasMes.reduce((s, v) => s + v.ganancia, 0);
+    meses.push({
+      mes: formatoMesCorto(key),
+      cobrado: Math.round(cobrado * 100) / 100,
+      costo: Math.round((cobrado - ganancia) * 100) / 100, // reinvertido
+      ganancia: Math.round(ganancia * 100) / 100
+    });
+  }
+  return meses;
 }
 
 // ============== RESPALDO (exportar / importar) ==============
@@ -1895,6 +1932,7 @@ function renderPerfumeExpandido(p) {
         </div>
         ${esAdmin ? `
         <div class="cliente-acciones" style="flex-direction:row">
+          <button class="icon-btn" style="background:rgba(6,182,212,0.12); color:#06b6d4" data-action="reiniciarFrascoPerfume" data-pid="${p.id}" title="Nuevo frasco">🔄</button>
           <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
           <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>
         </div>` : ''}
@@ -2139,6 +2177,11 @@ function renderDashboard() {
   const totalPiezasMes = ventasPorDia.reduce((s, d) => s + d.piezas, 0);
   const mejorDia = ventasPorDia.reduce((max, d) => d.piezas > (max?.piezas || 0) ? d : max, null);
 
+  // Flujo de dinero de la tienda (productos + perfumes), mes por mes
+  const flujoTienda = calcularFlujoTiendaMensual();
+  const flujoMesActual = flujoTienda[flujoTienda.length - 1];
+  const hayFlujoTienda = flujoTienda.some(m => m.cobrado > 0);
+
   return `<div class="fade-in" style="padding: 16px 20px">
     <div class="resumen" style="padding: 0; margin-bottom: 20px">
       <div class="resumen-card destacado">
@@ -2180,6 +2223,27 @@ function renderDashboard() {
         <div class="resumen-sub">${formatearFechaCorta(mejorDia.fecha)} · ${fmt(mejorDia.vendido)}</div>
       </div>
       ${renderBarChartDias(ventasPorDia)}
+      `}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#ec4899">💸</span> Flujo de dinero — Tienda (perfumes y productos)</div>
+      ${!hayFlujoTienda ? '<div class="vacio">Aún no hay ventas de tienda</div>' : `
+      <div class="resumen" style="padding:0; margin-bottom:14px">
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#06b6d4">Cobrado (mes)</div>
+          <div class="resumen-value">${fmt(flujoMesActual.cobrado)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#64748b">Reinvertido (mes)</div>
+          <div class="resumen-value">${fmt(flujoMesActual.costo)}</div>
+        </div>
+        <div class="resumen-card destacado" style="grid-column: span 2">
+          <div class="resumen-label" style="color:#10b981">Ganancia neta (mes)</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(flujoMesActual.ganancia)}</div>
+        </div>
+      </div>
+      ${renderBarChart(flujoTienda.slice(-6))}
       `}
     </div>
 
@@ -2500,6 +2564,10 @@ function handleClick(e) {
     case 'eliminarProducto':
       e.stopPropagation();
       eliminarProducto(d.pid);
+      break;
+    case 'reiniciarFrascoPerfume':
+      e.stopPropagation();
+      reiniciarFrascoPerfume(d.pid);
       break;
     case 'abrirModalVenta':
       e.stopPropagation();
