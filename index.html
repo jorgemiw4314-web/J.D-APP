@@ -380,6 +380,7 @@ let state = {
 let videoStreamActivo = null;
 let intervaloScanner = null;
 let scannerPendiente = null; // productoId detectado en espera de confirmación de cobro
+let scannerAutoCierreTimeout = null; // temporizador que cierra el escáner tras mostrar el cobro
 
 // ============== HELPERS ==============
 function claveMes(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
@@ -729,6 +730,24 @@ function reiniciarFrascoPerfume(id) {
   render();
 }
 
+// Permite al admin borrar una venta registrada por error o duplicada.
+// Si el producto tenía control de stock (no es perfume), le regresa las
+// piezas. En perfumes, el ciclo de 100ml/costo se recalcula solo, ya que
+// se basa en las ventas que sigan existiendo, no en un contador aparte.
+function eliminarVenta(ventaId) {
+  if (state.rol !== 'admin') return;
+  const venta = state.ventas.find(v => v.id === ventaId);
+  if (!venta) return;
+  if (!confirm('¿Eliminar esta venta? Es para corregir un cobro por error o duplicado. Esta acción no se puede deshacer.')) return;
+  const p = state.productos.find(pp => pp.id === venta.productoId);
+  if (p && !venta.tamano && p.stock != null) {
+    p.stock += venta.cantidad; // se regresan las piezas al stock (solo aplica a productos generales)
+  }
+  state.ventas = state.ventas.filter(v => v.id !== ventaId);
+  guardarLocal();
+  render();
+}
+
 function obtenerInfoVenta(p, tamano) {
   if (tamano) {
     const v = (p.variantes || []).find(vv => vv.tamano === tamano);
@@ -825,6 +844,7 @@ function calcularTotalesTienda() {
 
 // ============== ESCÁNER DE CÓDIGO DE BARRAS ==============
 function abrirScannerVenta() {
+  if (scannerAutoCierreTimeout) { clearTimeout(scannerAutoCierreTimeout); scannerAutoCierreTimeout = null; }
   scannerPendiente = null;
   state.scanner = { modo: 'venta' };
   render();
@@ -832,12 +852,14 @@ function abrirScannerVenta() {
 }
 function abrirScannerAsignar() {
   if (state.rol !== 'admin') return;
+  if (scannerAutoCierreTimeout) { clearTimeout(scannerAutoCierreTimeout); scannerAutoCierreTimeout = null; }
   scannerPendiente = null;
   state.scanner = { modo: 'asignar' };
   render();
   iniciarCamara();
 }
 function cerrarScanner() {
+  if (scannerAutoCierreTimeout) { clearTimeout(scannerAutoCierreTimeout); scannerAutoCierreTimeout = null; }
   detenerCamara();
   scannerPendiente = null;
   state.scanner = null;
@@ -981,9 +1003,39 @@ function procesarCodigoDetectado(codigo) {
   }
 }
 
-// Confirma la venta de un producto GENERAL detectado por escáner (los perfumes
-// usan elegirTamanoScanner, ya que primero hay que elegir la presentación).
+// Muestra en pantalla (mensaje de estado + historial del escáner) el
+// desglose completo de una venta: SIEMPRE lo cobrado, y para el admin
+// también la ganancia real por separado.
+function mostrarResultadoVentaScanner(nombreMostrado, venta, notaExtra) {
+  const statusEl = document.getElementById('scanner-status');
+  const lista = document.getElementById('scanner-lista');
+  if (statusEl) {
+    statusEl.textContent = state.rol === 'admin'
+      ? `✅ ${nombreMostrado} — Cobrado ${fmt(venta.total)} · Ganancia +${fmt(venta.ganancia)}`
+      : `✅ ${nombreMostrado} — Cobrado ${fmt(venta.total)}`;
+    statusEl.style.color = '#10b981';
+  }
+  if (lista) {
+    lista.insertAdjacentHTML('afterbegin', `
+      <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px 12px; margin-bottom:8px">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px">
+          <span style="font-weight:700">${esc(nombreMostrado)}</span>
+          <span style="font-family:'JetBrains Mono',monospace; color:#06b6d4; font-weight:700">${fmt(venta.total)}</span>
+        </div>
+        ${notaExtra ? `<div style="font-size:12px; color:#64748b; margin-top:2px">${esc(notaExtra)}</div>` : ''}
+        ${state.rol === 'admin' ? `<div style="font-size:12px; color:#10b981; margin-top:2px">Ganancia: +${fmt(venta.ganancia)}</div>` : ''}
+      </div>
+    `);
+  }
+  // Se cierra solo después de mostrar el cobro, para que la siguiente venta
+  // requiera escanear de nuevo el código de barras.
+  if (scannerAutoCierreTimeout) clearTimeout(scannerAutoCierreTimeout);
+  scannerAutoCierreTimeout = setTimeout(() => { scannerAutoCierreTimeout = null; cerrarScanner(); }, 1800);
+}
+
 function confirmarVentaScanner() {
+  // Confirma la venta de un producto GENERAL detectado por escáner (los perfumes
+  // usan elegirTamanoScanner, ya que primero hay que elegir la presentación).
   if (!scannerPendiente) return;
   const { productoId } = scannerPendiente;
   const p = state.productos.find(pp => pp.id === productoId);
@@ -1014,26 +1066,7 @@ function confirmarVentaScanner() {
 
   scannerPendiente = null;
   if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
-  if (statusEl) {
-    statusEl.textContent = state.rol === 'admin'
-      ? `✅ ${nombreMostrado} vendido — +${fmt(venta.ganancia)}`
-      : `✅ ${nombreMostrado} vendido — cobrar ${fmt(venta.total)}`;
-    statusEl.style.color = '#10b981';
-  }
-  const lista = document.getElementById('scanner-lista');
-  if (lista) {
-    lista.insertAdjacentHTML('afterbegin', `
-      <div class="cliente" style="margin-bottom:6px">
-        <div class="cliente-info">
-          <div class="nombre">${esc(nombreMostrado)}</div>
-          <div class="cliente-notas">Stock restante: ${p.stock}</div>
-        </div>
-        <div class="cliente-pago">
-          <div class="monto" style="color:${state.rol === 'admin' ? '#10b981' : '#94a3b8'}">${state.rol === 'admin' ? '+' + fmt(venta.ganancia) : fmt(venta.total)}</div>
-        </div>
-      </div>
-    `);
-  }
+  mostrarResultadoVentaScanner(nombreMostrado, venta, `Stock restante: ${p.stock}`);
 }
 
 // Se llama cuando, tras escanear el código único del perfume, el usuario elige
@@ -1070,26 +1103,7 @@ function elegirTamanoScanner(tamano) {
 
   scannerPendiente = null;
   if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
-  if (statusEl) {
-    statusEl.textContent = state.rol === 'admin'
-      ? `✅ ${nombreMostrado} vendido — +${fmt(venta.ganancia)}`
-      : `✅ ${nombreMostrado} vendido — cobrar ${fmt(venta.total)}`;
-    statusEl.style.color = '#10b981';
-  }
-  const lista = document.getElementById('scanner-lista');
-  if (lista) {
-    lista.insertAdjacentHTML('afterbegin', `
-      <div class="cliente" style="margin-bottom:6px">
-        <div class="cliente-info">
-          <div class="nombre">${esc(nombreMostrado)}</div>
-          <div class="cliente-notas">Venta registrada</div>
-        </div>
-        <div class="cliente-pago">
-          <div class="monto" style="color:${state.rol === 'admin' ? '#10b981' : '#94a3b8'}">${state.rol === 'admin' ? '+' + fmt(venta.ganancia) : fmt(venta.total)}</div>
-        </div>
-      </div>
-    `);
-  }
+  mostrarResultadoVentaScanner(nombreMostrado, venta);
 }
 
 function cancelarVentaScanner() {
@@ -1982,8 +1996,10 @@ function renderVentaRow(v) {
         <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr}</div>
       </div>
       <div class="cliente-pago">
-        <div class="monto" style="color:${esAdmin ? '#10b981' : '#94a3b8'}">${esAdmin ? '+' + fmt(v.ganancia) : fmt(v.total)}</div>
+        <div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>
+        ${esAdmin ? `<div style="font-size:11px; color:#10b981; margin-top:2px">+${fmt(v.ganancia)}</div>` : ''}
       </div>
+      ${esAdmin ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
     </div>
   `;
 }
@@ -2556,6 +2572,10 @@ function handleClick(e) {
     case 'toggleVentasProducto':
       e.stopPropagation();
       toggleVentasProducto(d.pid);
+      break;
+    case 'eliminarVenta':
+      e.stopPropagation();
+      eliminarVenta(d.vid);
       break;
     case 'cerrarModalProducto':
       if (e.target === e.currentTarget) cerrarModalProducto();
