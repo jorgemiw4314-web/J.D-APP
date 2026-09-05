@@ -20,7 +20,8 @@
   // Conexión a Firebase / Firestore: guarda una copia de los datos en la nube
   // para que no se pierdan si el teléfono borra el almacenamiento local.
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+  import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyC69lkoZW-dfD_W55T54hMMJRwhXmCAjpo",
@@ -39,7 +40,9 @@
   // (que es un script normal, no un módulo) las pueda usar.
   window.nubeGuardar = async function(datos) {
     try {
-      await setDoc(refDatos, { ...datos, actualizado: Date.now() });
+      // merge:true es importante: así este guardado normal (datos de la app)
+      // nunca borra el campo fcmTokens que se guarda aparte (ver abajo).
+      await setDoc(refDatos, { ...datos, actualizado: Date.now() }, { merge: true });
       return true;
     } catch (e) {
       console.error('Error guardando en la nube:', e);
@@ -53,6 +56,38 @@
       return snap.exists() ? snap.data() : null;
     } catch (e) {
       console.error('Error leyendo de la nube:', e);
+      return null;
+    }
+  };
+
+  // Guarda el "token" de este dispositivo/navegador para notificaciones push,
+  // sin tocar el resto de los datos guardados (merge:true + arrayUnion evita
+  // duplicados si el mismo dispositivo se registra varias veces).
+  window.nubeGuardarToken = async function(token) {
+    try {
+      await setDoc(refDatos, { fcmTokens: arrayUnion(token) }, { merge: true });
+      return true;
+    } catch (e) {
+      console.error('Error guardando token de notificaciones:', e);
+      return false;
+    }
+  };
+
+  // Pide (o refresca) el token de notificaciones push de este navegador y lo
+  // guarda en Firestore. Requiere que el Service Worker ya esté registrado.
+  window.nubeActivarPush = async function(vapidKey) {
+    try {
+      if (!('serviceWorker' in navigator)) return null;
+      const reg = await navigator.serviceWorker.ready;
+      const messaging = getMessaging(app);
+      const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg });
+      if (token) {
+        await window.nubeGuardarToken(token);
+        return token;
+      }
+      return null;
+    } catch (e) {
+      console.error('Error activando notificaciones push:', e);
       return null;
     }
   };
@@ -1648,6 +1683,17 @@ function renderSeccion(key, info) {
 
 // ============== NOTIFICACIONES DE VENCIMIENTO ==============
 const LIMITE_NOTIFICACION = 3; // avisar desde 3 días antes de vencer (y si ya venció)
+// Llave pública (VAPID) de este proyecto de Firebase para notificaciones push.
+// No es un secreto: identifica al proyecto, no da acceso a los datos.
+const VAPID_KEY = 'BFcQVHoGahQExG1HfWIF7u1MGkQy8TtB8G_d64rjK0rF1Xx8MyqzLblErrovafx3cvSrN2UUTlcSy6Ib7cpRhzQ';
+
+// Pide (o refresca) el token de notificaciones push de este dispositivo y lo
+// guarda en Firestore. Se llama tanto al activar notificaciones por primera
+// vez como cada vez que se abre la app, si ya había permiso concedido.
+async function refrescarTokenPush() {
+  if (!window.nubeActivarPush) return;
+  try { await window.nubeActivarPush(VAPID_KEY); } catch (e) {}
+}
 
 function cargarNotificados() {
   try {
@@ -1704,6 +1750,7 @@ async function activarNotificaciones() {
   const permiso = await Notification.requestPermission();
   if (permiso === 'granted') {
     revisarYNotificar();
+    await refrescarTokenPush();
     render();
   } else {
     alert('No se activaron las notificaciones. Puedes intentarlo de nuevo cuando quieras desde este mismo botón.');
@@ -2615,10 +2662,18 @@ revisarYNotificar(); // por si ya había permiso concedido de antes
 
 // El módulo de Firebase carga por separado y puede tardar un poco más que
 // el resto del código; esperamos a que avise que ya está listo.
-if (window.nubeListo) {
+function alFirebaseListo() {
   sincronizarNube();
+  // Si ya se había dado permiso de notificaciones antes, refrescamos el
+  // token push por si cambió (los tokens pueden expirar/renovarse).
+  if (('Notification' in window) && Notification.permission === 'granted') {
+    refrescarTokenPush();
+  }
+}
+if (window.nubeListo) {
+  alFirebaseListo();
 } else {
-  window.addEventListener('nube-lista', () => sincronizarNube(), { once: true });
+  window.addEventListener('nube-lista', alFirebaseListo, { once: true });
 }
 
 // Le pedimos al navegador que marque el almacenamiento como "persistente":
