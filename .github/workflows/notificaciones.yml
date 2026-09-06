@@ -1,0 +1,27 @@
+name: Notificaciones de pagos próximos a vencer
+
+"on":
+  schedule:
+    # 8:00 AM hora de Yucatán (UTC-6, todo el año) = 14:00 UTC
+    - cron: '0 14 * * *'
+  workflow_dispatch: {}  # permite correrlo manualmente desde GitHub para probar
+
+jobs:
+  notificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar firebase-admin
+        run: npm install firebase-admin
+
+      - name: Enviar notificaciones
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/enviar-notificaciones.js
