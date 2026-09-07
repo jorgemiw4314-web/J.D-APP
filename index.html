@@ -1241,6 +1241,20 @@ function calcularFlujoTiendaMensual() {
   return meses;
 }
 
+// Ranking de perfumes por piezas vendidas (5ml + 10ml juntas) del mes en
+// curso — se reinicia solo cada mes porque solo cuenta las ventas de ese mes.
+function calcularRankingPerfumes(mesKey) {
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
+  const ranking = perfumes.map(p => {
+    const piezas = state.ventas
+      .filter(v => v.productoId === p.id && v.mes === mesKey)
+      .reduce((s, v) => s + v.cantidad, 0);
+    return { id: p.id, nombre: p.nombre, piezas };
+  });
+  ranking.sort((a, b) => b.piezas - a.piezas);
+  return ranking;
+}
+
 // ============== RESPALDO (exportar / importar) ==============
 function verRespaldoTexto() {
   const respaldo = { data: state.data, pagosMes: state.pagosMes, productos: state.productos, ventas: state.ventas, version: 2, fecha: new Date().toISOString() };
@@ -2245,6 +2259,10 @@ function renderDashboard() {
   const flujoMesActual = flujoTienda[flujoTienda.length - 1];
   const hayFlujoTienda = flujoTienda.some(m => m.cobrado > 0);
 
+  // Ranking de perfumes por piezas vendidas (este mes)
+  const rankingPerfumes = calcularRankingPerfumes(mesK);
+  const maxPiezasPerfume = Math.max(...rankingPerfumes.map(r => r.piezas), 1);
+
   return `<div class="fade-in" style="padding: 16px 20px">
     <div class="resumen" style="padding: 0; margin-bottom: 20px">
       <div class="resumen-card destacado">
@@ -2308,6 +2326,21 @@ function renderDashboard() {
       </div>
       ${renderBarChart(flujoTienda.slice(-6))}
       `}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a855f7">🏆</span> Ranking de perfumes (este mes)</div>
+      ${rankingPerfumes.length === 0 ? '<div class="vacio">Aún no tienes perfumes registrados</div>' : rankingPerfumes.map((r, i) => `
+        <div class="servicio-bar">
+          <div class="servicio-bar-row">
+            <span class="nombre">${i === 0 && r.piezas > 0 ? '🥇 ' : ''}${esc(r.nombre)}</span>
+            <span class="monto" style="color:#a855f7">${r.piezas} pza(s)</span>
+          </div>
+          <div class="servicio-bar-bg">
+            <div class="servicio-bar-fill" style="width: ${(r.piezas/maxPiezasPerfume)*100}%; background: linear-gradient(90deg, #a855f780, #a855f7)"></div>
+          </div>
+        </div>
+      `).join('')}
     </div>
 
     <div class="dashboard-card">
