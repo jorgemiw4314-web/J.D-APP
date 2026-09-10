@@ -627,18 +627,16 @@ function variantesFormVacias() {
   return { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' } };
 }
 
-// Un frasco de perfume se asume de 100ml. Estas funciones llevan la cuenta de
-// cuánto se ha vendido (en ml y en dinero) desde que empezó el frasco actual
-// (p.cicloInicio), para saber cuándo ya se recuperó el costo y cuándo el
-// frasco se terminó (100ml vendidos) para reiniciar el conteo con el siguiente.
-function mlDeTamano(tamano) { return parseInt(tamano) || 0; } // '5ml' -> 5, '10ml' -> 10
-
+// Estas funciones llevan la cuenta de cuánto dinero se ha cobrado desde que
+// empezó el frasco actual (p.cicloInicio), para saber cuándo ya se recuperó
+// el costo. El reinicio del ciclo (cuando compras un frasco nuevo) es manual,
+// con el botón "Nuevo frasco" (ver reiniciarFrascoPerfume).
 function calcularCicloPerfume(p) {
   const desde = p.cicloInicio || p.creado || 0;
   const ventasCiclo = state.ventas.filter(v => v.productoId === p.id && v.fecha >= desde);
-  const mlVendidos = ventasCiclo.reduce((s, v) => s + mlDeTamano(v.tamano) * v.cantidad, 0);
   const ingresoAcumulado = ventasCiclo.reduce((s, v) => s + v.total, 0);
-  return { mlVendidos, ingresoAcumulado };
+  const piezasVendidas = ventasCiclo.reduce((s, v) => s + v.cantidad, 0);
+  return { ingresoAcumulado, piezasVendidas };
 }
 
 // Calcula el total a cobrar y la ganancia real de una venta de perfume,
@@ -652,15 +650,6 @@ function calcularVentaPerfume(p, tamano, cantidad) {
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
   const ganancia = Math.round(Math.max(0, total - costoRestante) * 100) / 100;
   return { precioVenta: v.precioVenta, total, ganancia };
-}
-
-// Después de registrar una venta de perfume, si ya se llegó a 100ml vendidos
-// en este ciclo, se reinicia: empieza a contarse un frasco nuevo desde cero.
-function actualizarCicloPerfume(p, ventaFecha) {
-  const { mlVendidos } = calcularCicloPerfume(p);
-  if (mlVendidos >= 100) {
-    p.cicloInicio = ventaFecha + 1;
-  }
 }
 function abrirModalProducto(productoId, categoriaDefault) {
   if (state.rol !== 'admin') return;
@@ -752,14 +741,14 @@ function eliminarProducto(id) {
 }
 
 // Reinicia manualmente el ciclo de recuperación de costo de un perfume
-// (por ejemplo, cuando se compra un frasco nuevo antes de llegar a 100ml,
-// o simplemente para empezar a contar de cero). No borra ventas ni historial,
-// solo cambia desde cuándo se cuentan los ml y el dinero recuperado.
+// (por ejemplo, cuando compras un frasco nuevo). No borra ventas ni
+// historial, solo cambia desde cuándo se cuentan las piezas y el dinero
+// recuperado para saber si ya se pagó el costo del frasco actual.
 function reiniciarFrascoPerfume(id) {
   if (state.rol !== 'admin') return;
   const p = state.productos.find(pp => pp.id === id);
   if (!p) return;
-  if (!confirm(`¿Registrar un frasco nuevo de "${p.nombre}"?\n\nEsto reinicia el conteo de ml vendidos y de costo recuperado (empieza de cero). Si el costo del frasco nuevo cambió, edítalo con ✎ después de esto.`)) return;
+  if (!confirm(`¿Registrar un frasco nuevo de "${p.nombre}"?\n\nEsto reinicia el conteo de piezas vendidas y de costo recuperado (empieza de cero). Si el costo del frasco nuevo cambió, edítalo con ✎ después de esto.`)) return;
   p.cicloInicio = Date.now();
   guardarLocal();
   render();
@@ -767,8 +756,8 @@ function reiniciarFrascoPerfume(id) {
 
 // Permite al admin borrar una venta registrada por error o duplicada.
 // Si el producto tenía control de stock (no es perfume), le regresa las
-// piezas. En perfumes, el ciclo de 100ml/costo se recalcula solo, ya que
-// se basa en las ventas que sigan existiendo, no en un contador aparte.
+// piezas. En perfumes, el ciclo de costo se recalcula solo, ya que se
+// basa en las ventas que sigan existiendo, no en un contador aparte.
 function eliminarVenta(ventaId) {
   if (state.rol !== 'admin') return;
   const venta = state.ventas.find(v => v.id === ventaId);
@@ -858,7 +847,6 @@ function registrarVenta(productoId, tamano) {
   // sinLimite es true siempre que haya "tamano" (perfumes ya no llevan stock),
   // así que aquí solo se descuenta stock de productos generales.
   if (!sinLimite) p.stock -= cant;
-  if (tamano) actualizarCicloPerfume(p, venta.fecha);
   guardarLocal();
   cerrarModalVenta();
   render();
@@ -1133,7 +1121,6 @@ function elegirTamanoScanner(tamano) {
     mes: claveMes(new Date())
   };
   state.ventas.push(venta);
-  actualizarCicloPerfume(p, venta.fecha);
   guardarLocal();
 
   scannerPendiente = null;
@@ -1994,7 +1981,7 @@ function renderPerfumeExpandido(p) {
   const variantes = (Array.isArray(p.variantes) && p.variantes.length > 0)
     ? p.variantes
     : [{ tamano: 'Único', precioVenta: p.precioVenta || 0 }];
-  const { mlVendidos, ingresoAcumulado } = calcularCicloPerfume(p);
+  const { piezasVendidas, ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
   return `
     <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:10px">
@@ -2003,7 +1990,7 @@ function renderPerfumeExpandido(p) {
           <div class="nombre">🌸 ${esc(p.nombre)}</div>
           ${p.codigo ? `<div class="cliente-notas">Cód: ${esc(p.codigo)}</div>` : ''}
           ${esAdmin ? `<div class="cliente-notas">Costo del frasco: ${fmt(p.precioCosto)} · ${costoRestante > 0 ? `faltan ${fmt(costoRestante)} por recuperar` : 'costo ya recuperado ✅'}</div>` : ''}
-          ${esAdmin ? `<div class="cliente-notas">Frasco actual: ${mlVendidos}/100 ml vendidos</div>` : ''}
+          ${esAdmin ? `<div class="cliente-notas">Piezas vendidas de este frasco: ${piezasVendidas}</div>` : ''}
         </div>
         ${esAdmin ? `
         <div class="cliente-acciones" style="flex-direction:row">
