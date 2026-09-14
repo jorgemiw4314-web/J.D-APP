@@ -381,6 +381,8 @@ const SERVICIOS = {
   otros: { nombre: 'Otros', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', color: '#a78bfa', gradient: 'linear-gradient(135deg, #a78bfa, #8b5cf6)' }
 };
 const MESES_NOMBRES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+// Las presentaciones que puede tener un perfume: 2 decants + el frasco completo.
+const TAMANOS_PERFUME = ['5ml', '10ml', 'Frasco completo'];
 
 let state = {
   data: {
@@ -405,7 +407,7 @@ let state = {
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
   modalProducto: null,
   formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general',
-    variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' } }
+    variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
   formVenta: { cantidad: '' },
@@ -624,7 +626,9 @@ function eliminarCliente(servicio, id) {
 
 // ============== TIENDA (productos por pieza) ==============
 function variantesFormVacias() {
-  return { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' } };
+  const v = {};
+  TAMANOS_PERFUME.forEach(tam => { v[tam] = { precioVenta: '' }; });
+  return v;
 }
 
 // Estas funciones llevan la cuenta de cuánto dinero se ha cobrado desde que
@@ -694,7 +698,7 @@ function guardarProducto() {
   const creado = existente ? existente.creado : Date.now();
   let nuevo;
   if (esPerfume) {
-    const variantes = ['5ml', '10ml'].map(tam => {
+    const variantes = TAMANOS_PERFUME.map(tam => {
       const v = state.formProducto.variantes[tam];
       return {
         tamano: tam,
@@ -969,9 +973,11 @@ function procesarCodigoDetectado(codigo) {
 
   if (esPerfumeConVariantes) {
     // Un solo código para el perfume: pedimos que elija la presentación,
-    // mostrando de una vez el precio de cada una.
+    // mostrando de una vez el precio de cada una. El "Frasco completo" solo
+    // aparece como opción si le pusiste un precio (si no, no se ofrece).
+    const variantesDisponibles = p.variantes.filter(v => v.tamano !== 'Frasco completo' || v.precioVenta > 0);
     scannerPendiente = { productoId: p.id, eligiendoTamano: true };
-    if (statusEl) { statusEl.textContent = '¿5ml o 10ml?'; statusEl.style.color = '#06b6d4'; }
+    if (statusEl) { statusEl.textContent = '¿Qué presentación vendiste?'; statusEl.style.color = '#06b6d4'; }
     if (confirmarEl) {
       confirmarEl.style.display = 'block';
       confirmarEl.innerHTML = `
@@ -980,8 +986,8 @@ function procesarCodigoDetectado(codigo) {
             <div class="nombre">🌸 ${esc(p.nombre)}</div>
             <div class="cliente-notas">¿Qué presentación vendiste?</div>
           </div>
-          <div style="display:flex; gap:8px">
-            ${p.variantes.map(v => `
+          <div style="display:flex; flex-direction:${variantesDisponibles.length > 2 ? 'column' : 'row'}; gap:8px">
+            ${variantesDisponibles.map(v => `
               <button class="guardar-btn" style="flex:1; margin-top:0; background:#a855f7" onclick="elegirTamanoScanner('${v.tamano}')">
                 ${esc(v.tamano)}<br>${fmt(v.precioVenta)}
               </button>
@@ -1093,7 +1099,7 @@ function confirmarVentaScanner() {
 }
 
 // Se llama cuando, tras escanear el código único del perfume, el usuario elige
-// si la venta fue de la presentación de 5ml o de 10ml.
+// qué presentación vendió (5ml, 10ml, o el frasco completo si lo tiene configurado).
 function elegirTamanoScanner(tamano) {
   if (!scannerPendiente) return;
   const { productoId } = scannerPendiente;
@@ -1228,8 +1234,8 @@ function calcularFlujoTiendaMensual() {
   return meses;
 }
 
-// Ranking de perfumes por piezas vendidas (5ml + 10ml juntas) del mes en
-// curso — se reinicia solo cada mes porque solo cuenta las ventas de ese mes.
+// Ranking de perfumes por piezas vendidas (todas las presentaciones juntas)
+// del mes en curso — se reinicia solo cada mes porque solo cuenta las ventas de ese mes.
 function calcularRankingPerfumes(mesKey) {
   const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
   const ranking = perfumes.map(p => {
@@ -1954,7 +1960,7 @@ function renderSeccionPerfumes(perfumes, esAdmin) {
 }
 
 // Cada perfume inicia colapsado (solo el nombre); al tocarlo se expande
-// mostrando sus 2 presentaciones (5ml y 10ml) con su propio precio/stock/código.
+// mostrando sus presentaciones (5ml, 10ml, y frasco completo si aplica) con su propio precio/código.
 function renderProductoRowColapsable(p) {
   const abierto = !!state.productoExpandido[p.id];
   if (!abierto) {
@@ -1978,8 +1984,10 @@ function renderPerfumeExpandido(p) {
   const esAdmin = state.rol === 'admin';
   // Compatibilidad: si por alguna razón el perfume no tiene variantes (dato viejo),
   // se muestra como una sola presentación "Único" para no romper la vista.
+  // El "Frasco completo" solo se muestra si le pusiste un precio (si lo dejas
+  // en 0, es porque no vendes ese perfume completo y no debe aparecer).
   const variantes = (Array.isArray(p.variantes) && p.variantes.length > 0)
-    ? p.variantes
+    ? p.variantes.filter(v => v.tamano !== 'Frasco completo' || v.precioVenta > 0)
     : [{ tamano: 'Único', precioVenta: p.precioVenta || 0 }];
   const { piezasVendidas, ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
@@ -2127,13 +2135,14 @@ function renderCamposProductoGeneral(f) {
 }
 
 function renderCamposVariantesPerfume(f) {
-  return ['5ml', '10ml'].map(tam => {
+  return TAMANOS_PERFUME.map(tam => {
     const v = f.variantes[tam];
+    const esFrasco = tam === 'Frasco completo';
     return `
       <div class="campo" style="border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:12px; margin-top:4px">
-        <div style="font-weight:700; color:#a855f7; margin-bottom:10px">🧴 Presentación ${tam}</div>
+        <div style="font-weight:700; color:#a855f7; margin-bottom:10px">${esFrasco ? '🍾' : '🧴'} ${esFrasco ? 'Frasco completo' : `Presentación ${tam}`}</div>
 
-        <div class="campo-label"><label>Precio cliente ($)</label></div>
+        <div class="campo-label"><label>Precio cliente ($)</label>${esFrasco ? '<span class="hint">Déjalo en 0 si no vendes el frasco completo</span>' : ''}</div>
         <input class="input" type="number" inputmode="decimal" value="${esc(v.precioVenta)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioVenta', this.value)" />
       </div>
     `;
