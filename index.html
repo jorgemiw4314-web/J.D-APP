@@ -1234,6 +1234,31 @@ function calcularFlujoTiendaMensual() {
   return meses;
 }
 
+// Mismo flujo de dinero (cobrado / reinvertido / ganancia) pero separado por
+// categoría, para ver cómo le fue a Perfumes y a Productos por separado.
+function calcularFlujoPorCategoria(mesKey) {
+  const ventasMes = state.ventas.filter(v => v.mes === mesKey);
+  const categoriaDe = {};
+  state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
+
+  const base = () => ({ cobrado: 0, ganancia: 0 });
+  const totales = { perfumes: base(), general: base() };
+
+  ventasMes.forEach(v => {
+    const cat = categoriaDe[v.productoId] || 'general';
+    totales[cat].cobrado += v.total;
+    totales[cat].ganancia += v.ganancia;
+  });
+
+  const redondear = (t) => ({
+    cobrado: Math.round(t.cobrado * 100) / 100,
+    ganancia: Math.round(t.ganancia * 100) / 100,
+    costo: Math.round((t.cobrado - t.ganancia) * 100) / 100
+  });
+
+  return { perfumes: redondear(totales.perfumes), general: redondear(totales.general) };
+}
+
 // Ranking de perfumes por piezas vendidas (todas las presentaciones juntas)
 // del mes en curso — se reinicia solo cada mes porque solo cuenta las ventas de ese mes.
 function calcularRankingPerfumes(mesKey) {
@@ -2254,6 +2279,7 @@ function renderDashboard() {
   const flujoTienda = calcularFlujoTiendaMensual();
   const flujoMesActual = flujoTienda[flujoTienda.length - 1];
   const hayFlujoTienda = flujoTienda.some(m => m.cobrado > 0);
+  const flujoCategorias = calcularFlujoPorCategoria(mesK);
 
   // Ranking de perfumes por piezas vendidas (este mes)
   const rankingPerfumes = calcularRankingPerfumes(mesK);
@@ -2321,6 +2347,10 @@ function renderDashboard() {
         </div>
       </div>
       ${renderBarChart(flujoTienda.slice(-6))}
+      <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px">
+        ${renderFlujoCategoria('🌸 Perfumes', '#a855f7', flujoCategorias.perfumes)}
+        ${renderFlujoCategoria('📦 Productos', '#f59e0b', flujoCategorias.general)}
+      </div>
       `}
     </div>
 
@@ -2450,6 +2480,36 @@ function renderLineChart(datos) {
       ${labelsX}
     </svg>
   </div>`;
+}
+
+// Muestra el mini-desglose de una categoría (Perfumes o Productos) dentro
+// de la tarjeta de Flujo de dinero: cobrado, reinvertido y ganancia neta.
+function renderFlujoCategoria(nombre, color, datos) {
+  if (datos.cobrado === 0 && datos.ganancia === 0) {
+    return `
+      <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px">
+        <div style="font-weight:700; color:${color}; margin-bottom:4px">${nombre}</div>
+        <div class="vacio" style="padding:4px 0">Sin ventas este mes</div>
+      </div>
+    `;
+  }
+  return `
+    <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px">
+      <div style="font-weight:700; color:${color}; margin-bottom:8px">${nombre}</div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px">
+        <span style="color:#94a3b8">Cobrado</span>
+        <span class="mono">${fmt(datos.cobrado)}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px">
+        <span style="color:#94a3b8">Reinvertido</span>
+        <span class="mono">${fmt(datos.costo)}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:13px">
+        <span style="color:#94a3b8">Ganancia neta</span>
+        <span class="mono" style="color:#10b981; font-weight:700">${fmt(datos.ganancia)}</span>
+      </div>
+    </div>
+  `;
 }
 
 function renderBarChart(datos) {
