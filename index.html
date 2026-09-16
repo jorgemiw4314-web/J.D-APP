@@ -398,7 +398,7 @@ let state = {
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
-  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false },
+  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false },
   productoExpandido: {},
   ventasProductoExpandido: {},
   editandoPrecio: null,
@@ -2385,9 +2385,12 @@ function renderDashboard() {
     </div>
 
     <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#94a3b8">💾</span> Respaldo de datos</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:8px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
-      <p style="font-size:12px; font-weight:700; margin-bottom:12px; color:${(() => { const d = diasDesdeUltimoRespaldo(); return d !== null && d < DIAS_AVISO_RESPALDO ? '#10b981' : '#fbbf24'; })()}">
+      <div class="dashboard-title" data-action="toggleExp" data-key="respaldoInfo" style="cursor:pointer; display:flex; align-items:center; gap:6px">
+        <span style="color:#94a3b8">💾</span> Respaldo de datos
+        <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.respaldoInfo ? '▼' : '▶'}</span>
+      </div>
+      ${state.expandido.respaldoInfo ? `<p style="font-size:12px; color:#94a3b8; margin-bottom:8px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>` : ''}
+      <p style="font-size:12px; font-weight:700; margin-bottom:12px; margin-top:${state.expandido.respaldoInfo ? '0' : '8px'}; color:${(() => { const d = diasDesdeUltimoRespaldo(); return d !== null && d < DIAS_AVISO_RESPALDO ? '#10b981' : '#fbbf24'; })()}">
         ${(() => { const d = diasDesdeUltimoRespaldo(); return d === null ? '⚠️ Nunca has hecho un respaldo' : `Último respaldo: hace ${d} día(s)`; })()}
       </p>
       <div style="display:flex; gap:8px">
@@ -2399,10 +2402,13 @@ function renderDashboard() {
     </div>
 
     <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#f59e0b">🔔</span> Notificaciones</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
+      <div class="dashboard-title" data-action="toggleExp" data-key="notifInfo" style="cursor:pointer; display:flex; align-items:center; gap:6px">
+        <span style="color:#f59e0b">🔔</span> Notificaciones
+        <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.notifInfo ? '▼' : '▶'}</span>
+      </div>
+      ${state.expandido.notifInfo ? `<p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
         Te avisa cuando falten 3 días o menos para que venza una membresía mensual, para que le marques al cliente a tiempo. Funciona mientras tengas la app abierta o recién en segundo plano — en teléfonos Huawei sin Google Play puede no llegar si la app lleva mucho tiempo cerrada, así que ábrela seguido.
-      </p>
+      </p>` : '<div style="margin-top:8px"></div>'}
       <button class="tipo-btn" style="width:100%" onclick="activarNotificaciones()">
         ${(typeof Notification !== 'undefined' && Notification.permission === 'granted') ? '🔔 Notificaciones activadas ✅' : '🔔 Activar notificaciones'}
       </button>
