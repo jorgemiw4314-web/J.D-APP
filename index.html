@@ -398,7 +398,7 @@ let state = {
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
-  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false },
+  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false, usuariosInfo: false },
   productoExpandido: {},
   ventasProductoExpandido: {},
   editandoPrecio: null,
@@ -2389,8 +2389,9 @@ function renderDashboard() {
         <span style="color:#94a3b8">💾</span> Respaldo de datos
         <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.respaldoInfo ? '▼' : '▶'}</span>
       </div>
-      ${state.expandido.respaldoInfo ? `<p style="font-size:12px; color:#94a3b8; margin-bottom:8px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>` : ''}
-      <p style="font-size:12px; font-weight:700; margin-bottom:12px; margin-top:${state.expandido.respaldoInfo ? '0' : '8px'}; color:${(() => { const d = diasDesdeUltimoRespaldo(); return d !== null && d < DIAS_AVISO_RESPALDO ? '#10b981' : '#fbbf24'; })()}">
+      ${state.expandido.respaldoInfo ? `
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:8px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
+      <p style="font-size:12px; font-weight:700; margin-bottom:12px; color:${(() => { const d = diasDesdeUltimoRespaldo(); return d !== null && d < DIAS_AVISO_RESPALDO ? '#10b981' : '#fbbf24'; })()}">
         ${(() => { const d = diasDesdeUltimoRespaldo(); return d === null ? '⚠️ Nunca has hecho un respaldo' : `Último respaldo: hace ${d} día(s)`; })()}
       </p>
       <div style="display:flex; gap:8px">
@@ -2399,6 +2400,7 @@ function renderDashboard() {
       </div>
       <button class="tipo-btn" style="width:100%; margin-top:8px" onclick="verRespaldoTexto()">📋 Ver como texto (si lo de arriba no funciona)</button>
       <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
+      ` : ''}
     </div>
 
     <div class="dashboard-card">
@@ -2406,16 +2408,22 @@ function renderDashboard() {
         <span style="color:#f59e0b">🔔</span> Notificaciones
         <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.notifInfo ? '▼' : '▶'}</span>
       </div>
-      ${state.expandido.notifInfo ? `<p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
+      ${state.expandido.notifInfo ? `
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
         Te avisa cuando falten 3 días o menos para que venza una membresía mensual, para que le marques al cliente a tiempo. Funciona mientras tengas la app abierta o recién en segundo plano — en teléfonos Huawei sin Google Play puede no llegar si la app lleva mucho tiempo cerrada, así que ábrela seguido.
-      </p>` : '<div style="margin-top:8px"></div>'}
+      </p>
       <button class="tipo-btn" style="width:100%" onclick="activarNotificaciones()">
         ${(typeof Notification !== 'undefined' && Notification.permission === 'granted') ? '🔔 Notificaciones activadas ✅' : '🔔 Activar notificaciones'}
       </button>
+      ` : ''}
     </div>
 
     <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#a78bfa">👤</span> Usuarios</div>
+      <div class="dashboard-title" data-action="toggleExp" data-key="usuariosInfo" style="cursor:pointer; display:flex; align-items:center; gap:6px">
+        <span style="color:#a78bfa">👤</span> Usuarios
+        <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.usuariosInfo ? '▼' : '▶'}</span>
+      </div>
+      ${state.expandido.usuariosInfo ? `
       <p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
         Tu Vendedor entra con solo tocar "Soy Vendedor" (sin PIN) y ve la pestaña "Cobros" — solo lo que hay que cobrar a cada cliente, sin ganancias ni costos. El PIN de aquí es el que te pedirá a ti para entrar como Admin en cualquier teléfono.
       </p>
@@ -2423,6 +2431,7 @@ function renderDashboard() {
         <button class="tipo-btn" style="flex:1" onclick="cambiarPinAdmin()">🔑 Cambiar PIN de Admin</button>
         <button class="tipo-btn" style="flex:1" onclick="cerrarSesion()">🚪 Cerrar sesión</button>
       </div>
+      ` : ''}
     </div>
     <div style="height:120px"></div>
   </div>`;
