@@ -1184,11 +1184,13 @@ function calcularDatosMensuales() {
 // Ventas de la tienda (productos + perfumes) día por día, del mes en curso.
 // Se incluyen TODOS los días del mes (aunque no hayan tenido ventas) para
 // que el rango de fechas en la gráfica se vea correcto.
-function calcularVentasPorDia() {
+function calcularVentasPorDia(soloCategoria) {
   const hoy = new Date();
   const anio = hoy.getFullYear(), mes = hoy.getMonth();
   const ultimoDia = new Date(anio, mes + 1, 0).getDate();
   const mesK = claveMes(hoy);
+  const categoriaDe = {};
+  if (soloCategoria) state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
   const porDia = {};
   for (let d = 1; d <= ultimoDia; d++) {
     const key = `${anio}-${String(mes+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
@@ -1196,6 +1198,7 @@ function calcularVentasPorDia() {
   }
   state.ventas.forEach(v => {
     if (v.mes !== mesK) return;
+    if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return;
     const dt = new Date(v.fecha);
     const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
     if (porDia[key]) {
@@ -1264,10 +1267,14 @@ function calcularFlujoPorCategoria(mesKey) {
 function calcularRankingPerfumes(mesKey) {
   const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
   const ranking = perfumes.map(p => {
-    const piezas = state.ventas
-      .filter(v => v.productoId === p.id && v.mes === mesKey)
-      .reduce((s, v) => s + v.cantidad, 0);
-    return { id: p.id, nombre: p.nombre, piezas };
+    const ventasMes = state.ventas.filter(v => v.productoId === p.id && v.mes === mesKey);
+    const piezas = ventasMes.reduce((s, v) => s + v.cantidad, 0);
+    const porTamano = {};
+    ventasMes.forEach(v => {
+      const tam = v.tamano || 'Único';
+      porTamano[tam] = (porTamano[tam] || 0) + v.cantidad;
+    });
+    return { id: p.id, nombre: p.nombre, piezas, porTamano };
   });
   ranking.sort((a, b) => b.piezas - a.piezas);
   return ranking;
@@ -1409,7 +1416,7 @@ async function intentarLogin(rol) {
   if (rol === 'vendedor') {
     state.rol = 'vendedor';
     try { localStorage.setItem('sesion-rol', 'vendedor'); } catch(e) {}
-    state.vista = 'cobros';
+    state.vista = 'tienda';
     render();
     return;
   }
@@ -1520,8 +1527,8 @@ function render() {
   }
 
   if (state.rol === 'vendedor') {
-    if (state.vista !== 'cobros' && state.vista !== 'tienda') state.vista = 'cobros';
-    const vista = state.vista === 'tienda' ? renderTienda() : renderCobros();
+    state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
+    const vista = renderTienda();
     app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner();
     bindEvents();
     return;
@@ -1555,9 +1562,6 @@ function renderHeader() {
 
 function renderNavRecepcion() {
   return `<div class="nav-bottom">
-    <button class="nav-btn ${state.vista === 'cobros' ? 'activo' : ''}" data-action="setVista" data-vista="cobros">
-      <span class="icon">🧾</span> Cobros
-    </button>
     <button class="nav-btn ${state.vista === 'tienda' ? 'activo' : ''}" data-action="setVista" data-vista="tienda">
       <span class="icon">🛒</span> Productos
     </button>
@@ -2275,6 +2279,11 @@ function renderDashboard() {
   const totalPiezasMes = ventasPorDia.reduce((s, d) => s + d.piezas, 0);
   const mejorDia = ventasPorDia.reduce((max, d) => d.piezas > (max?.piezas || 0) ? d : max, null);
 
+  // Lo mismo pero solo contando perfumes, para ver qué día se vendió más de perfumes
+  const ventasPorDiaPerfumes = calcularVentasPorDia('perfumes');
+  const totalPiezasPerfumesMes = ventasPorDiaPerfumes.reduce((s, d) => s + d.piezas, 0);
+  const mejorDiaPerfumes = ventasPorDiaPerfumes.reduce((max, d) => d.piezas > (max?.piezas || 0) ? d : max, null);
+
   // Flujo de dinero de la tienda (productos + perfumes), mes por mes
   const flujoTienda = calcularFlujoTiendaMensual();
   const flujoMesActual = flujoTienda[flujoTienda.length - 1];
@@ -2330,6 +2339,18 @@ function renderDashboard() {
     </div>
 
     <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a855f7">🌸</span> Ventas por día — Perfumes (este mes)</div>
+      ${totalPiezasPerfumesMes === 0 ? '<div class="vacio">Aún no hay ventas de perfumes este mes</div>' : `
+      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(168,85,247,0.13), rgba(168,85,247,0.03)); border-color: rgba(168,85,247,0.25)">
+        <div class="resumen-label" style="color:#a855f7">Mejor día</div>
+        <div class="resumen-value">${mejorDiaPerfumes.piezas} pza(s)</div>
+        <div class="resumen-sub">${formatearFechaCorta(mejorDiaPerfumes.fecha)} · ${fmt(mejorDiaPerfumes.vendido)}</div>
+      </div>
+      ${renderBarChartDias(ventasPorDiaPerfumes, '#a855f7')}
+      `}
+    </div>
+
+    <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#ec4899">💸</span> Flujo de dinero — Tienda (perfumes y productos)</div>
       ${!hayFlujoTienda ? '<div class="vacio">Aún no hay ventas de tienda</div>' : `
       <div class="resumen" style="padding:0; margin-bottom:14px">
@@ -2365,6 +2386,7 @@ function renderDashboard() {
           <div class="servicio-bar-bg">
             <div class="servicio-bar-fill" style="width: ${(r.piezas/maxPiezasPerfume)*100}%; background: linear-gradient(90deg, #a855f780, #a855f7)"></div>
           </div>
+          ${r.piezas > 0 ? `<div style="font-size:11px; color:#64748b; margin-top:4px">${Object.entries(r.porTamano).map(([tam, cant]) => `${esc(tam)}: ${cant}`).join(' · ')}</div>` : ''}
         </div>
       `).join('')}
     </div>
@@ -2568,7 +2590,8 @@ function renderBarChart(datos) {
 
 // Gráfica de piezas vendidas por día (mes en curso). El día con más piezas
 // se resalta en un color distinto para identificarlo de un vistazo.
-function renderBarChartDias(datos) {
+function renderBarChartDias(datos, color) {
+  color = color || '#f59e0b';
   const W = 320, H = 170, padL = 26, padR = 8, padT = 10, padB = 20;
   const cw = W - padL - padR, ch = H - padT - padB;
   const maxV = Math.max(...datos.map(d => d.piezas), 1);
@@ -2590,7 +2613,7 @@ function renderBarChartDias(datos) {
     const h = (d.piezas / maxV) * ch;
     const diaNum = Number(d.fecha.split('-')[2]);
     const esMejor = d.piezas > 0 && d.piezas === maxPiezas;
-    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? '#f59e0b' : '#f59e0b60'}" rx="2"/>`;
+    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2"/>`;
     if (diaNum === 1 || diaNum % 5 === 0 || i === datos.length - 1) {
       labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle">${diaNum}</text>`;
     }
