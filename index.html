@@ -398,7 +398,7 @@ let state = {
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
-  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false, usuariosInfo: false },
+  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false, usuariosInfo: false, productosArchivados: false },
   productoExpandido: {},
   ventasProductoExpandido: {},
   editandoPrecio: null,
@@ -719,6 +719,7 @@ function guardarProducto() {
       categoria: 'perfumes',
       variantes,
       cicloInicio: (existente && existente.cicloInicio) || creado,
+      archivado: existente ? !!existente.archivado : false,
       creado
     };
   } else {
@@ -730,6 +731,7 @@ function guardarProducto() {
       stock: Math.max(0, parseInt(state.formProducto.stock) || 0),
       codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
       categoria: 'general',
+      archivado: existente ? !!existente.archivado : false,
       creado
     };
   }
@@ -750,6 +752,17 @@ function eliminarProducto(id) {
   render();
 }
 
+// Archivar oculta el producto de la lista activa SIN borrar nada — el
+// historial de ventas y las ganancias pasadas se quedan intactas en el
+// Dashboard. Sirve para productos que ya no se van a reponer.
+function toggleArchivadoProducto(id) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === id);
+  if (!p) return;
+  p.archivado = !p.archivado;
+  guardarLocal();
+  render();
+}
 // Reinicia manualmente el ciclo de recuperación de costo de un perfume
 // (por ejemplo, cuando compras un frasco nuevo). No borra ventas ni
 // historial, solo cambia desde cuándo se cuentan las piezas y el dinero
@@ -1930,7 +1943,8 @@ function renderClienteRow(servicioKey, c, color) {
 
 function renderTienda() {
   const esAdmin = state.rol === 'admin';
-  const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes');
+  const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes' && !p.archivado);
+  const productosArchivados = state.productos.filter(p => p.categoria !== 'perfumes' && p.archivado);
   const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
   let html = '<div class="fade-in">';
 
@@ -2015,6 +2029,16 @@ function renderTienda() {
         <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
           + Agregar producto
         </button>
+        ${productosArchivados.length > 0 ? `
+        <div data-action="toggleExp" data-key="productosArchivados" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:10px; color:#64748b; font-size:12px">
+          <span>${state.expandido.productosArchivados ? '▼' : '▶'}</span>
+          <span>🗄️ Archivados (${productosArchivados.length})</span>
+        </div>
+        ${state.expandido.productosArchivados ? `
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; opacity:0.7">
+          ${productosArchivados.map(p => renderProductoRow(p)).join('')}
+        </div>` : ''}
+        ` : ''}
       </div>
     </div>`;
   }
@@ -2029,13 +2053,14 @@ function renderProductoRow(p) {
   const gananciaPza = p.precioVenta - p.precioCosto;
   const sinStock = p.stock <= 0;
   const esAdmin = state.rol === 'admin';
+  const archivado = !!p.archivado;
   const ventasProducto = [...state.ventas].filter(v => v.productoId === p.id).sort((a,b) => b.fecha - a.fecha);
   const ventasAbiertas = !!state.ventasProductoExpandido[p.id];
   return `
-    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:8px">
+    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:8px; ${archivado ? 'opacity:0.7' : ''}">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
-          <div class="nombre">${esc(p.nombre)}</div>
+          <div class="nombre">${esc(p.nombre)}${archivado ? ' <span style="color:#64748b; font-size:11px; font-weight:700">· ARCHIVADO</span>' : ''}</div>
           <div class="cliente-tags">
             <span class="tag" style="background:${sinStock ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sinStock ? '#ef4444' : '#f59e0b'}">Stock: ${p.stock}</span>
             ${esAdmin ? `<span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>` : ''}
@@ -2043,9 +2068,10 @@ function renderProductoRow(p) {
           <div class="cliente-notas">${esAdmin ? `Costo ${fmt(p.precioCosto)} · ` : ''}Venta ${fmt(p.precioVenta)}${p.codigo ? ` · Cód: ${esc(p.codigo)}` : ''}</div>
         </div>
         <div class="cliente-acciones" style="flex-direction:row">
-          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock ? 'disabled' : ''}>🛒</button>
+          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock || archivado ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock || archivado ? 'disabled' : ''}>🛒</button>
           ${esAdmin ? `
           <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
+          <button class="icon-btn" style="background:${archivado ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.15)'}; color:${archivado ? '#10b981' : '#64748b'}" data-action="toggleArchivadoProducto" data-pid="${p.id}" title="${archivado ? 'Restaurar' : 'Archivar'}">${archivado ? '↩️' : '🗄️'}</button>
           <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>` : ''}
         </div>
       </div>
@@ -2899,6 +2925,10 @@ function handleClick(e) {
     case 'eliminarProducto':
       e.stopPropagation();
       eliminarProducto(d.pid);
+      break;
+    case 'toggleArchivadoProducto':
+      e.stopPropagation();
+      toggleArchivadoProducto(d.pid);
       break;
     case 'reiniciarFrascoPerfume':
       e.stopPropagation();
