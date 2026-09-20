@@ -411,7 +411,8 @@ let state = {
   },
   modalVenta: null,
   formVenta: { cantidad: '' },
-  scanner: null
+  scanner: null,
+  modalVentasSemana: false
 };
 
 let videoStreamActivo = null;
@@ -899,6 +900,22 @@ function calcularVentasPerfumesRango(desde, hasta) {
     }
   });
   return { vendido: Math.round(vendido*100)/100, piezas };
+}
+// Lista (no solo el total) de las ventas de perfumes dentro de un rango de
+// fechas, más recientes primero — usada para el detalle de "Vendido esta semana".
+function listarVentasPerfumesRango(desde, hasta) {
+  const idsPerfumes = new Set(state.productos.filter(p => p.categoria === 'perfumes').map(p => p.id));
+  return state.ventas
+    .filter(v => v.fecha >= desde && v.fecha <= hasta && idsPerfumes.has(v.productoId))
+    .sort((a, b) => b.fecha - a.fecha);
+}
+function abrirModalVentasSemana() {
+  state.modalVentasSemana = true;
+  render();
+}
+function cerrarModalVentasSemana() {
+  state.modalVentasSemana = false;
+  render();
 }
 
 // ============== ESCÁNER DE CÓDIGO DE BARRAS ==============
@@ -1582,7 +1599,7 @@ function render() {
   if (state.rol === 'vendedor') {
     state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
     const vista = renderTienda();
-    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana();
     bindEvents();
     return;
   }
@@ -1950,10 +1967,10 @@ function renderTienda() {
           <div class="resumen-value">${fmt(hoy.vendido)}</div>
           <div class="resumen-sub">${hoy.piezas} pza(s)</div>
         </div>
-        <div class="resumen-card">
+        <div class="resumen-card" data-action="abrirModalVentasSemana" style="cursor:pointer">
           <div class="resumen-label" style="color:#a855f7">Vendido esta semana</div>
           <div class="resumen-value">${fmt(semana.vendido)}</div>
-          <div class="resumen-sub">${semana.piezas} pza(s)</div>
+          <div class="resumen-sub">${semana.piezas} pza(s) · toca para ver detalle</div>
         </div>
       </div>
     `;
@@ -2324,6 +2341,28 @@ function renderModalVenta() {
       <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || (!sinLimite && cant > info.stock) ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}" data-tam="${tamano || ''}">
         ✓ Confirmar venta
       </button>
+    </div>
+  </div>`;
+}
+
+// Detalle de "Vendido esta semana": lista cada venta de perfumes de la
+// semana en curso (lunes a hoy), para que el Vendedor tenga el control
+// exacto de qué se vendió, no solo el total.
+function renderModalVentasSemana() {
+  if (!state.modalVentasSemana) return '';
+  const ventas = listarVentasPerfumesRango(inicioDeSemana(), Date.now());
+  const totalVendido = ventas.reduce((s, v) => s + v.total, 0);
+  const totalPiezas = ventas.reduce((s, v) => s + v.cantidad, 0);
+  return `<div class="modal-overlay" data-action="cerrarModalVentasSemana">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Ventas de esta semana</h3>
+        <button class="close-btn" data-action="cerrarModalVentasSemana">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#a855f7">${totalPiezas} pza(s) · ${fmt(totalVendido)} en total</div>
+      ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas de perfumes esta semana</div>' :
+        ventas.map(v => renderVentaRow(v)).join('')
+      }
     </div>
   </div>`;
 }
@@ -2875,6 +2914,10 @@ function handleClick(e) {
       break;
     case 'cerrarModalVenta':
       if (e.target === e.currentTarget) cerrarModalVenta();
+      break;
+    case 'abrirModalVentasSemana': abrirModalVentasSemana(); break;
+    case 'cerrarModalVentasSemana':
+      if (e.target === e.currentTarget) cerrarModalVentasSemana();
       break;
     case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
