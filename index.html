@@ -1310,16 +1310,25 @@ function calcularFlujoTiendaMensual() {
 // categoría, para ver cómo le fue a Perfumes y a Productos por separado.
 function calcularFlujoPorCategoria(mesKey) {
   const ventasMes = state.ventas.filter(v => v.mes === mesKey);
-  const categoriaDe = {};
-  state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
+  const productosPorId = {};
+  state.productos.forEach(p => { productosPorId[p.id] = p; });
 
-  const base = () => ({ cobrado: 0, ganancia: 0 });
-  const totales = { perfumes: base(), general: base() };
+  const perfumesTot = { cobrado: 0, ganancia: 0 };
+  const generalesPorId = {}; // cada producto general por separado, para no revolverlos
 
   ventasMes.forEach(v => {
-    const cat = categoriaDe[v.productoId] || 'general';
-    totales[cat].cobrado += v.total;
-    totales[cat].ganancia += v.ganancia;
+    const p = productosPorId[v.productoId];
+    const esPerfume = p ? p.categoria === 'perfumes' : false;
+    if (esPerfume) {
+      perfumesTot.cobrado += v.total;
+      perfumesTot.ganancia += v.ganancia;
+    } else {
+      const id = v.productoId || 'sin_id';
+      const nombre = p ? p.nombre : 'Producto eliminado';
+      if (!generalesPorId[id]) generalesPorId[id] = { nombre, cobrado: 0, ganancia: 0 };
+      generalesPorId[id].cobrado += v.total;
+      generalesPorId[id].ganancia += v.ganancia;
+    }
   });
 
   const redondear = (t) => ({
@@ -1328,7 +1337,11 @@ function calcularFlujoPorCategoria(mesKey) {
     costo: Math.round((t.cobrado - t.ganancia) * 100) / 100
   });
 
-  return { perfumes: redondear(totales.perfumes), general: redondear(totales.general) };
+  const generales = Object.values(generalesPorId)
+    .map(t => ({ nombre: t.nombre, ...redondear(t) }))
+    .sort((a, b) => b.cobrado - a.cobrado);
+
+  return { perfumes: redondear(perfumesTot), generales };
 }
 
 // Ranking de perfumes por piezas vendidas (todas las presentaciones juntas)
@@ -2537,7 +2550,10 @@ function renderDashboard() {
       ${renderBarChart(flujoTienda.slice(-6))}
       <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px">
         ${renderFlujoCategoria('🌸 Perfumes', '#a855f7', flujoCategorias.perfumes)}
-        ${renderFlujoCategoria('📦 Productos', '#f59e0b', flujoCategorias.general)}
+        ${flujoCategorias.generales.length === 0
+          ? renderFlujoCategoria('📦 Productos', '#f59e0b', { cobrado: 0, ganancia: 0, costo: 0 })
+          : flujoCategorias.generales.map(g => renderFlujoCategoria(`📦 ${esc(g.nombre)}`, '#f59e0b', g)).join('')
+        }
       </div>
       `}
     </div>
