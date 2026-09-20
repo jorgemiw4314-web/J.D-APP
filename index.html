@@ -394,7 +394,7 @@ let state = {
   pagosMes: {},
   productos: [],
   ventas: [],
-  config: { pinAdmin: '1234' },
+  config: { pinAdmin: '1234', cajaCambio: 0 },
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
@@ -648,7 +648,7 @@ function calcularCicloPerfume(p) {
 // de esta venta (lo que falte por recuperar no cuenta como ganancia).
 function calcularVentaPerfume(p, tamano, cantidad) {
   const v = (p.variantes || []).find(vv => vv.tamano === tamano);
-  if (!v) return null;
+  if (!v || v.agotado) return null; // no se puede vender una presentación agotada
   const total = Math.round(v.precioVenta * cantidad * 100) / 100;
   const { ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
@@ -698,11 +698,16 @@ function guardarProducto() {
   const creado = existente ? existente.creado : Date.now();
   let nuevo;
   if (esPerfume) {
+    // Conservamos el estado "agotado" de cada presentación si ya existía
+    // (ese campo se cambia con su propio botón, no desde este formulario).
+    const variantesExistentes = existente && Array.isArray(existente.variantes) ? existente.variantes : [];
     const variantes = TAMANOS_PERFUME.map(tam => {
       const v = state.formProducto.variantes[tam];
+      const vExistente = variantesExistentes.find(vv => vv.tamano === tam);
       return {
         tamano: tam,
-        precioVenta: parseFloat(v.precioVenta) || 0
+        precioVenta: parseFloat(v.precioVenta) || 0,
+        agotado: vExistente ? !!vExistente.agotado : false
       };
     });
     nuevo = {
@@ -869,6 +874,33 @@ function calcularTotalesTienda() {
   return { ganancia: Math.round(ganancia*100)/100, vendido: Math.round(vendido*100)/100, piezas };
 }
 
+function inicioDeHoy() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+function inicioDeSemana() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  const dia = d.getDay(); // 0=domingo, 1=lunes, ... 6=sábado
+  const diasDesdeLunes = dia === 0 ? 6 : dia - 1;
+  d.setDate(d.getDate() - diasDesdeLunes);
+  return d.getTime();
+}
+// Ventas SOLO de perfumes dentro de un rango de fechas — usado para el
+// resumen del Vendedor (hoy / esta semana), ya que él no ve productos generales.
+function calcularVentasPerfumesRango(desde, hasta) {
+  const idsPerfumes = new Set(state.productos.filter(p => p.categoria === 'perfumes').map(p => p.id));
+  let vendido = 0, piezas = 0;
+  state.ventas.forEach(v => {
+    if (v.fecha >= desde && v.fecha <= hasta && idsPerfumes.has(v.productoId)) {
+      vendido += v.total;
+      piezas += v.cantidad;
+    }
+  });
+  return { vendido: Math.round(vendido*100)/100, piezas };
+}
+
 // ============== ESCÁNER DE CÓDIGO DE BARRAS ==============
 function abrirScannerVenta() {
   if (scannerAutoCierreTimeout) { clearTimeout(scannerAutoCierreTimeout); scannerAutoCierreTimeout = null; }
@@ -974,8 +1006,15 @@ function procesarCodigoDetectado(codigo) {
   if (esPerfumeConVariantes) {
     // Un solo código para el perfume: pedimos que elija la presentación,
     // mostrando de una vez el precio de cada una. El "Frasco completo" solo
-    // aparece como opción si le pusiste un precio (si no, no se ofrece).
-    const variantesDisponibles = p.variantes.filter(v => v.tamano !== 'Frasco completo' || v.precioVenta > 0);
+    // aparece como opción si le pusiste un precio (si no, no se ofrece), y
+    // las presentaciones marcadas como agotadas tampoco se ofrecen.
+    const variantesDisponibles = p.variantes.filter(v => (v.tamano !== 'Frasco completo' || v.precioVenta > 0) && !v.agotado);
+
+    if (variantesDisponibles.length === 0) {
+      if (statusEl) { statusEl.textContent = `⚠️ ${p.nombre} está agotado en todas sus presentaciones`; statusEl.style.color = '#ef4444'; }
+      return;
+    }
+
     scannerPendiente = { productoId: p.id, eligiendoTamano: true };
     if (statusEl) { statusEl.textContent = '¿Qué presentación vendiste?'; statusEl.style.color = '#06b6d4'; }
     if (confirmarEl) {
@@ -1459,6 +1498,20 @@ function cambiarPinAdmin() {
   alert('✅ PIN actualizado.');
 }
 
+// El admin registra cuánto dinero dejó en caja para que el Vendedor pueda dar
+// cambio; el Vendedor solo lo ve, no lo puede modificar.
+function actualizarCajaCambio() {
+  if (state.rol !== 'admin') return;
+  const actual = state.config.cajaCambio || 0;
+  const nuevo = prompt('¿Cuánto dejaste en caja para dar cambio?', actual);
+  if (nuevo === null) return;
+  const valor = parseFloat(nuevo);
+  if (isNaN(valor) || valor < 0) { alert('Escribe un número válido.'); return; }
+  state.config.cajaCambio = Math.round(valor * 100) / 100;
+  guardarLocal();
+  render();
+}
+
 function renderLogin() {
   return `
     <div class="fade-in" style="min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; gap:14px; background:#0a0e1a">
@@ -1859,29 +1912,61 @@ function renderClienteRow(servicioKey, c, color) {
 }
 
 function renderTienda() {
-  const t = calcularTotalesTienda();
   const esAdmin = state.rol === 'admin';
   const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes');
   const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
   let html = '<div class="fade-in">';
+
+  if (esAdmin) {
+    const t = calcularTotalesTienda();
+    html += `
+      <div class="resumen">
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
+          <div class="resumen-value">${fmt(t.vendido)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#f59e0b">Piezas vendidas</div>
+          <div class="resumen-value">${t.piezas}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#a78bfa">Productos</div>
+          <div class="resumen-value">${state.productos.length}</div>
+        </div>
+      </div>
+    `;
+  } else {
+    // El Vendedor solo ve perfumes: su corte es de hoy y de la semana, no del mes.
+    const hoy = calcularVentasPerfumesRango(inicioDeHoy(), Date.now());
+    const semana = calcularVentasPerfumesRango(inicioDeSemana(), Date.now());
+    html += `
+      <div class="resumen">
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#06b6d4">Vendido hoy</div>
+          <div class="resumen-value">${fmt(hoy.vendido)}</div>
+          <div class="resumen-sub">${hoy.piezas} pza(s)</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#a855f7">Vendido esta semana</div>
+          <div class="resumen-value">${fmt(semana.vendido)}</div>
+          <div class="resumen-sub">${semana.piezas} pza(s)</div>
+        </div>
+      </div>
+    `;
+  }
+
   html += `
-    <div class="resumen">
-      ${esAdmin ? `
-      <div class="resumen-card destacado">
-        <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
-        <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
-      </div>` : ''}
-      <div class="resumen-card ${esAdmin ? '' : 'destacado'}">
-        <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
-        <div class="resumen-value">${fmt(t.vendido)}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#f59e0b">Piezas vendidas</div>
-        <div class="resumen-value">${t.piezas}</div>
-      </div>
-      <div class="resumen-card">
-        <div class="resumen-label" style="color:#a78bfa">Productos</div>
-        <div class="resumen-value">${state.productos.length}</div>
+    <div style="padding: 0 20px 4px">
+      <div class="cliente card" style="justify-content:space-between; align-items:center; ${esAdmin ? 'cursor:pointer' : ''}" ${esAdmin ? 'onclick="actualizarCajaCambio()"' : ''}>
+        <div class="cliente-info">
+          <div class="nombre">💵 Caja para cambio</div>
+          <div class="cliente-notas">${esAdmin ? 'Toca para actualizar' : 'Dinero disponible para dar cambio'}</div>
+        </div>
+        <div class="monto mono" style="color:#10b981; font-size:20px">${fmt(state.config.cajaCambio || 0)}</div>
       </div>
     </div>
   `;
@@ -1895,26 +1980,27 @@ function renderTienda() {
   `;
 
   html += '<div class="secciones">';
-  html += `<div class="seccion">
-    <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
-      <div class="seccion-top">
-        <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
-        <div class="seccion-info">
-          <h2>Productos</h2>
-          <p>${productosGenerales.length} producto(s) en catálogo</p>
+  if (esAdmin) {
+    html += `<div class="seccion">
+      <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
+        <div class="seccion-top">
+          <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
+          <div class="seccion-info">
+            <h2>Productos</h2>
+            <p>${productosGenerales.length} producto(s) en catálogo</p>
+          </div>
         </div>
       </div>
-    </div>
-    <div class="seccion-body">
-      ${productosGenerales.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
-        productosGenerales.map(p => renderProductoRow(p)).join('')
-      }
-      ${esAdmin ? `
-      <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
-        + Agregar producto
-      </button>` : ''}
-    </div>
-  </div>`;
+      <div class="seccion-body">
+        ${productosGenerales.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
+          productosGenerales.map(p => renderProductoRow(p)).join('')
+        }
+        <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
+          + Agregar producto
+        </button>
+      </div>
+    </div>`;
+  }
   html += renderSeccionPerfumes(perfumes, esAdmin);
   html += '</div>';
 
@@ -2042,18 +2128,21 @@ function renderPerfumeExpandido(p) {
 }
 
 function renderVarianteRow(p, v) {
+  const esAdmin = state.rol === 'admin';
+  const agotado = !!v.agotado;
   const key = p.id + ':' + v.tamano;
   const ventasVariante = [...state.ventas].filter(vv => vv.productoId === p.id && (vv.tamano || null) === (v.tamano === 'Único' ? null : v.tamano)).sort((a,b) => b.fecha - a.fecha);
   const ventasAbiertas = !!state.ventasProductoExpandido[key];
   return `
-    <div style="border-top:1px solid rgba(148,163,184,0.12); padding-top:10px">
+    <div style="border-top:1px solid rgba(148,163,184,0.12); padding-top:10px; ${agotado ? 'opacity:0.55' : ''}">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
-          <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}</div>
+          <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}${agotado ? ' <span style="color:#ef4444; font-size:11px; font-weight:700">· AGOTADO</span>' : ''}</div>
           <div class="cliente-notas">Venta ${fmt(v.precioVenta)}</div>
         </div>
         <div class="cliente-acciones" style="flex-direction:row">
-          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}">🛒</button>
+          ${esAdmin ? `<button class="icon-btn" style="background:${agotado ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'}; color:${agotado ? '#10b981' : '#ef4444'}" data-action="toggleAgotadoVariante" data-pid="${p.id}" data-tam="${v.tamano}" title="${agotado ? 'Marcar disponible' : 'Marcar agotado'}">${agotado ? '✅' : '🚫'}</button>` : ''}
+          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${agotado ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}" ${agotado ? 'disabled' : ''}>🛒</button>
         </div>
       </div>
       <div data-action="toggleVentasProducto" data-pid="${key}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:8px; color:#64748b; font-size:12px">
@@ -2068,6 +2157,19 @@ function renderVarianteRow(p, v) {
       </div>` : ''}
     </div>
   `;
+}
+
+// El admin marca/desmarca una presentación como agotada (sin borrar el
+// perfume ni su historial); mientras esté agotada, no se puede vender.
+function toggleAgotadoVariante(productoId, tamano) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === productoId);
+  if (!p || !Array.isArray(p.variantes)) return;
+  const v = p.variantes.find(vv => vv.tamano === tamano);
+  if (!v) return;
+  v.agotado = !v.agotado;
+  guardarLocal();
+  render();
 }
 
 function renderVentaRow(v) {
@@ -2762,6 +2864,10 @@ function handleClick(e) {
     case 'reiniciarFrascoPerfume':
       e.stopPropagation();
       reiniciarFrascoPerfume(d.pid);
+      break;
+    case 'toggleAgotadoVariante':
+      e.stopPropagation();
+      toggleAgotadoVariante(d.pid, d.tam);
       break;
     case 'abrirModalVenta':
       e.stopPropagation();
