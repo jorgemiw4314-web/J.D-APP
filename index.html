@@ -1344,6 +1344,26 @@ function calcularFlujoPorCategoria(mesKey) {
   return { perfumes: redondear(perfumesTot), generales };
 }
 
+// Capital total invertido en perfumes (todos los frascos activos juntos),
+// cuánto se ha recuperado hasta ahora, y cuánto falta — sin importar el mes,
+// para ver el panorama completo de la inversión en perfumes.
+function calcularCapitalPerfumes() {
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes' && !p.archivado);
+  let invertido = 0, recuperado = 0;
+  perfumes.forEach(p => {
+    const costo = p.precioCosto || 0;
+    invertido += costo;
+    const { ingresoAcumulado } = calcularCicloPerfume(p);
+    recuperado += Math.min(ingresoAcumulado, costo);
+  });
+  const faltante = Math.max(0, invertido - recuperado);
+  return {
+    invertido: Math.round(invertido * 100) / 100,
+    recuperado: Math.round(recuperado * 100) / 100,
+    faltante: Math.round(faltante * 100) / 100
+  };
+}
+
 // Ranking de perfumes por piezas vendidas (todas las presentaciones juntas)
 // del mes en curso — se reinicia solo cada mes porque solo cuenta las ventas de ese mes.
 function calcularRankingPerfumes(mesKey) {
@@ -2469,6 +2489,7 @@ function renderDashboard() {
   const flujoMesActual = flujoTienda[flujoTienda.length - 1];
   const hayFlujoTienda = flujoTienda.some(m => m.cobrado > 0);
   const flujoCategorias = calcularFlujoPorCategoria(mesK);
+  const capitalPerfumes = calcularCapitalPerfumes();
 
   // Ranking de perfumes por piezas vendidas (este mes)
   const rankingPerfumes = calcularRankingPerfumes(mesK);
@@ -2527,6 +2548,26 @@ function renderDashboard() {
         <div class="resumen-sub">${formatearFechaCorta(mejorDiaPerfumes.fecha)} · ${fmt(mejorDiaPerfumes.vendido)}</div>
       </div>
       ${renderBarChartDias(ventasPorDiaPerfumes, '#a855f7')}
+      `}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a855f7">🌸</span> Capital invertido en perfumes</div>
+      ${capitalPerfumes.invertido === 0 ? '<div class="vacio">Aún no tienes perfumes con costo registrado</div>' : `
+      <div class="resumen" style="padding:0">
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#94a3b8">Invertido (frascos)</div>
+          <div class="resumen-value">${fmt(capitalPerfumes.invertido)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#10b981">Recuperado</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(capitalPerfumes.recuperado)}</div>
+        </div>
+        <div class="resumen-card destacado" style="grid-column: span 2">
+          <div class="resumen-label" style="color:#fbbf24">Falta por recuperar</div>
+          <div class="resumen-value" style="color:#fbbf24">${fmt(capitalPerfumes.faltante)}</div>
+        </div>
+      </div>
       `}
     </div>
 
