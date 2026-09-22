@@ -2251,12 +2251,13 @@ function toggleAgotadoVariante(productoId, tamano) {
 function renderVentaRow(v) {
   const p = state.productos.find(pp => pp.id === v.productoId);
   const fechaStr = new Date(v.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+  const horaStr = new Date(v.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const esAdmin = state.rol === 'admin';
   return `
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
         <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}${v.tamano ? ` (${esc(v.tamano)})` : ''}</div>
-        <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr}</div>
+        <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr} · ${horaStr}</div>
       </div>
       <div class="cliente-pago">
         <div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>
