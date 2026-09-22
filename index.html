@@ -412,7 +412,8 @@ let state = {
   modalVenta: null,
   formVenta: { cantidad: '' },
   scanner: null,
-  modalVentasSemana: false
+  modalVentasSemana: false,
+  modalVentasDia: null
 };
 
 let videoStreamActivo = null;
@@ -928,6 +929,31 @@ function abrirModalVentasSemana() {
 }
 function cerrarModalVentasSemana() {
   state.modalVentasSemana = false;
+  render();
+}
+
+// Detalle de "Mejor día" en el Dashboard del admin: lista lo que se vendió
+// en un día específico (todo o solo perfumes, según de dónde se haya tocado).
+function listarVentasDia(fechaKey, soloCategoria) {
+  const categoriaDe = {};
+  if (soloCategoria) state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
+  return state.ventas
+    .filter(v => {
+      const dt = new Date(v.fecha);
+      const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      if (key !== fechaKey) return false;
+      if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return false;
+      return true;
+    })
+    .sort((a, b) => b.fecha - a.fecha);
+}
+function abrirModalVentasDia(fechaKey, soloCategoria) {
+  if (state.rol !== 'admin') return;
+  state.modalVentasDia = { fecha: fechaKey, categoria: soloCategoria || null };
+  render();
+}
+function cerrarModalVentasDia() {
+  state.modalVentasDia = null;
   render();
 }
 
@@ -1655,7 +1681,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia();
   bindEvents();
 }
 
@@ -2427,6 +2453,30 @@ function renderModalVentasSemana() {
   </div>`;
 }
 
+// Detalle del "Mejor día" (o cualquier día) que toca el admin desde el
+// Dashboard: qué se vendió exactamente ese día.
+function renderModalVentasDia() {
+  if (!state.modalVentasDia) return '';
+  const { fecha, categoria } = state.modalVentasDia;
+  const ventas = listarVentasDia(fecha, categoria);
+  const totalVendido = ventas.reduce((s, v) => s + v.total, 0);
+  const totalGanancia = ventas.reduce((s, v) => s + v.ganancia, 0);
+  const totalPiezas = ventas.reduce((s, v) => s + v.cantidad, 0);
+  const color = categoria === 'perfumes' ? '#a855f7' : '#f59e0b';
+  return `<div class="modal-overlay" data-action="cerrarModalVentasDia">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Ventas del ${formatearFechaCorta(fecha)}${categoria === 'perfumes' ? ' (perfumes)' : ''}</h3>
+        <button class="close-btn" data-action="cerrarModalVentasDia">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:${color}">${totalPiezas} pza(s) · ${fmt(totalVendido)} cobrado · +${fmt(totalGanancia)} ganancia</div>
+      ${ventas.length === 0 ? '<div class="vacio">No hay ventas registradas ese día</div>' :
+        ventas.map(v => renderVentaRow(v)).join('')
+      }
+    </div>
+  </div>`;
+}
+
 function renderModalScanner() {
   if (!state.scanner) return '';
   const esVenta = state.scanner.modo === 'venta';
@@ -2531,10 +2581,11 @@ function renderDashboard() {
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#f59e0b">🗓️</span> Ventas por día (tienda, este mes)</div>
       ${totalPiezasMes === 0 ? '<div class="vacio">Aún no hay ventas de tienda este mes</div>' : `
-      <div class="resumen-card destacado" style="margin-bottom:14px">
+      <div class="resumen-card destacado" style="margin-bottom:14px; cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${mejorDia.fecha}">
         <div class="resumen-label" style="color:#f59e0b">Mejor día</div>
         <div class="resumen-value">${mejorDia.piezas} pza(s)</div>
-        <div class="resumen-sub">${formatearFechaCorta(mejorDia.fecha)} · ${fmt(mejorDia.vendido)}</div>
+        <div class="resumen-sub">${formatearFechaCorta(mejorDia.fecha)} · ${fmt(mejorDia.vendido)} · +${fmt(mejorDia.ganancia)} ganancia</div>
+        <div class="resumen-sub" style="color:#f59e0b">toca para ver el detalle</div>
       </div>
       ${renderBarChartDias(ventasPorDia)}
       `}
@@ -2543,12 +2594,13 @@ function renderDashboard() {
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#a855f7">🌸</span> Ventas por día — Perfumes (este mes)</div>
       ${totalPiezasPerfumesMes === 0 ? '<div class="vacio">Aún no hay ventas de perfumes este mes</div>' : `
-      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(168,85,247,0.13), rgba(168,85,247,0.03)); border-color: rgba(168,85,247,0.25)">
+      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(168,85,247,0.13), rgba(168,85,247,0.03)); border-color: rgba(168,85,247,0.25); cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${mejorDiaPerfumes.fecha}" data-categoria="perfumes">
         <div class="resumen-label" style="color:#a855f7">Mejor día</div>
         <div class="resumen-value">${mejorDiaPerfumes.piezas} pza(s)</div>
-        <div class="resumen-sub">${formatearFechaCorta(mejorDiaPerfumes.fecha)} · ${fmt(mejorDiaPerfumes.vendido)}</div>
+        <div class="resumen-sub">${formatearFechaCorta(mejorDiaPerfumes.fecha)} · ${fmt(mejorDiaPerfumes.vendido)} · +${fmt(mejorDiaPerfumes.ganancia)} ganancia</div>
+        <div class="resumen-sub" style="color:#a855f7">toca para ver el detalle</div>
       </div>
-      ${renderBarChartDias(ventasPorDiaPerfumes, '#a855f7')}
+      ${renderBarChartDias(ventasPorDiaPerfumes, '#a855f7', 'perfumes')}
       `}
     </div>
 
@@ -2815,7 +2867,7 @@ function renderBarChart(datos) {
 
 // Gráfica de piezas vendidas por día (mes en curso). El día con más piezas
 // se resalta en un color distinto para identificarlo de un vistazo.
-function renderBarChartDias(datos, color) {
+function renderBarChartDias(datos, color, categoria) {
   color = color || '#f59e0b';
   const W = 320, H = 170, padL = 26, padR = 8, padT = 10, padB = 20;
   const cw = W - padL - padR, ch = H - padT - padB;
@@ -2832,15 +2884,18 @@ function renderBarChartDias(datos, color) {
     grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="8" text-anchor="end" font-family="JetBrains Mono">${Math.round(val)}</text>`;
   }
 
-  let bars = '', labelsX = '';
+  let bars = '', labelsX = '', hitareas = '';
   datos.forEach((d, i) => {
     const gx = padL + i * groupW + (groupW - barW) / 2;
     const h = (d.piezas / maxV) * ch;
     const diaNum = Number(d.fecha.split('-')[2]);
     const esMejor = d.piezas > 0 && d.piezas === maxPiezas;
-    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2"/>`;
+    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2" style="pointer-events:none"/>`;
+    // Zona invisible más ancha que la barra, para poder tocar cualquier día
+    // (incluidos los que tienen 0 ventas, para que quede claro que no hubo nada).
+    hitareas += `<rect x="${padL + i*groupW}" y="${padT}" width="${groupW}" height="${ch}" fill="transparent" style="cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${d.fecha}" ${categoria ? `data-categoria="${categoria}"` : ''}/>`;
     if (diaNum === 1 || diaNum % 5 === 0 || i === datos.length - 1) {
-      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle">${diaNum}</text>`;
+      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle" style="pointer-events:none">${diaNum}</text>`;
     }
   });
 
@@ -2848,6 +2903,7 @@ function renderBarChartDias(datos, color) {
     <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       ${grid}
       ${bars}
+      ${hitareas}
       ${labelsX}
     </svg>
   </div>`;
@@ -3006,6 +3062,10 @@ function handleClick(e) {
     case 'abrirModalVentasSemana': abrirModalVentasSemana(); break;
     case 'cerrarModalVentasSemana':
       if (e.target === e.currentTarget) cerrarModalVentasSemana();
+      break;
+    case 'abrirModalVentasDia': abrirModalVentasDia(d.fecha, d.categoria || null); break;
+    case 'cerrarModalVentasDia':
+      if (e.target === e.currentTarget) cerrarModalVentasDia();
       break;
     case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
