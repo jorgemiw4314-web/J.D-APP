@@ -2526,14 +2526,15 @@ function renderDashboard() {
   const maxAbs = Math.max(...porServicio.map(p => Math.abs(p.ganancia)), 1);
 
   // Ventas de la tienda día por día (mes en curso)
+  const hoyKey = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}-${String(h.getDate()).padStart(2,'0')}`; })();
   const ventasPorDia = calcularVentasPorDia();
   const totalPiezasMes = ventasPorDia.reduce((s, d) => s + d.piezas, 0);
-  const mejorDia = ventasPorDia.reduce((max, d) => d.piezas > (max?.piezas || 0) ? d : max, null);
+  const ventasHoy = ventasPorDia.find(d => d.fecha === hoyKey) || { fecha: hoyKey, piezas: 0, vendido: 0, ganancia: 0 };
 
   // Lo mismo pero solo contando perfumes, para ver qué día se vendió más de perfumes
   const ventasPorDiaPerfumes = calcularVentasPorDia('perfumes');
   const totalPiezasPerfumesMes = ventasPorDiaPerfumes.reduce((s, d) => s + d.piezas, 0);
-  const mejorDiaPerfumes = ventasPorDiaPerfumes.reduce((max, d) => d.piezas > (max?.piezas || 0) ? d : max, null);
+  const ventasHoyPerfumes = ventasPorDiaPerfumes.find(d => d.fecha === hoyKey) || { fecha: hoyKey, piezas: 0, vendido: 0, ganancia: 0 };
 
   // Flujo de dinero de la tienda (productos + perfumes), mes por mes
   const flujoTienda = calcularFlujoTiendaMensual();
@@ -2581,10 +2582,10 @@ function renderDashboard() {
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#f59e0b">🗓️</span> Ventas por día (tienda, este mes)</div>
       ${totalPiezasMes === 0 ? '<div class="vacio">Aún no hay ventas de tienda este mes</div>' : `
-      <div class="resumen-card destacado" style="margin-bottom:14px; cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${mejorDia.fecha}">
-        <div class="resumen-label" style="color:#f59e0b">Mejor día</div>
-        <div class="resumen-value">${mejorDia.piezas} pza(s)</div>
-        <div class="resumen-sub">${formatearFechaCorta(mejorDia.fecha)} · ${fmt(mejorDia.vendido)} · +${fmt(mejorDia.ganancia)} ganancia</div>
+      <div class="resumen-card destacado" style="margin-bottom:14px; cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${ventasHoy.fecha}">
+        <div class="resumen-label" style="color:#f59e0b">Hoy</div>
+        <div class="resumen-value">${ventasHoy.piezas} pza(s)</div>
+        <div class="resumen-sub">${fmt(ventasHoy.vendido)} · +${fmt(ventasHoy.ganancia)} ganancia</div>
         <div class="resumen-sub" style="color:#f59e0b">toca para ver el detalle</div>
       </div>
       ${renderBarChartDias(ventasPorDia)}
@@ -2594,10 +2595,10 @@ function renderDashboard() {
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#a855f7">🌸</span> Ventas por día — Perfumes (este mes)</div>
       ${totalPiezasPerfumesMes === 0 ? '<div class="vacio">Aún no hay ventas de perfumes este mes</div>' : `
-      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(168,85,247,0.13), rgba(168,85,247,0.03)); border-color: rgba(168,85,247,0.25); cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${mejorDiaPerfumes.fecha}" data-categoria="perfumes">
-        <div class="resumen-label" style="color:#a855f7">Mejor día</div>
-        <div class="resumen-value">${mejorDiaPerfumes.piezas} pza(s)</div>
-        <div class="resumen-sub">${formatearFechaCorta(mejorDiaPerfumes.fecha)} · ${fmt(mejorDiaPerfumes.vendido)} · +${fmt(mejorDiaPerfumes.ganancia)} ganancia</div>
+      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(168,85,247,0.13), rgba(168,85,247,0.03)); border-color: rgba(168,85,247,0.25); cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${ventasHoyPerfumes.fecha}" data-categoria="perfumes">
+        <div class="resumen-label" style="color:#a855f7">Hoy</div>
+        <div class="resumen-value">${ventasHoyPerfumes.piezas} pza(s)</div>
+        <div class="resumen-sub">${fmt(ventasHoyPerfumes.vendido)} · +${fmt(ventasHoyPerfumes.ganancia)} ganancia</div>
         <div class="resumen-sub" style="color:#a855f7">toca para ver el detalle</div>
       </div>
       ${renderBarChartDias(ventasPorDiaPerfumes, '#a855f7', 'perfumes')}
