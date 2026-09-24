@@ -592,6 +592,7 @@ function guardarCliente() {
   if (state.rol !== 'admin') return;
   if (!state.formCliente.nombre.trim()) return;
   const { servicio, clienteId } = state.modal;
+  const existente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
   const nuevo = {
     id: clienteId || ('c_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
     nombre: state.formCliente.nombre.trim(),
@@ -600,7 +601,8 @@ function guardarCliente() {
     notas: state.formCliente.notas.trim(),
     diaPago: state.formCliente.diaPago ? Math.min(31, Math.max(1, parseInt(state.formCliente.diaPago) || 1)) : null,
     ultimoPago: state.formCliente.ultimoPago || null,
-    creado: clienteId ? state.data[servicio].clientes.find(c=>c.id===clienteId).creado : Date.now()
+    archivado: existente ? !!existente.archivado : false,
+    creado: existente ? existente.creado : Date.now()
   };
   if (clienteId) {
     state.data[servicio].clientes = state.data[servicio].clientes.map(c => c.id === clienteId ? nuevo : c);
@@ -613,7 +615,7 @@ function guardarCliente() {
 
 function eliminarCliente(servicio, id) {
   if (state.rol !== 'admin') return;
-  if (!confirm('¿Eliminar este cliente? También se borrará su historial de pagos.')) return;
+  if (!confirm('¿Eliminar este cliente PARA SIEMPRE? También se borrará su historial de pagos.\n\nSi solo canceló su membresía y quieres conservar su historial, mejor usa "Archivar" en vez de esto.')) return;
   state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
   // BUG FIX: antes los registros de pago (pagosMes) de un cliente eliminado se quedaban
   // huérfanos para siempre en localStorage, inflando los datos guardados y descuadrando
@@ -622,6 +624,19 @@ function eliminarCliente(servicio, id) {
   Object.keys(state.pagosMes).forEach(mes => {
     if (state.pagosMes[mes] && clave in state.pagosMes[mes]) delete state.pagosMes[mes][clave];
   });
+  guardarLocal();
+  render();
+}
+
+// Archivar oculta al cliente de la lista activa (ya no se le pide pago ni
+// sale en "por vencer") SIN borrar nada — su historial de pagos pasados se
+// queda intacto para las estadísticas históricas del Dashboard. Es lo que
+// usas cuando un cliente cancela su membresía.
+function toggleArchivadoCliente(servicio, id) {
+  if (state.rol !== 'admin') return;
+  const c = state.data[servicio].clientes.find(cc => cc.id === id);
+  if (!c) return;
+  c.archivado = !c.archivado;
   guardarLocal();
   render();
 }
@@ -1243,6 +1258,7 @@ function calcularTotalesMes() {
   Object.entries(state.data).forEach(([sk, s]) => {
     let huboPagos = false;
     s.clientes.forEach(c => {
+      if (c.archivado) return; // ya canceló, no cuenta para el mes en curso
       if (c.tipoPago === 'mensual') mensual += c.pago;
       if (estaPagado(sk, c.id)) { cobrado += c.pago; huboPagos = true; }
     });
@@ -1548,6 +1564,7 @@ function calcularVencimientos() {
   const lista = [];
   Object.entries(state.data).forEach(([sk, s]) => {
     s.clientes.forEach(c => {
+      if (c.archivado) return; // ya canceló, no se le recuerda nada
       if (c.tipoPago !== 'mensual' || (!c.diaPago && !c.ultimoPago)) return;
       if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
       const info = calcularEstadoVencimiento(c);
@@ -1832,11 +1849,14 @@ function renderInicio() {
 
 function renderSeccion(key, info) {
   const s = state.data[key];
-  const cobrado = s.clientes.reduce((sum, c) => sum + (estaPagado(key, c.id) ? c.pago : 0), 0);
+  const clientesActivos = s.clientes.filter(c => !c.archivado);
+  const clientesArchivados = s.clientes.filter(c => c.archivado);
+  const cobrado = clientesActivos.reduce((sum, c) => sum + (estaPagado(key, c.id) ? c.pago : 0), 0);
   const ganancia = cobrado - s.precioReal;
-  const pagados = s.clientes.filter(c => estaPagado(key, c.id)).length;
+  const pagados = clientesActivos.filter(c => estaPagado(key, c.id)).length;
   const editando = state.editandoPrecio === key;
   const expandido = state.expandido[key];
+  const archivadosKey = 'archivados_' + key;
 
   let html = `<div class="seccion">
     <div class="seccion-header" style="background: linear-gradient(135deg, ${info.color}15, ${info.color}05); ${expandido ? `border-bottom: 1px solid ${info.color}20;` : ''}">
@@ -1845,7 +1865,7 @@ function renderSeccion(key, info) {
         <div class="seccion-icon" style="background: ${info.gradient}">${info.icon}</div>
         <div class="seccion-info">
           <h2>${info.nombre}</h2>
-          <p>${pagados}/${s.clientes.length} pagaron</p>
+          <p>${pagados}/${clientesActivos.length} pagaron</p>
         </div>
         <div class="seccion-ganancia">
           <div class="label">Ganancia</div>
@@ -1869,12 +1889,22 @@ function renderSeccion(key, info) {
     </div>
     ${expandido ? `
       <div class="seccion-body">
-        ${s.clientes.length === 0 ? `<div class="vacio">Sin clientes en ${info.nombre}</div>` :
-          s.clientes.map(c => renderClienteRow(key, c, info.color)).join('')
+        ${clientesActivos.length === 0 ? `<div class="vacio">Sin clientes en ${info.nombre}</div>` :
+          clientesActivos.map(c => renderClienteRow(key, c, info.color)).join('')
         }
         <button class="add-cliente-btn" style="background: ${info.color}15; color: ${info.color}; border: 1px dashed ${info.color}40" data-action="abrirModal" data-servicio="${key}">
           + Agregar cliente
         </button>
+        ${clientesArchivados.length > 0 ? `
+        <div data-action="toggleExp" data-key="${archivadosKey}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:10px; color:#64748b; font-size:12px">
+          <span>${state.expandido[archivadosKey] ? '▼' : '▶'}</span>
+          <span>🗄️ Archivados (${clientesArchivados.length})</span>
+        </div>
+        ${state.expandido[archivadosKey] ? `
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; opacity:0.7">
+          ${clientesArchivados.map(c => renderClienteRow(key, c, info.color)).join('')}
+        </div>` : ''}
+        ` : ''}
       </div>
     ` : ''}
   </div>`;
@@ -1995,17 +2025,18 @@ function calcularEstadoVencimiento(c) {
 
 function renderClienteRow(servicioKey, c, color) {
   const pagado = estaPagado(servicioKey, c.id);
-  const vencInfo = (c.tipoPago === 'mensual' && (c.diaPago || c.ultimoPago)) ? calcularEstadoVencimiento(c) : null;
+  const archivado = !!c.archivado;
+  const vencInfo = (!archivado && c.tipoPago === 'mensual' && (c.diaPago || c.ultimoPago)) ? calcularEstadoVencimiento(c) : null;
   return `
-    <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''}">
-      <button class="check-btn" data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
+    <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''} ${archivado ? 'opacity:0.6' : ''}">
+      <button class="check-btn" ${archivado ? 'disabled' : ''} data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
         ${pagado ? `<span style="color:${color}">✅</span>` : '<span style="color:#475569">⭕</span>'}
       </button>
       <div class="cliente-info">
-        <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}</div>
+        <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}${archivado ? ' <span style="color:#64748b; font-size:11px; font-weight:700">· ARCHIVADO</span>' : ''}</div>
         <div class="cliente-tags">
           <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
-          ${c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
+          ${!archivado && c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
           ${vencInfo ? `<span class="tag" style="background:${vencInfo.color}20; color:${vencInfo.color}">${vencInfo.texto}</span>` : ''}
           ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
         </div>
@@ -2016,6 +2047,7 @@ function renderClienteRow(servicioKey, c, color) {
       ${state.rol === 'admin' ? `
       <div class="cliente-acciones">
         <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
+        <button class="icon-btn" style="background:${archivado ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.15)'}; color:${archivado ? '#10b981' : '#64748b'}" data-action="toggleArchivadoCliente" data-servicio="${servicioKey}" data-cid="${c.id}" title="${archivado ? 'Restaurar' : 'Archivar (canceló)'}">${archivado ? '↩️' : '🗄️'}</button>
         <button class="icon-btn delete" data-action="eliminarCliente" data-servicio="${servicioKey}" data-cid="${c.id}">🗑</button>
       </div>` : ''}
     </div>
@@ -3099,6 +3131,10 @@ function handleClick(e) {
     case 'eliminarCliente':
       e.stopPropagation();
       eliminarCliente(d.servicio, d.cid);
+      break;
+    case 'toggleArchivadoCliente':
+      e.stopPropagation();
+      toggleArchivadoCliente(d.servicio, d.cid);
       break;
     case 'abrirModalProducto':
       e.stopPropagation();
