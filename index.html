@@ -1440,7 +1440,13 @@ function calcularRankingPerfumes(mesKey) {
       const tam = v.tamano || 'Único';
       porTamano[tam] = (porTamano[tam] || 0) + v.cantidad;
     });
-    return { id: p.id, nombre: p.nombre, piezas, porTamano };
+    // Cuánto lleva recuperado del costo del frasco actual (no solo este mes,
+    // desde que empezó el ciclo/frasco), para saber si ya dio ganancia o no.
+    const { ingresoAcumulado } = calcularCicloPerfume(p);
+    const costo = p.precioCosto || 0;
+    const faltante = Math.max(0, Math.round((costo - ingresoAcumulado) * 100) / 100);
+    const gananciaFrasco = Math.max(0, Math.round((ingresoAcumulado - costo) * 100) / 100);
+    return { id: p.id, nombre: p.nombre, piezas, porTamano, faltante, gananciaFrasco };
   });
   ranking.sort((a, b) => b.piezas - a.piezas);
   return ranking;
@@ -2743,6 +2749,9 @@ function renderDashboard() {
             <div class="servicio-bar-fill" style="width: ${(r.piezas/maxPiezasPerfume)*100}%; background: linear-gradient(90deg, #a855f780, #a855f7)"></div>
           </div>
           ${r.piezas > 0 ? `<div style="font-size:11px; color:#64748b; margin-top:4px">${Object.entries(r.porTamano).map(([tam, cant]) => `${esc(tam)}: ${cant}`).join(' · ')}</div>` : ''}
+          <div style="font-size:11px; margin-top:2px; color:${r.faltante > 0 ? '#fbbf24' : '#10b981'}">
+            ${r.faltante > 0 ? `Faltan ${fmt(r.faltante)} por recuperar` : `✅ Costo recuperado · Ganancia: +${fmt(r.gananciaFrasco)}`}
+          </div>
         </div>
       `).join('')}
     </div>
