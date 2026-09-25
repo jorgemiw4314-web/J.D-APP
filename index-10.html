@@ -1,0 +1,3265 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#10b981">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="J.D Ventas">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<title>J.D Ventas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+<script type="module">
+  // Conexión a Firebase / Firestore: guarda una copia de los datos en la nube
+  // para que no se pierdan si el teléfono borra el almacenamiento local.
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js";
+  import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyC69lkoZW-dfD_W55T54hMMJRwhXmCAjpo",
+    authDomain: "jdventas-a6afa.firebaseapp.com",
+    projectId: "jdventas-a6afa",
+    storageBucket: "jdventas-a6afa.firebasestorage.app",
+    messagingSenderId: "924830739264",
+    appId: "1:924830739264:web:e1980ec2a8e2484075a8a5"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const refDatos = doc(db, 'jdventas', 'principal');
+
+  // Estas funciones quedan colgadas de "window" para que el resto de la app
+  // (que es un script normal, no un módulo) las pueda usar.
+  window.nubeGuardar = async function(datos) {
+    try {
+      // merge:true es importante: así este guardado normal (datos de la app)
+      // nunca borra el campo fcmTokens que se guarda aparte (ver abajo).
+      await setDoc(refDatos, { ...datos, actualizado: Date.now() }, { merge: true });
+      return true;
+    } catch (e) {
+      console.error('Error guardando en la nube:', e);
+      return false;
+    }
+  };
+
+  window.nubeLeer = async function() {
+    try {
+      const snap = await getDoc(refDatos);
+      return snap.exists() ? snap.data() : null;
+    } catch (e) {
+      console.error('Error leyendo de la nube:', e);
+      return null;
+    }
+  };
+
+  // Guarda el "token" de este dispositivo/navegador para notificaciones push,
+  // sin tocar el resto de los datos guardados (merge:true + arrayUnion evita
+  // duplicados si el mismo dispositivo se registra varias veces).
+  window.nubeGuardarToken = async function(token) {
+    try {
+      await setDoc(refDatos, { fcmTokens: arrayUnion(token) }, { merge: true });
+      return true;
+    } catch (e) {
+      console.error('Error guardando token de notificaciones:', e);
+      return false;
+    }
+  };
+
+  // Pide (o refresca) el token de notificaciones push de este navegador y lo
+  // guarda en Firestore. Requiere que el Service Worker ya esté registrado.
+  window.nubeActivarPush = async function(vapidKey) {
+    try {
+      if (!('serviceWorker' in navigator)) return null;
+      const reg = await navigator.serviceWorker.ready;
+      const messaging = getMessaging(app);
+      const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: reg });
+      if (token) {
+        await window.nubeGuardarToken(token);
+        return token;
+      }
+      return null;
+    } catch (e) {
+      console.error('Error activando notificaciones push:', e);
+      return null;
+    }
+  };
+
+  window.nubeListo = true;
+  window.dispatchEvent(new Event('nube-lista'));
+</script>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    background: linear-gradient(180deg, #0a0e1a 0%, #0f1729 100%);
+    color: #e4e7eb;
+    min-height: 100vh;
+    padding-bottom: 240px;
+    overflow-x: hidden;
+  }
+  input, button, select, textarea { font-family: inherit; }
+  input:focus, textarea:focus { outline: none; border-color: #10b981 !important; }
+  button { cursor: pointer; transition: transform 0.1s; }
+  button:active { transform: scale(0.97); }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .card { animation: slideUp 0.3s ease-out; }
+  .fade-in { animation: fadeIn 0.3s ease-out; }
+
+  /* Header */
+  .header {
+    padding: 24px 20px 16px;
+    background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(6,182,212,0.04) 100%);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .header-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 12px;
+    background: linear-gradient(135deg, #10b981, #06b6d4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 800; color: white;
+  }
+  .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+  .header p { font-size: 12px; color: #94a3b8; }
+
+  /* Selector mes */
+  .meses-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 4px 0; margin-right: -20px; padding-right: 20px; }
+  .meses-scroll::-webkit-scrollbar { display: none; }
+  .mes-btn {
+    padding: 8px 14px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 20px;
+    color: #94a3b8; font-size: 13px; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .mes-btn.activo { background: rgba(16,185,129,0.2); border-color: #10b981; color: #10b981; }
+
+  /* Pagos por vencer */
+  .venc-card {
+    margin: 16px 20px 0;
+    background: rgba(239,68,68,0.06);
+    border: 1px solid rgba(239,68,68,0.2);
+    border-radius: 14px; padding: 12px 14px;
+  }
+  .venc-title { font-size: 13px; font-weight: 700; color: #f87171; margin-bottom: 8px; }
+  .venc-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 6px; border-radius: 10px;
+  }
+  .venc-row:not(:last-child) { border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .venc-info { flex: 1; min-width: 0; }
+  .venc-info .nombre { font-size: 13px; font-weight: 600; color: #e4e7eb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .venc-info .tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+  .venc-dias { font-size: 12px; font-weight: 700; color: #fbbf24; flex-shrink: 0; }
+  .venc-dias.vencido { color: #ef4444; }
+
+  /* Aviso de respaldo atrasado */
+  .respaldo-alert {
+    margin: 16px 20px 0;
+    background: rgba(6,182,212,0.08);
+    border: 1px solid rgba(6,182,212,0.25);
+    border-radius: 14px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .respaldo-alert .texto { flex: 1; font-size: 13px; font-weight: 600; color: #67e8f9; }
+  .respaldo-alert button {
+    background: #06b6d4; color: #04222a; border: none; border-radius: 10px;
+    padding: 8px 12px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  }
+
+  /* Resumen */
+  .resumen { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .resumen-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; padding: 12px 14px;
+  }
+  .resumen-card.destacado { background: linear-gradient(135deg, rgba(16,185,129,0.13), rgba(16,185,129,0.03)); border-color: rgba(16,185,129,0.25); }
+  .resumen-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .resumen-value { font-size: 17px; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: #e4e7eb; }
+  .resumen-sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+
+  /* Secciones */
+  .secciones { padding: 0 16px; display: flex; flex-direction: column; gap: 12px; }
+  .seccion {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 18px; overflow: hidden;
+  }
+  .seccion-header { padding: 16px; }
+  .seccion-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .chevron-btn { background: transparent; border: none; color: #94a3b8; padding: 0; display: flex; }
+  .seccion-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .seccion-info { flex: 1; }
+  .seccion-info h2 { font-size: 17px; font-weight: 700; }
+  .seccion-info p { font-size: 12px; color: #94a3b8; }
+  .seccion-ganancia { text-align: right; }
+  .seccion-ganancia .label { font-size: 10px; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+  .seccion-ganancia .value { font-size: 16px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+
+  .precio-real-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; background: rgba(0,0,0,0.25); border-radius: 10px;
+  }
+  .precio-real-row .label { font-size: 12px; color: #94a3b8; font-weight: 600; }
+  .precio-real-row button { background: transparent; border: none; color: #e4e7eb; display: flex; align-items: center; gap: 6px; }
+  .precio-real-row .monto { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+  .precio-input {
+    width: 100px; padding: 6px 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px; color: #e4e7eb;
+    font-size: 14px; font-family: 'JetBrains Mono', monospace;
+    text-align: right;
+  }
+  .save-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; color: white; }
+
+  .seccion-body { padding: 12px; }
+  .vacio { text-align: center; padding: 20px; color: #64748b; font-size: 13px; }
+
+  /* Cliente row */
+  .cliente {
+    display: flex; align-items: center; gap: 10px; padding: 12px;
+    background: rgba(255,255,255,0.02); border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.04);
+    margin-bottom: 8px;
+    transition: all 0.2s;
+  }
+  .check-btn { background: transparent; border: none; padding: 0; flex-shrink: 0; font-size: 24px; }
+  .cliente-info { flex: 1; min-width: 0; }
+  .cliente-info .nombre { font-size: 14px; font-weight: 600; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cliente-tags { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .tag-mensual { background: rgba(6,182,212,0.15); color: #06b6d4; }
+  .tag-unico { background: rgba(167,139,250,0.15); color: #a78bfa; }
+  .tag-venc { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .cliente-notas { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cliente-pago { text-align: right; flex-shrink: 0; }
+  .cliente-pago .monto { font-size: 15px; font-weight: 700; font-family: 'JetBrains Mono', monospace; color: #f1f5f9; }
+  .cliente-acciones { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: none; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .icon-btn.edit { background: rgba(255,255,255,0.04); color: #94a3b8; }
+  .icon-btn.delete { background: rgba(239,68,68,0.08); color: #ef4444; }
+
+  .add-cliente-btn {
+    width: 100%; padding: 16px;
+    border-radius: 10px;
+    font-weight: 600; font-size: 15px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    position: relative; z-index: 10;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 200; display: flex; align-items: flex-end;
+    backdrop-filter: blur(8px);
+  }
+  .modal {
+    background: #0f1729; width: 100%;
+    border-radius: 24px 24px 0 0; padding: 24px 20px;
+    max-height: 90vh; overflow-y: auto;
+    border: 1px solid rgba(255,255,255,0.08);
+    animation: slideUp 0.3s ease-out;
+  }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .modal-header h3 { font-size: 20px; font-weight: 700; }
+  .modal-subtitle { font-size: 13px; font-weight: 600; margin-bottom: 20px; }
+  .close-btn {
+    background: rgba(255,255,255,0.05); border: none;
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #94a3b8; font-size: 18px;
+  }
+  .campo { margin-bottom: 16px; }
+  .campo-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .campo-label label { font-size: 13px; font-weight: 600; color: #cbd5e1; }
+  .campo-label .hint { font-size: 11px; color: #64748b; }
+  .required { color: #10b981; }
+  .input {
+    width: 100%; padding: 14px 16px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; color: #e4e7eb;
+    font-size: 15px;
+  }
+  .tipo-pago-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tipo-btn {
+    padding: 12px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+    color: #94a3b8; font-weight: 600; font-size: 14px;
+  }
+  .tipo-btn.activo { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
+  .guardar-btn {
+    width: 100%; padding: 16px; border: none; border-radius: 14px;
+    font-size: 16px; font-weight: 700; color: white;
+    margin-top: 8px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: linear-gradient(135deg, #10b981, #059669);
+  }
+  .guardar-btn:disabled { background: rgba(255,255,255,0.05); cursor: not-allowed; }
+
+  /* Bottom Nav */
+  .nav-bottom {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(10,14,26,0.95);
+    backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 12px 20px 20px;
+    display: flex; gap: 8px; z-index: 50;
+  }
+  .nav-btn {
+    flex: 1; padding: 10px; background: transparent;
+    border: none; border-radius: 12px; color: #64748b;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600;
+  }
+  .nav-btn.activo { background: rgba(16,185,129,0.15); color: #10b981; }
+  .nav-btn .icon { font-size: 20px; }
+
+  /* Dashboard */
+  .dashboard-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; padding: 16px;
+    margin-bottom: 16px;
+  }
+  .dashboard-title { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 15px; font-weight: 700; }
+
+  /* Charts */
+  .chart-container { width: 100%; }
+  .chart-svg { width: 100%; display: block; }
+
+  .servicio-bar { margin-bottom: 12px; }
+  .servicio-bar-row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px; }
+  .servicio-bar-row .nombre { color: #cbd5e1; font-weight: 600; }
+  .servicio-bar-row .monto { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+  .servicio-bar-bg { height: 8px; background: rgba(255,255,255,0.04); border-radius: 4px; overflow: hidden; }
+  .servicio-bar-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease-out; }
+
+  /* Escáner de código de barras */
+  .scanner-video-wrap {
+    position: relative; width: 100%; aspect-ratio: 4/3;
+    border-radius: 16px; overflow: hidden; background: #000;
+    margin-bottom: 12px;
+  }
+  .scanner-video-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .scanner-frame { position: absolute; inset: 18% 10%; border: 2px solid #10b981; border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 2000px rgba(0,0,0,0.25); }
+  .scanner-status { text-align: center; font-size: 13px; font-weight: 700; padding: 8px 4px; min-height: 20px; color: #94a3b8; }
+  .scanner-manual { display: flex; gap: 8px; margin-top: 4px; }
+
+  .toast {
+    position: fixed; bottom: 100px; left: 20px; right: 20px;
+    background: #10b981; color: white; padding: 14px 18px;
+    border-radius: 14px; font-size: 13px; font-weight: 700; text-align: center;
+    z-index: 300; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    animation: slideUp 0.25s ease-out;
+  }
+  .toast.error { background: #ef4444; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+// ============== ESTADO ==============
+const SERVICIOS = {
+  internet: { nombre: 'Internet', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>', color: '#06b6d4', gradient: 'linear-gradient(135deg, #06b6d4, #0891b2)' },
+  netflix: { nombre: 'Netflix', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>', color: '#ef4444', gradient: 'linear-gradient(135deg, #ef4444, #dc2626)' },
+  spotify: { nombre: 'Spotify', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
+  otros: { nombre: 'Otros', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', color: '#a78bfa', gradient: 'linear-gradient(135deg, #a78bfa, #8b5cf6)' }
+};
+const MESES_NOMBRES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+// Las presentaciones que puede tener un perfume: 2 decants + el frasco completo.
+const TAMANOS_PERFUME = ['5ml', '10ml', 'Frasco completo'];
+
+let state = {
+  data: {
+    internet: { precioReal: 0, clientes: [] },
+    netflix: { precioReal: 0, clientes: [] },
+    spotify: { precioReal: 0, clientes: [] },
+    otros: { precioReal: 0, clientes: [] }
+  },
+  pagosMes: {},
+  productos: [],
+  ventas: [],
+  config: { pinAdmin: '1234', cajaCambio: 0 },
+  rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
+  vista: 'inicio',
+  mesActual: claveMes(new Date()),
+  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false, usuariosInfo: false, productosArchivados: false },
+  productoExpandido: {},
+  ventasProductoExpandido: {},
+  editandoPrecio: null,
+  precioTemp: '',
+  modal: null,
+  formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
+  modalProducto: null,
+  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general',
+    variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
+  },
+  modalVenta: null,
+  formVenta: { cantidad: '' },
+  scanner: null,
+  modalVentasSemana: false,
+  modalVentasDia: null
+};
+
+let videoStreamActivo = null;
+let intervaloScanner = null;
+let scannerPendiente = null; // productoId detectado en espera de confirmación de cobro
+let scannerAutoCierreTimeout = null; // temporizador que cierra el escáner tras mostrar el cobro
+
+// ============== HELPERS ==============
+function claveMes(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function parseMes(k) { const [y,m] = k.split('-'); return { year: +y, month: +m-1 }; }
+function formatoMes(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${year}`; }
+function formatoMesCorto(k) { const {year, month} = parseMes(k); return `${MESES_NOMBRES[month]} ${String(year).slice(2)}`; }
+function fmt(n) { return '$' + (n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function fmtCorto(n) { if (Math.abs(n) >= 1000) return '$' + (n/1000).toFixed(1) + 'k'; return '$' + Math.round(n); }
+function estaPagado(sk, cid) { return state.pagosMes[state.mesActual]?.[sk+':'+cid] === true; }
+function esc(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ============== PERSISTENCIA (localStorage) ==============
+function guardarLocal() {
+  try {
+    localStorage.setItem('pagos-data', JSON.stringify(state.data));
+    localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
+    localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
+    localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+    localStorage.setItem('app-config', JSON.stringify(state.config));
+    localStorage.setItem('local-actualizado', String(Date.now()));
+  } catch(e) { console.error(e); }
+
+  // Sube a Firebase unos segundos después del último cambio (no en cada click,
+  // para no mandar de más escrituras si estás marcando varios pagos seguidos).
+  if (window.nubeListo) {
+    clearTimeout(nubeTimeout);
+    actualizarIndicadorNube('sincronizando');
+    nubeTimeout = setTimeout(subirANube, 1500);
+  }
+}
+function cargarLocal() {
+  try {
+    const d = localStorage.getItem('pagos-data');
+    const p = localStorage.getItem('pagos-mes');
+    const pr = localStorage.getItem('tienda-productos');
+    const v = localStorage.getItem('tienda-ventas');
+    const cfg = localStorage.getItem('app-config');
+    if (d) state.data = { ...state.data, ...JSON.parse(d) };
+    if (p) state.pagosMes = JSON.parse(p);
+    if (pr) state.productos = JSON.parse(pr);
+    if (v) state.ventas = JSON.parse(v);
+    if (cfg) state.config = { ...state.config, ...JSON.parse(cfg) };
+  } catch(e) { console.error(e); }
+  // La sesión (rol) es propia de este dispositivo, no se sincroniza con la nube.
+  try { state.rol = localStorage.getItem('sesion-rol') || null; } catch(e) {}
+}
+
+// ============== SINCRONIZACIÓN CON LA NUBE (FIREBASE) ==============
+let nubeTimeout = null;
+
+function actualizarIndicadorNube(estado) {
+  const el = document.getElementById('nube-status');
+  if (!el) return;
+  const mapa = {
+    sincronizando: { icono: '🔄', titulo: 'Sincronizando…' },
+    ok: { icono: '☁️', titulo: 'Sincronizado con la nube' },
+    error: { icono: '⚠️', titulo: 'Sin conexión — solo guardado en el teléfono' }
+  };
+  const m = mapa[estado] || mapa.error;
+  el.textContent = m.icono;
+  el.title = m.titulo;
+}
+
+async function subirANube() {
+  if (!window.nubeListo) return;
+  const ok = await window.nubeGuardar({
+    data: state.data,
+    pagosMes: state.pagosMes,
+    productos: state.productos,
+    ventas: state.ventas,
+    config: state.config
+  });
+  actualizarIndicadorNube(ok ? 'ok' : 'error');
+}
+
+async function sincronizarNube() {
+  if (!window.nubeListo) return;
+  actualizarIndicadorNube('sincronizando');
+  const remoto = await window.nubeLeer();
+  const remotoTs = remoto?.actualizado || 0;
+  const localTs = parseInt(localStorage.getItem('local-actualizado') || '0');
+
+  if (remoto && remotoTs > localTs) {
+    // La nube tiene algo más nuevo que este teléfono (p. ej. se perdieron los
+    // datos locales, o los editaste desde otro dispositivo). Traemos la nube.
+    state.data = remoto.data || state.data;
+    state.pagosMes = remoto.pagosMes || state.pagosMes;
+    state.productos = remoto.productos || state.productos;
+    state.ventas = remoto.ventas || state.ventas;
+    state.config = remoto.config || state.config;
+    try {
+      localStorage.setItem('pagos-data', JSON.stringify(state.data));
+      localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
+      localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
+      localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+      localStorage.setItem('app-config', JSON.stringify(state.config));
+      localStorage.setItem('local-actualizado', String(remotoTs));
+    } catch(e) {}
+    actualizarIndicadorNube('ok');
+    render();
+  } else {
+    // Este teléfono está igual o más al día: subimos para que la nube quede sincronizada.
+    subirANube();
+  }
+}
+
+// ============== ACCIONES ==============
+function setVista(v) { state.vista = v; render(); }
+function setMes(m) { state.mesActual = m; render(); }
+function toggleExpandido(k) { state.expandido[k] = !state.expandido[k]; render(); }
+function toggleProductoExpandido(pid) { state.productoExpandido[pid] = !state.productoExpandido[pid]; render(); }
+function toggleVentasProducto(pid) { state.ventasProductoExpandido[pid] = !state.ventasProductoExpandido[pid]; render(); }
+
+function iniciarEditarPrecio(k) {
+  state.editandoPrecio = k;
+  state.precioTemp = state.data[k].precioReal != null ? String(state.data[k].precioReal) : '';
+  render();
+  setTimeout(() => document.getElementById('precio-input')?.focus(), 50);
+}
+function guardarPrecio(k) {
+  state.data[k].precioReal = parseFloat(state.precioTemp) || 0;
+  state.editandoPrecio = null;
+  state.precioTemp = '';
+  guardarLocal();
+  render();
+}
+
+function togglePago(sk, cid, mes) {
+  const m = mes || state.mesActual;
+  if (!state.pagosMes[m]) state.pagosMes[m] = {};
+  const k = sk+':'+cid;
+  const yaPagado = !!state.pagosMes[m][k];
+  state.pagosMes[m][k] = !yaPagado;
+  // Si se está marcando como pagado (y es el mes actual), guardamos la fecha real
+  // para calcular con precisión cuándo vence la siguiente membresía.
+  if (!yaPagado && m === claveMes(new Date())) {
+    const cliente = state.data[sk].clientes.find(c => c.id === cid);
+    if (cliente) cliente.ultimoPago = claveHoyISO();
+  }
+  guardarLocal();
+  render();
+}
+
+function abrirModal(servicio, clienteId) {
+  if (state.rol !== 'admin') return;
+  const cliente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
+  state.formCliente = {
+    nombre: cliente?.nombre || '',
+    pago: cliente?.pago != null ? String(cliente.pago) : '',
+    tipoPago: cliente?.tipoPago || 'mensual',
+    notas: cliente?.notas || '',
+    diaPago: cliente?.diaPago ? String(cliente.diaPago) : '',
+    ultimoPago: cliente?.ultimoPago || ''
+  };
+  state.modal = { servicio, clienteId };
+  render();
+}
+function cerrarModal() {
+  state.modal = null;
+  state.formCliente = { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '', ultimoPago: '' };
+  render();
+}
+function actualizarForm(campo, valor) {
+  state.formCliente[campo] = valor;
+  // Solo re-render para tipoPago (cambia visual). Para inputs no re-render para no perder focus
+  if (campo === 'tipoPago') render();
+}
+
+function guardarCliente() {
+  if (state.rol !== 'admin') return;
+  if (!state.formCliente.nombre.trim()) return;
+  const { servicio, clienteId } = state.modal;
+  const existente = clienteId ? state.data[servicio].clientes.find(c => c.id === clienteId) : null;
+  const nuevo = {
+    id: clienteId || ('c_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
+    nombre: state.formCliente.nombre.trim(),
+    pago: parseFloat(state.formCliente.pago) || 0,
+    tipoPago: state.formCliente.tipoPago,
+    notas: state.formCliente.notas.trim(),
+    diaPago: state.formCliente.diaPago ? Math.min(31, Math.max(1, parseInt(state.formCliente.diaPago) || 1)) : null,
+    ultimoPago: state.formCliente.ultimoPago || null,
+    archivado: existente ? !!existente.archivado : false,
+    creado: existente ? existente.creado : Date.now()
+  };
+  if (clienteId) {
+    state.data[servicio].clientes = state.data[servicio].clientes.map(c => c.id === clienteId ? nuevo : c);
+  } else {
+    state.data[servicio].clientes.push(nuevo);
+  }
+  guardarLocal();
+  cerrarModal();
+}
+
+function eliminarCliente(servicio, id) {
+  if (state.rol !== 'admin') return;
+  if (!confirm('¿Eliminar este cliente PARA SIEMPRE? También se borrará su historial de pagos.\n\nSi solo canceló su membresía y quieres conservar su historial, mejor usa "Archivar" en vez de esto.')) return;
+  state.data[servicio].clientes = state.data[servicio].clientes.filter(c => c.id !== id);
+  // BUG FIX: antes los registros de pago (pagosMes) de un cliente eliminado se quedaban
+  // huérfanos para siempre en localStorage, inflando los datos guardados y descuadrando
+  // los totales históricos del dashboard. Ahora se limpian de todos los meses.
+  const clave = servicio + ':' + id;
+  Object.keys(state.pagosMes).forEach(mes => {
+    if (state.pagosMes[mes] && clave in state.pagosMes[mes]) delete state.pagosMes[mes][clave];
+  });
+  guardarLocal();
+  render();
+}
+
+// Archivar oculta al cliente de la lista activa (ya no se le pide pago ni
+// sale en "por vencer") SIN borrar nada — su historial de pagos pasados se
+// queda intacto para las estadísticas históricas del Dashboard. Es lo que
+// usas cuando un cliente cancela su membresía.
+function toggleArchivadoCliente(servicio, id) {
+  if (state.rol !== 'admin') return;
+  const c = state.data[servicio].clientes.find(cc => cc.id === id);
+  if (!c) return;
+  c.archivado = !c.archivado;
+  guardarLocal();
+  render();
+}
+
+// ============== TIENDA (productos por pieza) ==============
+function variantesFormVacias() {
+  const v = {};
+  TAMANOS_PERFUME.forEach(tam => { v[tam] = { precioVenta: '' }; });
+  return v;
+}
+
+// Estas funciones llevan la cuenta de cuánto dinero se ha cobrado desde que
+// empezó el frasco actual (p.cicloInicio), para saber cuándo ya se recuperó
+// el costo. El reinicio del ciclo (cuando compras un frasco nuevo) es manual,
+// con el botón "Nuevo frasco" (ver reiniciarFrascoPerfume).
+function calcularCicloPerfume(p) {
+  const desde = p.cicloInicio || p.creado || 0;
+  const ventasCiclo = state.ventas.filter(v => v.productoId === p.id && v.fecha >= desde);
+  const ingresoAcumulado = ventasCiclo.reduce((s, v) => s + v.total, 0);
+  const piezasVendidas = ventasCiclo.reduce((s, v) => s + v.cantidad, 0);
+  return { ingresoAcumulado, piezasVendidas };
+}
+
+// Calcula el total a cobrar y la ganancia real de una venta de perfume,
+// tomando en cuenta cuánto del costo del frasco ya se había recuperado antes
+// de esta venta (lo que falte por recuperar no cuenta como ganancia).
+function calcularVentaPerfume(p, tamano, cantidad) {
+  const v = (p.variantes || []).find(vv => vv.tamano === tamano);
+  if (!v || v.agotado) return null; // no se puede vender una presentación agotada
+  const total = Math.round(v.precioVenta * cantidad * 100) / 100;
+  const { ingresoAcumulado } = calcularCicloPerfume(p);
+  const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
+  const ganancia = Math.round(Math.max(0, total - costoRestante) * 100) / 100;
+  return { precioVenta: v.precioVenta, total, ganancia };
+}
+function abrirModalProducto(productoId, categoriaDefault) {
+  if (state.rol !== 'admin') return;
+  const p = productoId ? state.productos.find(pp => pp.id === productoId) : null;
+  const variantesForm = variantesFormVacias();
+  if (p && p.categoria === 'perfumes' && Array.isArray(p.variantes)) {
+    p.variantes.forEach(v => {
+      if (variantesForm[v.tamano]) {
+        variantesForm[v.tamano] = { precioVenta: v.precioVenta != null ? String(v.precioVenta) : '' };
+      }
+    });
+  }
+  state.formProducto = {
+    nombre: p?.nombre || '',
+    precioCosto: p?.precioCosto != null ? String(p.precioCosto) : '',
+    precioVenta: p?.precioVenta != null ? String(p.precioVenta) : '',
+    stock: p?.stock != null ? String(p.stock) : '',
+    codigo: p?.codigo || '',
+    categoria: p?.categoria || categoriaDefault || 'general',
+    variantes: variantesForm
+  };
+  state.modalProducto = { productoId };
+  render();
+}
+function cerrarModalProducto() {
+  state.modalProducto = null;
+  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general', variantes: variantesFormVacias() };
+  render();
+}
+function actualizarFormProducto(campo, valor) {
+  state.formProducto[campo] = valor;
+}
+function actualizarFormProductoVariante(tamano, campo, valor) {
+  state.formProducto.variantes[tamano][campo] = valor;
+}
+function guardarProducto() {
+  if (state.rol !== 'admin') return;
+  if (!state.formProducto.nombre.trim()) return;
+  const { productoId } = state.modalProducto;
+  const esPerfume = state.formProducto.categoria === 'perfumes';
+  const existente = productoId ? state.productos.find(p => p.id === productoId) : null;
+  const creado = existente ? existente.creado : Date.now();
+  let nuevo;
+  if (esPerfume) {
+    // Conservamos el estado "agotado" de cada presentación si ya existía
+    // (ese campo se cambia con su propio botón, no desde este formulario).
+    const variantesExistentes = existente && Array.isArray(existente.variantes) ? existente.variantes : [];
+    const variantes = TAMANOS_PERFUME.map(tam => {
+      const v = state.formProducto.variantes[tam];
+      const vExistente = variantesExistentes.find(vv => vv.tamano === tam);
+      return {
+        tamano: tam,
+        precioVenta: parseFloat(v.precioVenta) || 0,
+        agotado: vExistente ? !!vExistente.agotado : false
+      };
+    });
+    nuevo = {
+      id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
+      nombre: state.formProducto.nombre.trim(),
+      precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
+      codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
+      categoria: 'perfumes',
+      variantes,
+      cicloInicio: (existente && existente.cicloInicio) || creado,
+      archivado: existente ? !!existente.archivado : false,
+      creado
+    };
+  } else {
+    nuevo = {
+      id: productoId || ('p_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)),
+      nombre: state.formProducto.nombre.trim(),
+      precioCosto: parseFloat(state.formProducto.precioCosto) || 0,
+      precioVenta: parseFloat(state.formProducto.precioVenta) || 0,
+      stock: Math.max(0, parseInt(state.formProducto.stock) || 0),
+      codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
+      categoria: 'general',
+      archivado: existente ? !!existente.archivado : false,
+      creado
+    };
+  }
+  if (productoId) {
+    state.productos = state.productos.map(p => p.id === productoId ? nuevo : p);
+  } else {
+    state.productos.push(nuevo);
+  }
+  guardarLocal();
+  cerrarModalProducto();
+}
+function eliminarProducto(id) {
+  if (state.rol !== 'admin') return;
+  if (!confirm('¿Eliminar este producto? También se borrará su historial de ventas.')) return;
+  state.productos = state.productos.filter(p => p.id !== id);
+  state.ventas = state.ventas.filter(v => v.productoId !== id);
+  guardarLocal();
+  render();
+}
+
+// Archivar oculta el producto de la lista activa SIN borrar nada — el
+// historial de ventas y las ganancias pasadas se quedan intactas en el
+// Dashboard. Sirve para productos que ya no se van a reponer.
+function toggleArchivadoProducto(id) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === id);
+  if (!p) return;
+  p.archivado = !p.archivado;
+  guardarLocal();
+  render();
+}
+// Reinicia manualmente el ciclo de recuperación de costo de un perfume
+// (por ejemplo, cuando compras un frasco nuevo). No borra ventas ni
+// historial, solo cambia desde cuándo se cuentan las piezas y el dinero
+// recuperado para saber si ya se pagó el costo del frasco actual.
+function reiniciarFrascoPerfume(id) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === id);
+  if (!p) return;
+  if (!confirm(`¿Registrar un frasco nuevo de "${p.nombre}"?\n\nEsto reinicia el conteo de piezas vendidas y de costo recuperado (empieza de cero). Si el costo del frasco nuevo cambió, edítalo con ✎ después de esto.`)) return;
+  p.cicloInicio = Date.now();
+  guardarLocal();
+  render();
+}
+
+// Permite al admin borrar una venta registrada por error o duplicada.
+// Si el producto tenía control de stock (no es perfume), le regresa las
+// piezas. En perfumes, el ciclo de costo se recalcula solo, ya que se
+// basa en las ventas que sigan existiendo, no en un contador aparte.
+function eliminarVenta(ventaId) {
+  if (state.rol !== 'admin') return;
+  const venta = state.ventas.find(v => v.id === ventaId);
+  if (!venta) return;
+  if (!confirm('¿Eliminar esta venta? Es para corregir un cobro por error o duplicado. Esta acción no se puede deshacer.')) return;
+  const p = state.productos.find(pp => pp.id === venta.productoId);
+  if (p && !venta.tamano && p.stock != null) {
+    p.stock += venta.cantidad; // se regresan las piezas al stock (solo aplica a productos generales)
+  }
+  state.ventas = state.ventas.filter(v => v.id !== ventaId);
+  guardarLocal();
+  render();
+}
+
+function obtenerInfoVenta(p, tamano) {
+  if (tamano) {
+    const v = (p.variantes || []).find(vv => vv.tamano === tamano);
+    return v ? { precioVenta: v.precioVenta, stock: null } : null; // stock null = sin límite (perfumes)
+  }
+  return { precioCosto: p.precioCosto, precioVenta: p.precioVenta, stock: p.stock };
+}
+function abrirModalVenta(productoId, tamano) {
+  state.modalVenta = { productoId, tamano: tamano || null };
+  state.formVenta = { cantidad: '1' };
+  render();
+}
+function cerrarModalVenta() {
+  state.modalVenta = null;
+  state.formVenta = { cantidad: '' };
+  render();
+}
+function actualizarFormVenta(valor) {
+  state.formVenta.cantidad = valor;
+  const p = state.productos.find(pp => pp.id === state.modalVenta.productoId);
+  if (!p) return;
+  const tamano = state.modalVenta.tamano;
+  const info = obtenerInfoVenta(p, tamano);
+  if (!info) return;
+  const sinLimite = info.stock === null;
+  const cant = parseInt(valor) || 0;
+  let totalEstim, gananciaEstim;
+  if (tamano) {
+    const calc = calcularVentaPerfume(p, tamano, cant || 0);
+    totalEstim = calc ? calc.total : 0;
+    gananciaEstim = calc ? calc.ganancia : 0;
+  } else {
+    totalEstim = info.precioVenta * cant;
+    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+  }
+  const totalEl = document.getElementById('venta-total');
+  const gananciaEl = document.getElementById('venta-ganancia');
+  const btn = document.getElementById('btn-confirmar-venta');
+  if (totalEl) totalEl.textContent = fmt(totalEstim);
+  if (gananciaEl) gananciaEl.textContent = fmt(gananciaEstim);
+  if (btn) btn.disabled = cant < 1 || (!sinLimite && cant > info.stock);
+}
+function registrarVenta(productoId, tamano) {
+  const p = state.productos.find(pp => pp.id === productoId);
+  if (!p) return;
+  const info = obtenerInfoVenta(p, tamano);
+  if (!info) return;
+  const sinLimite = info.stock === null;
+  const cant = parseInt(state.formVenta.cantidad) || 0;
+  if (cant < 1 || (!sinLimite && cant > info.stock)) return;
+
+  let total, ganancia;
+  if (tamano) {
+    const calc = calcularVentaPerfume(p, tamano, cant);
+    if (!calc) return;
+    total = calc.total;
+    ganancia = calc.ganancia;
+  } else {
+    total = Math.round(info.precioVenta * cant * 100) / 100;
+    ganancia = Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100;
+  }
+  const venta = {
+    id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    productoId,
+    tamano: tamano || null,
+    cantidad: cant,
+    total,
+    ganancia,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  };
+  state.ventas.push(venta);
+  // sinLimite es true siempre que haya "tamano" (perfumes ya no llevan stock),
+  // así que aquí solo se descuenta stock de productos generales.
+  if (!sinLimite) p.stock -= cant;
+  guardarLocal();
+  cerrarModalVenta();
+  render();
+}
+
+function calcularTotalesTienda() {
+  const mesActual = claveMes(new Date());
+  let ganancia = 0, vendido = 0, piezas = 0;
+  state.ventas.forEach(v => {
+    if (v.mes === mesActual) {
+      ganancia += v.ganancia;
+      vendido += v.total;
+      piezas += v.cantidad;
+    }
+  });
+  return { ganancia: Math.round(ganancia*100)/100, vendido: Math.round(vendido*100)/100, piezas };
+}
+
+function inicioDeHoy() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+function inicioDeSemana() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  const dia = d.getDay(); // 0=domingo, 1=lunes, ... 6=sábado
+  const diasDesdeLunes = dia === 0 ? 6 : dia - 1;
+  d.setDate(d.getDate() - diasDesdeLunes);
+  return d.getTime();
+}
+// Ventas SOLO de perfumes dentro de un rango de fechas — usado para el
+// resumen del Vendedor (hoy / esta semana), ya que él no ve productos generales.
+function calcularVentasPerfumesRango(desde, hasta) {
+  const idsPerfumes = new Set(state.productos.filter(p => p.categoria === 'perfumes').map(p => p.id));
+  let vendido = 0, piezas = 0;
+  state.ventas.forEach(v => {
+    if (v.fecha >= desde && v.fecha <= hasta && idsPerfumes.has(v.productoId)) {
+      vendido += v.total;
+      piezas += v.cantidad;
+    }
+  });
+  return { vendido: Math.round(vendido*100)/100, piezas };
+}
+// Lista (no solo el total) de las ventas de perfumes dentro de un rango de
+// fechas, más recientes primero — usada para el detalle de "Vendido esta semana".
+function listarVentasPerfumesRango(desde, hasta) {
+  const idsPerfumes = new Set(state.productos.filter(p => p.categoria === 'perfumes').map(p => p.id));
+  return state.ventas
+    .filter(v => v.fecha >= desde && v.fecha <= hasta && idsPerfumes.has(v.productoId))
+    .sort((a, b) => b.fecha - a.fecha);
+}
+function abrirModalVentasSemana() {
+  state.modalVentasSemana = true;
+  render();
+}
+function cerrarModalVentasSemana() {
+  state.modalVentasSemana = false;
+  render();
+}
+
+// Detalle de "Mejor día" en el Dashboard del admin: lista lo que se vendió
+// en un día específico (todo o solo perfumes, según de dónde se haya tocado).
+function listarVentasDia(fechaKey, soloCategoria) {
+  const categoriaDe = {};
+  if (soloCategoria) state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
+  return state.ventas
+    .filter(v => {
+      const dt = new Date(v.fecha);
+      const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      if (key !== fechaKey) return false;
+      if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return false;
+      return true;
+    })
+    .sort((a, b) => b.fecha - a.fecha);
+}
+function abrirModalVentasDia(fechaKey, soloCategoria) {
+  if (state.rol !== 'admin') return;
+  state.modalVentasDia = { fecha: fechaKey, categoria: soloCategoria || null };
+  render();
+}
+function cerrarModalVentasDia() {
+  state.modalVentasDia = null;
+  render();
+}
+
+// ============== ESCÁNER DE CÓDIGO DE BARRAS ==============
+function abrirScannerVenta() {
+  if (scannerAutoCierreTimeout) { clearTimeout(scannerAutoCierreTimeout); scannerAutoCierreTimeout = null; }
+  scannerPendiente = null;
+  state.scanner = { modo: 'venta' };
+  render();
+  iniciarCamara();
+}
+function abrirScannerAsignar() {
+  if (state.rol !== 'admin') return;
+  if (scannerAutoCierreTimeout) { clearTimeout(scannerAutoCierreTimeout); scannerAutoCierreTimeout = null; }
+  scannerPendiente = null;
+  state.scanner = { modo: 'asignar' };
+  render();
+  iniciarCamara();
+}
+function cerrarScanner() {
+  if (scannerAutoCierreTimeout) { clearTimeout(scannerAutoCierreTimeout); scannerAutoCierreTimeout = null; }
+  detenerCamara();
+  scannerPendiente = null;
+  state.scanner = null;
+  render();
+}
+
+async function iniciarCamara() {
+  const statusEl = document.getElementById('scanner-status');
+  const videoWrap = document.querySelector('.scanner-video-wrap');
+  if (!('BarcodeDetector' in window)) {
+    if (statusEl) { statusEl.textContent = 'Tu navegador no soporta escaneo automático. Escribe el código abajo.'; statusEl.style.color = '#fbbf24'; }
+    if (videoWrap) videoWrap.style.display = 'none';
+    return;
+  }
+  try {
+    videoStreamActivo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    const video = document.getElementById('scanner-video');
+    if (!video) { detenerCamara(); return; }
+    video.srcObject = videoStreamActivo;
+    await video.play();
+    const detector = new BarcodeDetector({ formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code'] });
+    let ultimoCodigo = null, ultimoTiempo = 0;
+    intervaloScanner = setInterval(async () => {
+      if (!video.videoWidth) return;
+      if (scannerPendiente) return; // pausado: hay una venta esperando confirmación
+      try {
+        const codigos = await detector.detect(video);
+        if (codigos.length > 0) {
+          const valor = codigos[0].rawValue;
+          const ahora = Date.now();
+          if (valor === ultimoCodigo && ahora - ultimoTiempo < 2500) return;
+          ultimoCodigo = valor; ultimoTiempo = ahora;
+          procesarCodigoDetectado(valor);
+        }
+      } catch(err) {}
+    }, 400);
+  } catch(err) {
+    if (statusEl) { statusEl.textContent = 'No se pudo acceder a la cámara. Revisa permisos o escribe el código abajo.'; statusEl.style.color = '#ef4444'; }
+    if (videoWrap) videoWrap.style.display = 'none';
+  }
+}
+
+function detenerCamara() {
+  if (intervaloScanner) { clearInterval(intervaloScanner); intervaloScanner = null; }
+  if (videoStreamActivo) { videoStreamActivo.getTracks().forEach(t => t.stop()); videoStreamActivo = null; }
+}
+
+function buscarCodigoManual() {
+  const input = document.getElementById('scanner-manual-input');
+  if (!input || !input.value.trim()) return;
+  procesarCodigoDetectado(input.value.trim());
+  input.value = '';
+}
+
+function buscarProductoPorCodigo(codigo) {
+  return state.productos.find(p => p.codigo && p.codigo === codigo) || null;
+}
+
+function procesarCodigoDetectado(codigo) {
+  if (!state.scanner) return;
+
+  if (state.scanner.modo === 'asignar') {
+    state.formProducto.codigo = codigo;
+    cerrarScanner();
+    return;
+  }
+
+  if (scannerPendiente) {
+    const statusEl = document.getElementById('scanner-status');
+    if (statusEl) { statusEl.textContent = '⚠️ Termina de cobrar el producto actual primero'; statusEl.style.color = '#fbbf24'; }
+    return; // ya hay una venta esperando confirmación
+  }
+
+  const statusEl = document.getElementById('scanner-status');
+  const p = buscarProductoPorCodigo(codigo);
+
+  if (!p) {
+    if (statusEl) { statusEl.textContent = `⚠️ Código "${codigo}" no está asignado a ningún producto`; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+
+  const esPerfumeConVariantes = p.categoria === 'perfumes' && Array.isArray(p.variantes) && p.variantes.length > 0;
+  const confirmarEl = document.getElementById('scanner-confirmar');
+
+  if (esPerfumeConVariantes) {
+    // Un solo código para el perfume: pedimos que elija la presentación,
+    // mostrando de una vez el precio de cada una. El "Frasco completo" solo
+    // aparece como opción si le pusiste un precio (si no, no se ofrece), y
+    // las presentaciones marcadas como agotadas tampoco se ofrecen.
+    const variantesDisponibles = p.variantes.filter(v => (v.tamano !== 'Frasco completo' || v.precioVenta > 0) && !v.agotado);
+
+    if (variantesDisponibles.length === 0) {
+      if (statusEl) { statusEl.textContent = `⚠️ ${p.nombre} está agotado en todas sus presentaciones`; statusEl.style.color = '#ef4444'; }
+      return;
+    }
+
+    scannerPendiente = { productoId: p.id, eligiendoTamano: true };
+    if (statusEl) { statusEl.textContent = '¿Qué presentación vendiste?'; statusEl.style.color = '#06b6d4'; }
+    if (confirmarEl) {
+      confirmarEl.style.display = 'block';
+      confirmarEl.innerHTML = `
+        <div class="cliente card" style="border: 1px solid rgba(168,85,247,0.4); flex-direction:column; align-items:stretch; gap:10px">
+          <div class="cliente-info">
+            <div class="nombre">🌸 ${esc(p.nombre)}</div>
+            <div class="cliente-notas">¿Qué presentación vendiste?</div>
+          </div>
+          <div style="display:flex; flex-direction:${variantesDisponibles.length > 2 ? 'column' : 'row'}; gap:8px">
+            ${variantesDisponibles.map(v => `
+              <button class="guardar-btn" style="flex:1; margin-top:0; background:#a855f7" onclick="elegirTamanoScanner('${v.tamano}')">
+                ${esc(v.tamano)}<br>${fmt(v.precioVenta)}
+              </button>
+            `).join('')}
+          </div>
+          <button class="tipo-btn" onclick="cancelarVentaScanner()">Cancelar</button>
+        </div>
+      `;
+    }
+    return;
+  }
+
+  // Producto general (o un perfume viejo sin variantes): flujo normal de confirmar y cobrar
+  const precioVenta = p.precioVenta;
+  const nombreMostrado = p.nombre;
+
+  if (!(p.stock > 0)) {
+    if (statusEl) { statusEl.textContent = `⚠️ ${nombreMostrado} no tiene piezas en stock`; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+
+  scannerPendiente = { productoId: p.id, tamano: null };
+  if (statusEl) { statusEl.textContent = 'Producto detectado — confirma para cobrar'; statusEl.style.color = '#06b6d4'; }
+
+  if (confirmarEl) {
+    confirmarEl.style.display = 'block';
+    confirmarEl.innerHTML = `
+      <div class="cliente card" style="border: 1px solid rgba(16,185,129,0.4); flex-direction:column; align-items:stretch; gap:10px">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div class="cliente-info">
+            <div class="nombre">${esc(nombreMostrado)}</div>
+            <div class="cliente-notas">Stock disponible: ${p.stock}</div>
+          </div>
+          <div class="monto" style="color:#10b981; font-size:22px; font-family:'JetBrains Mono', monospace">${fmt(precioVenta)}</div>
+        </div>
+        <div style="display:flex; gap:8px">
+          <button class="tipo-btn" style="flex:1" onclick="cancelarVentaScanner()">Cancelar</button>
+          <button class="guardar-btn" style="flex:1.4; margin-top:0; background:#10b981" onclick="confirmarVentaScanner()">💰 Cobrar ${fmt(precioVenta)}</button>
+        </div>
+      </div>
+    `;
+  }
+}
+
+// Muestra en pantalla (mensaje de estado + historial del escáner) el
+// desglose completo de una venta: SIEMPRE lo cobrado, y para el admin
+// también la ganancia real por separado.
+function mostrarResultadoVentaScanner(nombreMostrado, venta, notaExtra) {
+  const statusEl = document.getElementById('scanner-status');
+  const lista = document.getElementById('scanner-lista');
+  if (statusEl) {
+    statusEl.textContent = state.rol === 'admin'
+      ? `✅ ${nombreMostrado} — Cobrado ${fmt(venta.total)} · Ganancia +${fmt(venta.ganancia)}`
+      : `✅ ${nombreMostrado} — Cobrado ${fmt(venta.total)}`;
+    statusEl.style.color = '#10b981';
+  }
+  if (lista) {
+    lista.insertAdjacentHTML('afterbegin', `
+      <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px 12px; margin-bottom:8px">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px">
+          <span style="font-weight:700">${esc(nombreMostrado)}</span>
+          <span style="font-family:'JetBrains Mono',monospace; color:#06b6d4; font-weight:700">${fmt(venta.total)}</span>
+        </div>
+        ${notaExtra ? `<div style="font-size:12px; color:#64748b; margin-top:2px">${esc(notaExtra)}</div>` : ''}
+        ${state.rol === 'admin' ? `<div style="font-size:12px; color:#10b981; margin-top:2px">Ganancia: +${fmt(venta.ganancia)}</div>` : ''}
+      </div>
+    `);
+  }
+  // Se cierra solo después de mostrar el cobro, para que la siguiente venta
+  // requiera escanear de nuevo el código de barras.
+  if (scannerAutoCierreTimeout) clearTimeout(scannerAutoCierreTimeout);
+  scannerAutoCierreTimeout = setTimeout(() => { scannerAutoCierreTimeout = null; cerrarScanner(); }, 1800);
+}
+
+function confirmarVentaScanner() {
+  // Confirma la venta de un producto GENERAL detectado por escáner (los perfumes
+  // usan elegirTamanoScanner, ya que primero hay que elegir la presentación).
+  if (!scannerPendiente) return;
+  const { productoId } = scannerPendiente;
+  const p = state.productos.find(pp => pp.id === productoId);
+  const statusEl = document.getElementById('scanner-status');
+  const confirmarEl = document.getElementById('scanner-confirmar');
+
+  if (!p || !(p.stock > 0)) {
+    scannerPendiente = null;
+    if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+    if (statusEl) { statusEl.textContent = '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+
+  const nombreMostrado = p.nombre;
+  const venta = {
+    id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    productoId: p.id,
+    tamano: null,
+    cantidad: 1,
+    total: Math.round(p.precioVenta * 100) / 100,
+    ganancia: Math.round((p.precioVenta - p.precioCosto) * 100) / 100,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  };
+  state.ventas.push(venta);
+  p.stock -= 1;
+  guardarLocal();
+
+  scannerPendiente = null;
+  if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+  mostrarResultadoVentaScanner(nombreMostrado, venta, `Stock restante: ${p.stock}`);
+}
+
+// Se llama cuando, tras escanear el código único del perfume, el usuario elige
+// qué presentación vendió (5ml, 10ml, o el frasco completo si lo tiene configurado).
+function elegirTamanoScanner(tamano) {
+  if (!scannerPendiente) return;
+  const { productoId } = scannerPendiente;
+  const p = state.productos.find(pp => pp.id === productoId);
+  const statusEl = document.getElementById('scanner-status');
+  const confirmarEl = document.getElementById('scanner-confirmar');
+  const calc = p ? calcularVentaPerfume(p, tamano, 1) : null;
+
+  if (!p || !calc) {
+    scannerPendiente = null;
+    if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+    if (statusEl) { statusEl.textContent = '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
+    return;
+  }
+
+  const nombreMostrado = `${p.nombre} (${tamano})`;
+  const venta = {
+    id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    productoId: p.id,
+    tamano,
+    cantidad: 1,
+    total: calc.total,
+    ganancia: calc.ganancia,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  };
+  state.ventas.push(venta);
+  guardarLocal();
+
+  scannerPendiente = null;
+  if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+  mostrarResultadoVentaScanner(nombreMostrado, venta);
+}
+
+function cancelarVentaScanner() {
+  scannerPendiente = null;
+  const statusEl = document.getElementById('scanner-status');
+  const confirmarEl = document.getElementById('scanner-confirmar');
+  if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
+  if (statusEl) { statusEl.textContent = 'Buscando código…'; statusEl.style.color = ''; }
+}
+
+// ============== CÁLCULOS ==============
+function calcularTotalesMes() {
+  let cobrado = 0, costoReal = 0, mensual = 0;
+  Object.entries(state.data).forEach(([sk, s]) => {
+    let huboPagos = false;
+    s.clientes.forEach(c => {
+      if (c.archivado) return; // ya canceló, no cuenta para el mes en curso
+      if (c.tipoPago === 'mensual') mensual += c.pago;
+      if (estaPagado(sk, c.id)) { cobrado += c.pago; huboPagos = true; }
+    });
+    if (huboPagos) costoReal += s.precioReal;
+  });
+  return { cobrado, costoReal, ganancia: cobrado - costoReal, mensualEsperado: mensual };
+}
+
+function calcularDatosMensuales() {
+  const hoy = new Date();
+  const meses = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const key = claveMes(d);
+    const pagos = state.pagosMes[key] || {};
+    let cobrado = 0, costo = 0;
+    Object.entries(state.data).forEach(([sk, s]) => {
+      let hubo = false;
+      s.clientes.forEach(c => {
+        if (pagos[sk+':'+c.id]) { cobrado += c.pago; hubo = true; }
+      });
+      if (hubo) costo += s.precioReal;
+    });
+    meses.push({
+      mes: formatoMesCorto(key),
+      cobrado: Math.round(cobrado*100)/100,
+      costo: Math.round(costo*100)/100,
+      ganancia: Math.round((cobrado-costo)*100)/100
+    });
+  }
+  return meses;
+}
+
+// Ventas de la tienda (productos + perfumes) día por día, del mes en curso.
+// Se incluyen TODOS los días del mes (aunque no hayan tenido ventas) para
+// que el rango de fechas en la gráfica se vea correcto.
+function calcularVentasPorDia(soloCategoria) {
+  const hoy = new Date();
+  const anio = hoy.getFullYear(), mes = hoy.getMonth();
+  const ultimoDia = new Date(anio, mes + 1, 0).getDate();
+  const mesK = claveMes(hoy);
+  const categoriaDe = {};
+  if (soloCategoria) state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
+  const porDia = {};
+  for (let d = 1; d <= ultimoDia; d++) {
+    const key = `${anio}-${String(mes+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    porDia[key] = { fecha: key, piezas: 0, vendido: 0, ganancia: 0 };
+  }
+  state.ventas.forEach(v => {
+    if (v.mes !== mesK) return;
+    if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return;
+    const dt = new Date(v.fecha);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+    if (porDia[key]) {
+      porDia[key].piezas += v.cantidad;
+      porDia[key].vendido += v.total;
+      porDia[key].ganancia += v.ganancia;
+    }
+  });
+  return Object.values(porDia);
+}
+function formatearFechaCorta(fechaKey) {
+  const [y, m, d] = fechaKey.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+}
+
+// Flujo de dinero de la Tienda (productos + perfumes), mes por mes.
+// "reinvertido" es la parte de lo cobrado que fue a cubrir el costo
+// (del producto o, en perfumes, del frasco compartido); "ganancia" es lo
+// que realmente quedó limpio, usando el mismo valor ya guardado en cada venta.
+function calcularFlujoTiendaMensual() {
+  const hoy = new Date();
+  const meses = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const key = claveMes(d);
+    const ventasMes = state.ventas.filter(v => v.mes === key);
+    const cobrado = ventasMes.reduce((s, v) => s + v.total, 0);
+    const ganancia = ventasMes.reduce((s, v) => s + v.ganancia, 0);
+    meses.push({
+      mes: formatoMesCorto(key),
+      cobrado: Math.round(cobrado * 100) / 100,
+      costo: Math.round((cobrado - ganancia) * 100) / 100, // reinvertido
+      ganancia: Math.round(ganancia * 100) / 100
+    });
+  }
+  return meses;
+}
+
+// Piezas vendidas mes por mes (últimos 12 meses) — opcionalmente solo de una
+// categoría (perfumes), para ver el histórico completo, no solo el mes actual.
+function calcularPiezasPorMes(soloCategoria) {
+  const hoy = new Date();
+  const meses = [];
+  const categoriaDe = {};
+  if (soloCategoria) state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const key = claveMes(d);
+    let piezas = 0, vendido = 0;
+    state.ventas.forEach(v => {
+      if (v.mes !== key) return;
+      if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return;
+      piezas += v.cantidad;
+      vendido += v.total;
+    });
+    meses.push({ mes: formatoMesCorto(key), piezas, vendido: Math.round(vendido * 100) / 100 });
+  }
+  return meses;
+}
+
+// Mismo flujo de dinero (cobrado / reinvertido / ganancia) pero separado por
+// categoría, para ver cómo le fue a Perfumes y a Productos por separado.
+function calcularFlujoPorCategoria(mesKey) {
+  const ventasMes = state.ventas.filter(v => v.mes === mesKey);
+  const productosPorId = {};
+  state.productos.forEach(p => { productosPorId[p.id] = p; });
+
+  const perfumesTot = { cobrado: 0, ganancia: 0 };
+  const generalesPorId = {}; // cada producto general por separado, para no revolverlos
+
+  ventasMes.forEach(v => {
+    const p = productosPorId[v.productoId];
+    const esPerfume = p ? p.categoria === 'perfumes' : false;
+    if (esPerfume) {
+      perfumesTot.cobrado += v.total;
+      perfumesTot.ganancia += v.ganancia;
+    } else {
+      const id = v.productoId || 'sin_id';
+      const nombre = p ? p.nombre : 'Producto eliminado';
+      if (!generalesPorId[id]) generalesPorId[id] = { nombre, cobrado: 0, ganancia: 0 };
+      generalesPorId[id].cobrado += v.total;
+      generalesPorId[id].ganancia += v.ganancia;
+    }
+  });
+
+  const redondear = (t) => ({
+    cobrado: Math.round(t.cobrado * 100) / 100,
+    ganancia: Math.round(t.ganancia * 100) / 100,
+    costo: Math.round((t.cobrado - t.ganancia) * 100) / 100
+  });
+
+  const generales = Object.values(generalesPorId)
+    .map(t => ({ nombre: t.nombre, ...redondear(t) }))
+    .sort((a, b) => b.cobrado - a.cobrado);
+
+  return { perfumes: redondear(perfumesTot), generales };
+}
+
+// Capital total invertido en perfumes (todos los frascos activos juntos),
+// cuánto se ha recuperado hasta ahora, y cuánto falta — sin importar el mes,
+// para ver el panorama completo de la inversión en perfumes.
+function calcularCapitalPerfumes() {
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes' && !p.archivado);
+  let invertido = 0, recuperado = 0;
+  perfumes.forEach(p => {
+    const costo = p.precioCosto || 0;
+    invertido += costo;
+    const { ingresoAcumulado } = calcularCicloPerfume(p);
+    recuperado += Math.min(ingresoAcumulado, costo);
+  });
+  const faltante = Math.max(0, invertido - recuperado);
+  return {
+    invertido: Math.round(invertido * 100) / 100,
+    recuperado: Math.round(recuperado * 100) / 100,
+    faltante: Math.round(faltante * 100) / 100
+  };
+}
+
+// Ranking de perfumes por piezas vendidas (todas las presentaciones juntas)
+// del mes en curso — se reinicia solo cada mes porque solo cuenta las ventas de ese mes.
+function calcularRankingPerfumes(mesKey) {
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
+  const ranking = perfumes.map(p => {
+    const ventasMes = state.ventas.filter(v => v.productoId === p.id && v.mes === mesKey);
+    const piezas = ventasMes.reduce((s, v) => s + v.cantidad, 0);
+    const porTamano = {};
+    ventasMes.forEach(v => {
+      const tam = v.tamano || 'Único';
+      porTamano[tam] = (porTamano[tam] || 0) + v.cantidad;
+    });
+    // Cuánto lleva recuperado del costo del frasco actual (no solo este mes,
+    // desde que empezó el ciclo/frasco), para saber si ya dio ganancia o no.
+    const { ingresoAcumulado } = calcularCicloPerfume(p);
+    const costo = p.precioCosto || 0;
+    const faltante = Math.max(0, Math.round((costo - ingresoAcumulado) * 100) / 100);
+    const gananciaFrasco = Math.max(0, Math.round((ingresoAcumulado - costo) * 100) / 100);
+    return { id: p.id, nombre: p.nombre, piezas, porTamano, faltante, gananciaFrasco };
+  });
+  ranking.sort((a, b) => b.piezas - a.piezas);
+  return ranking;
+}
+
+// ============== RESPALDO (exportar / importar) ==============
+function verRespaldoTexto() {
+  const respaldo = { data: state.data, pagosMes: state.pagosMes, productos: state.productos, ventas: state.ventas, version: 2, fecha: new Date().toISOString() };
+  const contenido = JSON.stringify(respaldo);
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Respaldo en texto</h3>
+        <button class="close-btn" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#94a3b8">Copia este texto y guárdalo en Notas o mándatelo por WhatsApp. Para restaurar, pégalo tal cual en el mismo lugar.</div>
+      <textarea class="input" readonly rows="8" style="font-family:'JetBrains Mono',monospace; font-size:11px; resize:vertical" id="respaldo-texto-area">${esc(contenido)}</textarea>
+      <button class="guardar-btn" style="margin-top:10px" id="btn-copiar-respaldo">📋 Copiar al portapapeles</button>
+    </div>
+  `;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  const ta = overlay.querySelector('#respaldo-texto-area');
+  overlay.querySelector('#btn-copiar-respaldo').addEventListener('click', () => {
+    ta.removeAttribute('readonly');
+    ta.select();
+    ta.setSelectionRange(0, 999999);
+    let copiado = false;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(contenido);
+        copiado = true;
+      }
+    } catch(e) {}
+    if (!copiado) {
+      try { copiado = document.execCommand('copy'); } catch(e) {}
+    }
+    ta.setAttribute('readonly', 'true');
+    if (copiado) { registrarRespaldoHecho(); render(); }
+    alert(copiado ? 'Copiado ✅ Ya lo puedes pegar donde quieras.' : 'No se pudo copiar solo. El texto ya está seleccionado, mantén presionado y elige "Copiar".');
+  });
+}
+
+async function exportarRespaldo() {
+  const respaldo = { data: state.data, pagosMes: state.pagosMes, productos: state.productos, ventas: state.ventas, version: 2, fecha: new Date().toISOString() };
+  const contenido = JSON.stringify(respaldo, null, 2);
+  const f = new Date();
+  const nombre = `jd-ventas-respaldo-${f.getFullYear()}-${String(f.getMonth()+1).padStart(2,'0')}-${String(f.getDate()).padStart(2,'0')}.json`;
+
+  // Intento 1: compartir el archivo con el menú nativo de Android (más confiable en navegadores móviles)
+  try {
+    if (navigator.canShare && navigator.share) {
+      const file = new File([contenido], nombre, { type: 'application/json' });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Respaldo J.D Ventas' });
+        registrarRespaldoHecho();
+        render();
+        return;
+      }
+    }
+  } catch(err) {
+    // si el usuario cancela el share, o falla, seguimos con el siguiente intento
+  }
+
+  // Intento 2: descarga clásica con blob
+  try {
+    const blob = new Blob([contenido], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    registrarRespaldoHecho();
+    render();
+  } catch(err) {
+    // Intento 3: abrir en pestaña nueva para que el usuario lo guarde manualmente
+    try {
+      const blob = new Blob([contenido], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      registrarRespaldoHecho();
+      render();
+    } catch(err2) {
+      alert('No se pudo generar el respaldo. Intenta con Chrome.');
+    }
+  }
+}
+function importarRespaldo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const json = JSON.parse(e.target.result);
+      if (!json.data || !json.pagosMes) throw new Error('Formato inválido');
+      if (!confirm('Esto reemplazará todos los datos actuales con los del respaldo. ¿Continuar?')) return;
+      state.data = json.data;
+      state.pagosMes = json.pagosMes;
+      state.productos = json.productos || [];
+      state.ventas = json.ventas || [];
+      guardarLocal();
+      render();
+      alert('Respaldo restaurado correctamente.');
+    } catch(err) {
+      alert('El archivo no es un respaldo válido de J.D Ventas.');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// ============== VENCIMIENTOS ==============
+function calcularVencimientos() {
+  const LIMITE_DIAS = 5; // avisar desde 5 días antes
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  const claveReal = claveMes(hoy);
+  const pagosReales = state.pagosMes[claveReal] || {};
+  const lista = [];
+  Object.entries(state.data).forEach(([sk, s]) => {
+    s.clientes.forEach(c => {
+      if (c.archivado) return; // ya canceló, no se le recuerda nada
+      if (c.tipoPago !== 'mensual' || (!c.diaPago && !c.ultimoPago)) return;
+      if (pagosReales[sk+':'+c.id]) return; // ya pagó este mes
+      const info = calcularEstadoVencimiento(c);
+      if (!info) return;
+      if (info.diff <= LIMITE_DIAS) {
+        lista.push({ servicio: sk, cliente: c, diasRestantes: info.diff });
+      }
+    });
+  });
+  lista.sort((a,b) => a.diasRestantes - b.diasRestantes);
+  return lista;
+}
+
+// ============== SESIÓN (ADMIN / VENDEDOR) ==============
+async function intentarLogin(rol) {
+  if (rol === 'vendedor') {
+    state.rol = 'vendedor';
+    try { localStorage.setItem('sesion-rol', 'vendedor'); } catch(e) {}
+    state.vista = 'tienda';
+    render();
+    return;
+  }
+
+  // Admin sí requiere PIN
+  const pin = prompt('Ingresa el PIN de Admin:');
+  if (pin === null) return;
+
+  // Verificamos contra el PIN más reciente de la nube (si hay internet), no solo
+  // el que esté en memoria en este momento — importante la primera vez que se
+  // abre la app en un teléfono nuevo, antes de que termine de sincronizar.
+  let pinVigente = state.config.pinAdmin;
+  if (window.nubeListo) {
+    try {
+      const remoto = await window.nubeLeer();
+      if (remoto?.config?.pinAdmin) pinVigente = remoto.config.pinAdmin;
+    } catch(e) { /* sin internet: seguimos con el PIN que ya teníamos guardado */ }
+  }
+
+  if (pin.trim() === pinVigente) {
+    state.rol = 'admin';
+    try { localStorage.setItem('sesion-rol', 'admin'); } catch(e) {}
+    state.vista = 'inicio';
+    render();
+  } else {
+    alert('PIN incorrecto.');
+  }
+}
+function cerrarSesion() {
+  state.rol = null;
+  try { localStorage.removeItem('sesion-rol'); } catch(e) {}
+  render();
+}
+function cambiarPinAdmin() {
+  const nuevo = prompt('Nuevo PIN de Admin (solo números):', state.config.pinAdmin);
+  if (nuevo === null || !nuevo.trim()) return;
+  state.config.pinAdmin = nuevo.trim();
+  guardarLocal();
+  render();
+  alert('✅ PIN actualizado.');
+}
+
+// El admin registra cuánto dinero dejó en caja para que el Vendedor pueda dar
+// cambio; el Vendedor solo lo ve, no lo puede modificar.
+function actualizarCajaCambio() {
+  if (state.rol !== 'admin') return;
+  const actual = state.config.cajaCambio || 0;
+  const nuevo = prompt('¿Cuánto dejaste en caja para dar cambio?', actual);
+  if (nuevo === null) return;
+  const valor = parseFloat(nuevo);
+  if (isNaN(valor) || valor < 0) { alert('Escribe un número válido.'); return; }
+  state.config.cajaCambio = Math.round(valor * 100) / 100;
+  guardarLocal();
+  render();
+}
+
+function renderLogin() {
+  return `
+    <div class="fade-in" style="min-height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:24px; gap:14px; background:#0a0e1a">
+      <div class="logo" style="width:64px; height:64px; font-size:28px; margin-bottom:8px">$</div>
+      <h1 style="font-size:22px; color:#f1f5f9">J.D Ventas</h1>
+      <p style="color:#64748b; font-size:13px; margin-bottom:16px">¿Quién eres?</p>
+      <button class="guardar-btn" style="width:85%; max-width:320px" data-action="intentarLogin" data-rol="admin">🔒 Soy Admin</button>
+      <button class="tipo-btn" style="width:85%; max-width:320px; padding:14px" data-action="intentarLogin" data-rol="vendedor">🧾 Soy Vendedor</button>
+    </div>
+  `;
+}
+
+
+const DIAS_AVISO_RESPALDO = 7;
+
+function registrarRespaldoHecho() {
+  try { localStorage.setItem('ultimo-respaldo', String(Date.now())); } catch(e) {}
+}
+function diasDesdeUltimoRespaldo() {
+  try {
+    const raw = localStorage.getItem('ultimo-respaldo');
+    if (!raw) return null;
+    return Math.floor((Date.now() - parseInt(raw)) / 86400000);
+  } catch(e) { return null; }
+}
+function renderAvisoRespaldo() {
+  const dias = diasDesdeUltimoRespaldo();
+  if (dias !== null && dias < DIAS_AVISO_RESPALDO) return '';
+  const texto = dias === null ? '💾 Nunca has hecho un respaldo de tus datos' : `💾 Tu último respaldo fue hace ${dias} días`;
+  return `<div class="respaldo-alert">
+    <div class="texto">${texto}</div>
+    <button data-action="setVista" data-vista="dashboard">Respaldar</button>
+  </div>`;
+}
+
+function renderVencimientos() {
+  const venc = calcularVencimientos();
+  if (venc.length === 0) return '';
+  const claveHoy = claveMes(new Date());
+  return `<div class="venc-card">
+    <div class="venc-title">⏰ Pagos por vencer</div>
+    ${venc.map(v => {
+      const info = SERVICIOS[v.servicio];
+      const vencido = v.diasRestantes < 0;
+      const texto = vencido ? `Vencido hace ${Math.abs(v.diasRestantes)}d` : v.diasRestantes === 0 ? 'Vence hoy' : `En ${v.diasRestantes}d`;
+      return `<div class="venc-row ${vencido ? 'vencido' : ''}" data-action="togglePago" data-servicio="${v.servicio}" data-cid="${v.cliente.id}" data-mes="${claveHoy}">
+        <span class="check-btn" style="font-size:18px">⭕</span>
+        <div class="venc-info">
+          <div class="nombre">${esc(v.cliente.nombre)}</div>
+          <span class="tag" style="background:${info.color}20; color:${info.color}">${info.nombre}</span>
+        </div>
+        <div class="venc-dias ${vencido ? 'vencido' : ''}">${texto}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+// ============== RENDER ==============
+function render() {
+  const app = document.getElementById('app');
+
+  if (!state.rol) {
+    app.innerHTML = renderLogin();
+    bindEvents();
+    return;
+  }
+
+  if (state.rol === 'vendedor') {
+    state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
+    const vista = renderTienda();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana();
+    bindEvents();
+    return;
+  }
+
+  // Admin: control total
+  let vista;
+  if (state.vista === 'inicio') vista = renderInicio();
+  else if (state.vista === 'tienda') vista = renderTienda();
+  else vista = renderDashboard();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia();
+  bindEvents();
+}
+
+function renderHeader() {
+  const subtitulos = { inicio: 'Control por servicio', tienda: 'Ventas por pieza', dashboard: 'Ganancias mes a mes', cobros: 'Lo que hay que cobrar' };
+  return `
+    <div class="header">
+      <div class="header-top">
+        <div class="logo">$</div>
+        <div style="flex:1">
+          <h1>J.D Ventas</h1>
+          <p>${subtitulos[state.vista] || ''}</p>
+        </div>
+        <span id="nube-status" style="font-size:18px; opacity:0.8"></span>
+      </div>
+      ${state.vista === 'inicio' ? renderSelectorMes() : ''}
+    </div>
+  `;
+}
+
+function renderNavRecepcion() {
+  return `<div class="nav-bottom">
+    <button class="nav-btn ${state.vista === 'tienda' ? 'activo' : ''}" data-action="setVista" data-vista="tienda">
+      <span class="icon">🛒</span> Productos
+    </button>
+    <button class="nav-btn" data-action="cerrarSesion">
+      <span class="icon">🚪</span> Salir
+    </button>
+  </div>`;
+}
+
+// Vista de recepción: solo lo que hay que cobrar, sin costos ni ganancias
+function renderCobros() {
+  let totalCobrado = 0, totalPendiente = 0;
+  Object.entries(state.data).forEach(([sk, s]) => {
+    s.clientes.forEach(c => {
+      if (estaPagado(sk, c.id)) totalCobrado += c.pago;
+      else totalPendiente += c.pago;
+    });
+  });
+
+  let html = '<div class="fade-in">';
+  html += renderVencimientos();
+  html += `
+    <div class="resumen">
+      <div class="resumen-card destacado">
+        <div class="resumen-label" style="color:#10b981">Cobrado este mes</div>
+        <div class="resumen-value" style="color:#10b981">${fmt(totalCobrado)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#fbbf24">Falta por cobrar</div>
+        <div class="resumen-value" style="color:#fbbf24">${fmt(totalPendiente)}</div>
+      </div>
+    </div>
+  `;
+
+  html += '<div class="secciones">';
+  Object.entries(SERVICIOS).forEach(([sk, info]) => {
+    const s = state.data[sk];
+    if (!s.clientes.length) return;
+    const pagaron = s.clientes.filter(c => estaPagado(sk, c.id)).length;
+    html += `<div class="seccion">
+      <div class="seccion-header" style="background: linear-gradient(135deg, ${info.color}15, ${info.color}05); border-bottom: 1px solid ${info.color}25;">
+        <div class="seccion-top">
+          <div class="seccion-icon" style="background:${info.gradient}">${info.icon}</div>
+          <div class="seccion-info">
+            <h2>${info.nombre}</h2>
+            <p>${pagaron}/${s.clientes.length} pagaron</p>
+          </div>
+        </div>
+      </div>
+      <div class="seccion-body">
+        ${s.clientes.map(c => renderClienteRow(sk, c, info.color)).join('')}
+      </div>
+    </div>`;
+  });
+  html += '</div><div style="height:120px"></div></div>';
+  return html;
+}
+
+function renderSelectorMes() {
+  const hoy = new Date();
+  let html = '<div class="meses-scroll">';
+  for (let i = -6; i <= 2; i++) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth()+i, 1);
+    const k = claveMes(d);
+    html += `<button class="mes-btn ${k===state.mesActual?'activo':''}" data-action="setMes" data-mes="${k}">${formatoMes(k)}</button>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderInicio() {
+  const t = calcularTotalesMes();
+  let html = '<div class="fade-in">';
+  html += renderVencimientos();
+  html += renderAvisoRespaldo();
+  html += `
+    <div class="resumen">
+      <div class="resumen-card destacado">
+        <div class="resumen-label" style="color:#10b981">Ganancia del mes</div>
+        <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#06b6d4">Cobrado</div>
+        <div class="resumen-value">${fmt(t.cobrado)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#94a3b8">Costo real</div>
+        <div class="resumen-value">${fmt(t.costoReal)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#a78bfa">Esperado mensual</div>
+        <div class="resumen-value">${fmt(t.mensualEsperado)}</div>
+      </div>
+    </div>
+  `;
+
+  html += '<div class="secciones">';
+  Object.entries(SERVICIOS).forEach(([key, info]) => {
+    html += renderSeccion(key, info);
+  });
+  html += '</div><div style="height:120px"></div></div>';
+  return html;
+}
+
+function renderSeccion(key, info) {
+  const s = state.data[key];
+  const clientesActivos = s.clientes.filter(c => !c.archivado);
+  const clientesArchivados = s.clientes.filter(c => c.archivado);
+  const cobrado = clientesActivos.reduce((sum, c) => sum + (estaPagado(key, c.id) ? c.pago : 0), 0);
+  const ganancia = cobrado - s.precioReal;
+  const pagados = clientesActivos.filter(c => estaPagado(key, c.id)).length;
+  const editando = state.editandoPrecio === key;
+  const expandido = state.expandido[key];
+  const archivadosKey = 'archivados_' + key;
+
+  let html = `<div class="seccion">
+    <div class="seccion-header" style="background: linear-gradient(135deg, ${info.color}15, ${info.color}05); ${expandido ? `border-bottom: 1px solid ${info.color}20;` : ''}">
+      <div class="seccion-top" data-action="toggleExp" data-key="${key}" style="cursor:pointer">
+        <span class="chevron-btn" style="font-size:14px">${expandido ? '▼' : '▶'}</span>
+        <div class="seccion-icon" style="background: ${info.gradient}">${info.icon}</div>
+        <div class="seccion-info">
+          <h2>${info.nombre}</h2>
+          <p>${pagados}/${clientesActivos.length} pagaron</p>
+        </div>
+        <div class="seccion-ganancia">
+          <div class="label">Ganancia</div>
+          <div class="value" style="color: ${ganancia >= 0 ? info.color : '#ef4444'}">${fmt(ganancia)}</div>
+        </div>
+      </div>
+      <div class="precio-real-row">
+        <span class="label">Precio real (lo que pagas)</span>
+        ${editando ? `
+          <div style="display:flex; gap:6px; align-items:center">
+            <input id="precio-input" type="number" inputmode="decimal" class="precio-input" value="${state.precioTemp}" style="border-color: ${info.color}40" />
+            <button class="save-btn" style="background: ${info.color}" data-action="guardarPrecio" data-key="${key}">✓</button>
+          </div>
+        ` : `
+          <button data-action="iniciarPrecio" data-key="${key}">
+            <span class="monto">${fmt(s.precioReal)}</span>
+            <span style="color:#64748b; font-size:12px">✎</span>
+          </button>
+        `}
+      </div>
+    </div>
+    ${expandido ? `
+      <div class="seccion-body">
+        ${clientesActivos.length === 0 ? `<div class="vacio">Sin clientes en ${info.nombre}</div>` :
+          clientesActivos.map(c => renderClienteRow(key, c, info.color)).join('')
+        }
+        <button class="add-cliente-btn" style="background: ${info.color}15; color: ${info.color}; border: 1px dashed ${info.color}40" data-action="abrirModal" data-servicio="${key}">
+          + Agregar cliente
+        </button>
+        ${clientesArchivados.length > 0 ? `
+        <div data-action="toggleExp" data-key="${archivadosKey}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:10px; color:#64748b; font-size:12px">
+          <span>${state.expandido[archivadosKey] ? '▼' : '▶'}</span>
+          <span>🗄️ Archivados (${clientesArchivados.length})</span>
+        </div>
+        ${state.expandido[archivadosKey] ? `
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; opacity:0.7">
+          ${clientesArchivados.map(c => renderClienteRow(key, c, info.color)).join('')}
+        </div>` : ''}
+        ` : ''}
+      </div>
+    ` : ''}
+  </div>`;
+  return html;
+}
+
+// ============== NOTIFICACIONES DE VENCIMIENTO ==============
+const LIMITE_NOTIFICACION = 3; // avisar desde 3 días antes de vencer (y si ya venció)
+// Llave pública (VAPID) de este proyecto de Firebase para notificaciones push.
+// No es un secreto: identifica al proyecto, no da acceso a los datos.
+const VAPID_KEY = 'BFcQVHoGahQExG1HfWIF7u1MGkQy8TtB8G_d64rjK0rF1Xx8MyqzLblErrovafx3cvSrN2UUTlcSy6Ib7cpRhzQ';
+
+// Pide (o refresca) el token de notificaciones push de este dispositivo y lo
+// guarda en Firestore. Se llama tanto al activar notificaciones por primera
+// vez como cada vez que se abre la app, si ya había permiso concedido.
+async function refrescarTokenPush() {
+  if (!window.nubeActivarPush) return;
+  try { await window.nubeActivarPush(VAPID_KEY); } catch (e) {}
+}
+
+function cargarNotificados() {
+  try {
+    const raw = localStorage.getItem('notificados-hoy');
+    if (!raw) return { fecha: claveHoyISO(), ids: [] };
+    const obj = JSON.parse(raw);
+    if (obj.fecha !== claveHoyISO()) return { fecha: claveHoyISO(), ids: [] };
+    return obj;
+  } catch(e) { return { fecha: claveHoyISO(), ids: [] }; }
+}
+function guardarNotificados(obj) {
+  try { localStorage.setItem('notificados-hoy', JSON.stringify(obj)); } catch(e) {}
+}
+
+function dispararNotificacion(titulo, cuerpo) {
+  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.showNotification(titulo, { body: cuerpo, icon: 'icon-192.png', badge: 'icon-192.png', tag: titulo });
+    }).catch(() => {
+      try { new Notification(titulo, { body: cuerpo }); } catch(e) {}
+    });
+  } else {
+    try { new Notification(titulo, { body: cuerpo }); } catch(e) {}
+  }
+}
+
+function revisarYNotificar() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const venc = calcularVencimientos();
+  const notif = cargarNotificados();
+  let huboNuevas = false;
+  venc.forEach(v => {
+    if (v.diasRestantes > LIMITE_NOTIFICACION) return;
+    const clave = v.servicio + ':' + v.cliente.id;
+    if (notif.ids.includes(clave)) return;
+    const info = SERVICIOS[v.servicio];
+    const texto = v.diasRestantes < 0
+      ? `Vencido hace ${Math.abs(v.diasRestantes)} día(s) — ${info.nombre}`
+      : v.diasRestantes === 0
+        ? `Vence hoy — ${info.nombre}`
+        : `Vence en ${v.diasRestantes} día(s) — ${info.nombre}`;
+    dispararNotificacion(`${v.cliente.nombre}`, texto);
+    notif.ids.push(clave);
+    huboNuevas = true;
+  });
+  if (huboNuevas) guardarNotificados(notif);
+}
+
+async function activarNotificaciones() {
+  if (!('Notification' in window)) {
+    alert('Este navegador no soporta notificaciones.');
+    return;
+  }
+  const permiso = await Notification.requestPermission();
+  if (permiso === 'granted') {
+    revisarYNotificar();
+    await refrescarTokenPush();
+    render();
+  } else {
+    alert('No se activaron las notificaciones. Puedes intentarlo de nuevo cuando quieras desde este mismo botón.');
+  }
+}
+
+function claveHoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function sumarMes(fecha) {
+  const dia = fecha.getDate();
+  const destino = new Date(fecha.getFullYear(), fecha.getMonth()+1, 1);
+  const diasEnDestino = new Date(destino.getFullYear(), destino.getMonth()+1, 0).getDate();
+  destino.setDate(Math.min(dia, diasEnDestino));
+  return destino;
+}
+
+// Calcula cuándo vence la membresía de un cliente. Si tiene fecha real del último
+// pago (ultimoPago), la usa (vence 1 mes después, con precisión de día exacto).
+// Si no, usa el día fijo de vencimiento (diaPago) sobre el mes actual.
+function calcularEstadoVencimiento(c) {
+  const hoy = new Date();
+  hoy.setHours(0,0,0,0);
+  let fechaVenc;
+  if (c.ultimoPago) {
+    fechaVenc = sumarMes(new Date(c.ultimoPago + 'T00:00:00'));
+  } else if (c.diaPago) {
+    const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).getDate();
+    const dia = Math.min(c.diaPago, diasEnMes);
+    fechaVenc = new Date(hoy.getFullYear(), hoy.getMonth(), dia);
+  } else {
+    return null;
+  }
+  const diff = Math.round((fechaVenc - hoy) / 86400000);
+  if (diff < 0) return { diff, color: '#ef4444', texto: `Vencido ${Math.abs(diff)}d` };
+  if (diff === 0) return { diff, color: '#fbbf24', texto: 'Vence hoy' };
+  if (diff <= 5) return { diff, color: '#fbbf24', texto: `En ${diff}d` };
+  return { diff, color: '#64748b', texto: `En ${diff}d` };
+}
+
+function renderClienteRow(servicioKey, c, color) {
+  const pagado = estaPagado(servicioKey, c.id);
+  const archivado = !!c.archivado;
+  const vencInfo = (!archivado && c.tipoPago === 'mensual' && (c.diaPago || c.ultimoPago)) ? calcularEstadoVencimiento(c) : null;
+  return `
+    <div class="cliente card" style="${pagado ? `background: ${color}10; border-color: ${color}30;` : ''} ${archivado ? 'opacity:0.6' : ''}">
+      <button class="check-btn" ${archivado ? 'disabled' : ''} data-action="togglePago" data-servicio="${servicioKey}" data-cid="${c.id}">
+        ${pagado ? `<span style="color:${color}">✅</span>` : '<span style="color:#475569">⭕</span>'}
+      </button>
+      <div class="cliente-info">
+        <div class="nombre" style="${pagado ? 'color:#f1f5f9' : ''}">${esc(c.nombre)}${archivado ? ' <span style="color:#64748b; font-size:11px; font-weight:700">· ARCHIVADO</span>' : ''}</div>
+        <div class="cliente-tags">
+          <span class="tag ${c.tipoPago === 'mensual' ? 'tag-mensual' : 'tag-unico'}">${c.tipoPago === 'mensual' ? 'MENSUAL' : 'ÚNICO'}</span>
+          ${!archivado && c.diaPago ? `<span class="tag tag-venc">Vence: ${c.diaPago}</span>` : ''}
+          ${vencInfo ? `<span class="tag" style="background:${vencInfo.color}20; color:${vencInfo.color}">${vencInfo.texto}</span>` : ''}
+          ${c.notas ? `<span class="cliente-notas">${esc(c.notas)}</span>` : ''}
+        </div>
+      </div>
+      <div class="cliente-pago">
+        <div class="monto" style="${pagado ? `color:${color}` : ''}">${fmt(c.pago)}</div>
+      </div>
+      ${state.rol === 'admin' ? `
+      <div class="cliente-acciones">
+        <button class="icon-btn edit" data-action="abrirModal" data-servicio="${servicioKey}" data-cid="${c.id}">✎</button>
+        <button class="icon-btn" style="background:${archivado ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.15)'}; color:${archivado ? '#10b981' : '#64748b'}" data-action="toggleArchivadoCliente" data-servicio="${servicioKey}" data-cid="${c.id}" title="${archivado ? 'Restaurar' : 'Archivar (canceló)'}">${archivado ? '↩️' : '🗄️'}</button>
+        <button class="icon-btn delete" data-action="eliminarCliente" data-servicio="${servicioKey}" data-cid="${c.id}">🗑</button>
+      </div>` : ''}
+    </div>
+  `;
+}
+
+function renderTienda() {
+  const esAdmin = state.rol === 'admin';
+  const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes' && !p.archivado);
+  const productosArchivados = state.productos.filter(p => p.categoria !== 'perfumes' && p.archivado);
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
+  let html = '<div class="fade-in">';
+
+  if (esAdmin) {
+    const t = calcularTotalesTienda();
+    html += `
+      <div class="resumen">
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
+          <div class="resumen-value">${fmt(t.vendido)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#f59e0b">Piezas vendidas</div>
+          <div class="resumen-value">${t.piezas}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#a78bfa">Productos</div>
+          <div class="resumen-value">${state.productos.length}</div>
+        </div>
+      </div>
+    `;
+  } else {
+    // El Vendedor solo ve perfumes: su corte es de hoy y de la semana, no del mes.
+    const hoy = calcularVentasPerfumesRango(inicioDeHoy(), Date.now());
+    const semana = calcularVentasPerfumesRango(inicioDeSemana(), Date.now());
+    html += `
+      <div class="resumen">
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#06b6d4">Vendido hoy</div>
+          <div class="resumen-value">${fmt(hoy.vendido)}</div>
+          <div class="resumen-sub">${hoy.piezas} pza(s)</div>
+        </div>
+        <div class="resumen-card" data-action="abrirModalVentasSemana" style="cursor:pointer">
+          <div class="resumen-label" style="color:#a855f7">Vendido esta semana</div>
+          <div class="resumen-value">${fmt(semana.vendido)}</div>
+          <div class="resumen-sub">${semana.piezas} pza(s) · toca para ver detalle</div>
+        </div>
+      </div>
+    `;
+  }
+
+  html += `
+    <div style="padding: 0 20px 4px">
+      <div class="cliente card" style="justify-content:space-between; align-items:center; ${esAdmin ? 'cursor:pointer' : ''}" ${esAdmin ? 'onclick="actualizarCajaCambio()"' : ''}>
+        <div class="cliente-info">
+          <div class="nombre">💵 Caja para cambio</div>
+          <div class="cliente-notas">${esAdmin ? 'Toca para actualizar' : 'Dinero disponible para dar cambio'}</div>
+        </div>
+        <div class="monto mono" style="color:#10b981; font-size:20px">${fmt(state.config.cajaCambio || 0)}</div>
+      </div>
+    </div>
+  `;
+
+  html += `
+    <div style="padding: 0 20px 4px">
+      <button class="add-cliente-btn" style="background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(6,182,212,0.1)); color:#10b981; border: 1px solid rgba(16,185,129,0.3)" data-action="abrirScannerVenta">
+        📷 Escanear y vender
+      </button>
+    </div>
+  `;
+
+  html += '<div class="secciones">';
+  if (esAdmin) {
+    html += `<div class="seccion">
+      <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
+        <div class="seccion-top">
+          <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
+          <div class="seccion-info">
+            <h2>Productos</h2>
+            <p>${productosGenerales.length} producto(s) en catálogo</p>
+          </div>
+        </div>
+      </div>
+      <div class="seccion-body">
+        ${productosGenerales.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
+          productosGenerales.map(p => renderProductoRow(p)).join('')
+        }
+        <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
+          + Agregar producto
+        </button>
+        ${productosArchivados.length > 0 ? `
+        <div data-action="toggleExp" data-key="productosArchivados" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:10px; color:#64748b; font-size:12px">
+          <span>${state.expandido.productosArchivados ? '▼' : '▶'}</span>
+          <span>🗄️ Archivados (${productosArchivados.length})</span>
+        </div>
+        ${state.expandido.productosArchivados ? `
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; opacity:0.7">
+          ${productosArchivados.map(p => renderProductoRow(p)).join('')}
+        </div>` : ''}
+        ` : ''}
+      </div>
+    </div>`;
+  }
+  html += renderSeccionPerfumes(perfumes, esAdmin);
+  html += '</div>';
+
+  html += '<div style="height:120px"></div></div>';
+  return html;
+}
+
+function renderProductoRow(p) {
+  const gananciaPza = p.precioVenta - p.precioCosto;
+  const sinStock = p.stock <= 0;
+  const esAdmin = state.rol === 'admin';
+  const archivado = !!p.archivado;
+  const ventasProducto = [...state.ventas].filter(v => v.productoId === p.id).sort((a,b) => b.fecha - a.fecha);
+  const ventasAbiertas = !!state.ventasProductoExpandido[p.id];
+  return `
+    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:8px; ${archivado ? 'opacity:0.7' : ''}">
+      <div style="display:flex; gap:12px; align-items:center">
+        <div class="cliente-info">
+          <div class="nombre">${esc(p.nombre)}${archivado ? ' <span style="color:#64748b; font-size:11px; font-weight:700">· ARCHIVADO</span>' : ''}</div>
+          <div class="cliente-tags">
+            <span class="tag" style="background:${sinStock ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)'}; color:${sinStock ? '#ef4444' : '#f59e0b'}">Stock: ${p.stock}</span>
+            ${esAdmin ? `<span class="tag" style="background:rgba(16,185,129,0.15); color:#10b981">+${fmt(gananciaPza)}/pza</span>` : ''}
+          </div>
+          <div class="cliente-notas">${esAdmin ? `Costo ${fmt(p.precioCosto)} · ` : ''}Venta ${fmt(p.precioVenta)}${p.codigo ? ` · Cód: ${esc(p.codigo)}` : ''}</div>
+        </div>
+        <div class="cliente-acciones" style="flex-direction:row">
+          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${sinStock || archivado ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" ${sinStock || archivado ? 'disabled' : ''}>🛒</button>
+          ${esAdmin ? `
+          <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
+          <button class="icon-btn" style="background:${archivado ? 'rgba(16,185,129,0.12)' : 'rgba(100,116,139,0.15)'}; color:${archivado ? '#10b981' : '#64748b'}" data-action="toggleArchivadoProducto" data-pid="${p.id}" title="${archivado ? 'Restaurar' : 'Archivar'}">${archivado ? '↩️' : '🗄️'}</button>
+          <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>` : ''}
+        </div>
+      </div>
+      <div data-action="toggleVentasProducto" data-pid="${p.id}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:6px; border-top:1px solid rgba(148,163,184,0.1); color:#64748b; font-size:12px">
+        <span>${ventasAbiertas ? '▼' : '▶'}</span>
+        <span>🧾 Ventas recientes (${ventasProducto.length})</span>
+      </div>
+      ${ventasAbiertas ? `
+      <div style="display:flex; flex-direction:column; gap:6px">
+        ${ventasProducto.length === 0 ? '<div class="vacio" style="padding:8px 0">Aún no hay ventas de este producto</div>' :
+          ventasProducto.slice(0, 10).map(v => renderVentaRow(v)).join('')
+        }
+      </div>` : ''}
+    </div>
+  `;
+}
+
+// Sección de Perfumes: acordeón oculto por defecto (igual que Netflix/Spotify),
+// y dentro cada perfume también aparece colapsado (solo nombre) hasta tocarlo.
+function renderSeccionPerfumes(perfumes, esAdmin) {
+  const abierto = state.expandido.perfumes;
+  return `<div class="seccion" style="margin-top:12px">
+    <div class="seccion-header" style="background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(168,85,247,0.02)); ${abierto ? 'border-bottom: 1px solid rgba(168,85,247,0.15);' : ''}">
+      <div class="seccion-top" data-action="toggleExp" data-key="perfumes" style="cursor:pointer">
+        <span class="chevron-btn" style="font-size:14px">${abierto ? '▼' : '▶'}</span>
+        <div class="seccion-icon" style="background: linear-gradient(135deg, #a855f7, #7c3aed)">🌸</div>
+        <div class="seccion-info">
+          <h2>Perfumes</h2>
+          <p>${perfumes.length} producto(s) en catálogo</p>
+        </div>
+      </div>
+    </div>
+    ${abierto ? `
+    <div class="seccion-body">
+      ${perfumes.length === 0 ? '<div class="vacio">Sin perfumes, agrega el primero</div>' :
+        perfumes.map(p => renderProductoRowColapsable(p)).join('')
+      }
+      ${esAdmin ? `
+      <button class="add-cliente-btn" style="background: rgba(168,85,247,0.1); color: #a855f7; border: 1px dashed rgba(168,85,247,0.4)" data-action="abrirModalProducto" data-categoria="perfumes">
+        + Agregar perfume
+      </button>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+// Cada perfume inicia colapsado (solo el nombre); al tocarlo se expande
+// mostrando sus presentaciones (5ml, 10ml, y frasco completo si aplica) con su propio precio/código.
+function renderProductoRowColapsable(p) {
+  const abierto = !!state.productoExpandido[p.id];
+  if (!abierto) {
+    return `
+    <div class="cliente card" data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
+      <div class="cliente-info">
+        <div class="nombre">${esc(p.nombre)}</div>
+      </div>
+      <div style="color:#64748b; font-size:14px">▶ Ver</div>
+    </div>
+    `;
+  }
+  return `
+    <div data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
+      ${renderPerfumeExpandido(p)}
+    </div>
+  `;
+}
+
+function renderPerfumeExpandido(p) {
+  const esAdmin = state.rol === 'admin';
+  // Compatibilidad: si por alguna razón el perfume no tiene variantes (dato viejo),
+  // se muestra como una sola presentación "Único" para no romper la vista.
+  // El "Frasco completo" solo se muestra si le pusiste un precio (si lo dejas
+  // en 0, es porque no vendes ese perfume completo y no debe aparecer).
+  const variantes = (Array.isArray(p.variantes) && p.variantes.length > 0)
+    ? p.variantes.filter(v => v.tamano !== 'Frasco completo' || v.precioVenta > 0)
+    : [{ tamano: 'Único', precioVenta: p.precioVenta || 0 }];
+  const { piezasVendidas, ingresoAcumulado } = calcularCicloPerfume(p);
+  const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
+  return `
+    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:10px">
+      <div style="display:flex; gap:12px; align-items:center">
+        <div class="cliente-info">
+          <div class="nombre">🌸 ${esc(p.nombre)}</div>
+          ${p.codigo ? `<div class="cliente-notas">Cód: ${esc(p.codigo)}</div>` : ''}
+          ${esAdmin ? `<div class="cliente-notas">Costo del frasco: ${fmt(p.precioCosto)} · ${costoRestante > 0 ? `faltan ${fmt(costoRestante)} por recuperar` : 'costo ya recuperado ✅'}</div>` : ''}
+          ${esAdmin ? `<div class="cliente-notas">Piezas vendidas de este frasco: ${piezasVendidas}</div>` : ''}
+        </div>
+        ${esAdmin ? `
+        <div class="cliente-acciones" style="flex-direction:row">
+          <button class="icon-btn" style="background:rgba(6,182,212,0.12); color:#06b6d4" data-action="reiniciarFrascoPerfume" data-pid="${p.id}" title="Nuevo frasco">🔄</button>
+          <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
+          <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>
+        </div>` : ''}
+      </div>
+      ${variantes.map(v => renderVarianteRow(p, v)).join('')}
+    </div>
+  `;
+}
+
+function renderVarianteRow(p, v) {
+  const esAdmin = state.rol === 'admin';
+  const agotado = !!v.agotado;
+  const key = p.id + ':' + v.tamano;
+  const ventasVariante = [...state.ventas].filter(vv => vv.productoId === p.id && (vv.tamano || null) === (v.tamano === 'Único' ? null : v.tamano)).sort((a,b) => b.fecha - a.fecha);
+  const ventasAbiertas = !!state.ventasProductoExpandido[key];
+  return `
+    <div style="border-top:1px solid rgba(148,163,184,0.12); padding-top:10px; ${agotado ? 'opacity:0.55' : ''}">
+      <div style="display:flex; gap:12px; align-items:center">
+        <div class="cliente-info">
+          <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}${agotado ? ' <span style="color:#ef4444; font-size:11px; font-weight:700">· AGOTADO</span>' : ''}</div>
+          <div class="cliente-notas">Venta ${fmt(v.precioVenta)}</div>
+        </div>
+        <div class="cliente-acciones" style="flex-direction:row">
+          ${esAdmin ? `<button class="icon-btn" style="background:${agotado ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'}; color:${agotado ? '#10b981' : '#ef4444'}" data-action="toggleAgotadoVariante" data-pid="${p.id}" data-tam="${v.tamano}" title="${agotado ? 'Marcar disponible' : 'Marcar agotado'}">${agotado ? '✅' : '🚫'}</button>` : ''}
+          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${agotado ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}" ${agotado ? 'disabled' : ''}>🛒</button>
+        </div>
+      </div>
+      <div data-action="toggleVentasProducto" data-pid="${key}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:8px; color:#64748b; font-size:12px">
+        <span>${ventasAbiertas ? '▼' : '▶'}</span>
+        <span>🧾 Ventas recientes (${ventasVariante.length})</span>
+      </div>
+      ${ventasAbiertas ? `
+      <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px">
+        ${ventasVariante.length === 0 ? '<div class="vacio" style="padding:8px 0">Aún no hay ventas de esta presentación</div>' :
+          ventasVariante.slice(0, 10).map(vv => renderVentaRow(vv)).join('')
+        }
+      </div>` : ''}
+    </div>
+  `;
+}
+
+// El admin marca/desmarca una presentación como agotada (sin borrar el
+// perfume ni su historial); mientras esté agotada, no se puede vender.
+function toggleAgotadoVariante(productoId, tamano) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === productoId);
+  if (!p || !Array.isArray(p.variantes)) return;
+  const v = p.variantes.find(vv => vv.tamano === tamano);
+  if (!v) return;
+  v.agotado = !v.agotado;
+  guardarLocal();
+  render();
+}
+
+function renderVentaRow(v) {
+  const p = state.productos.find(pp => pp.id === v.productoId);
+  const fechaStr = new Date(v.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+  const horaStr = new Date(v.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const esAdmin = state.rol === 'admin';
+  return `
+    <div class="cliente" style="margin-bottom:8px">
+      <div class="cliente-info">
+        <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}${v.tamano ? ` (${esc(v.tamano)})` : ''}</div>
+        <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr} · ${horaStr}</div>
+      </div>
+      <div class="cliente-pago">
+        <div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>
+        ${esAdmin ? `<div style="font-size:11px; color:#10b981; margin-top:2px">+${fmt(v.ganancia)}</div>` : ''}
+      </div>
+      ${esAdmin ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
+    </div>
+  `;
+}
+
+function renderModalProducto() {
+  if (!state.modalProducto) return '';
+  const f = state.formProducto;
+  const esPerfume = f.categoria === 'perfumes';
+  return `<div class="modal-overlay" data-action="cerrarModalProducto">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>${state.modalProducto.productoId ? 'Editar' : 'Nuevo'} ${esPerfume ? 'perfume' : 'producto'}</h3>
+        <button class="close-btn" data-action="cerrarModalProducto">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#f59e0b">Productos</div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Nombre del ${esPerfume ? 'perfume' : 'producto'} <span class="required">*</span></label></div>
+        <input class="input" type="text" value="${esc(f.nombre)}" placeholder="${esPerfume ? 'Ej. Bleu de Chanel' : 'Ej. Playera talla M'}" oninput="actualizarFormProducto('nombre', this.value); document.getElementById('btn-guardar-producto').disabled = !this.value.trim()" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Categoría</label></div>
+        <div class="tipo-pago-grid">
+          <button type="button" class="tipo-btn ${f.categoria !== 'perfumes' ? 'activo' : ''}" data-action="setCategoriaProducto" data-categoria="general">📦 Productos</button>
+          <button type="button" class="tipo-btn ${f.categoria === 'perfumes' ? 'activo' : ''}" data-action="setCategoriaProducto" data-categoria="perfumes">🌸 Perfumes</button>
+        </div>
+      </div>
+
+      ${esPerfume ? `
+      <div class="campo">
+        <div class="campo-label"><label>Precio costo del frasco ($)</label><span class="hint">Es el mismo frasco, solo un costo</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.precioCosto)}" placeholder="0.00" oninput="actualizarFormProducto('precioCosto', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>Código de barras</label><span class="hint">Uno solo, sirve para las 2 presentaciones</span></div>
+        <div style="display:flex; gap:8px">
+          <input class="input" style="flex:1" type="text" value="${esc(f.codigo || '')}" placeholder="Escanea o escribe" oninput="actualizarFormProducto('codigo', this.value)" />
+          <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar">📷</button>
+        </div>
+      </div>
+      ${renderCamposVariantesPerfume(f)}
+      ` : renderCamposProductoGeneral(f)}
+
+      <button id="btn-guardar-producto" class="guardar-btn" style="background: linear-gradient(135deg, #f59e0b, #d97706)" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarProducto">
+        ✓ ${state.modalProducto.productoId ? 'Guardar cambios' : (esPerfume ? 'Agregar perfume' : 'Agregar producto')}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderCamposProductoGeneral(f) {
+  return `
+      <div class="campo">
+        <div class="campo-label"><label>Precio total (costo) ($)</label><span class="hint">Lo que a ti te cuesta</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.precioCosto)}" placeholder="0.00" oninput="actualizarFormProducto('precioCosto', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Precio cliente ($)</label><span class="hint">Lo que le cobras</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.precioVenta)}" placeholder="0.00" oninput="actualizarFormProducto('precioVenta', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Piezas disponibles</label><span class="hint">Stock actual</span></div>
+        <input class="input" type="number" inputmode="numeric" min="0" value="${esc(f.stock)}" placeholder="0" oninput="actualizarFormProducto('stock', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Código de barras (opcional)</label><span class="hint">Para venta rápida</span></div>
+        <div style="display:flex; gap:8px">
+          <input class="input" style="flex:1" type="text" value="${esc(f.codigo || '')}" placeholder="Escanea o escribe" oninput="actualizarFormProducto('codigo', this.value)" />
+          <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar">📷</button>
+        </div>
+      </div>
+  `;
+}
+
+function renderCamposVariantesPerfume(f) {
+  return TAMANOS_PERFUME.map(tam => {
+    const v = f.variantes[tam];
+    const esFrasco = tam === 'Frasco completo';
+    return `
+      <div class="campo" style="border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:12px; margin-top:4px">
+        <div style="font-weight:700; color:#a855f7; margin-bottom:10px">${esFrasco ? '🍾' : '🧴'} ${esFrasco ? 'Frasco completo' : `Presentación ${tam}`}</div>
+
+        <div class="campo-label"><label>Precio cliente ($)</label>${esFrasco ? '<span class="hint">Déjalo en 0 si no vendes el frasco completo</span>' : ''}</div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(v.precioVenta)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioVenta', this.value)" />
+      </div>
+    `;
+  }).join('');
+}
+
+function renderModalVenta() {
+  if (!state.modalVenta) return '';
+  const p = state.productos.find(pp => pp.id === state.modalVenta.productoId);
+  if (!p) return '';
+  const tamano = state.modalVenta.tamano;
+  const info = obtenerInfoVenta(p, tamano);
+  if (!info) return '';
+  const sinLimite = info.stock === null;
+  const cant = parseInt(state.formVenta.cantidad) || 0;
+  let totalEstim, gananciaEstim;
+  if (tamano) {
+    const calc = calcularVentaPerfume(p, tamano, cant || 0);
+    totalEstim = calc ? calc.total : 0;
+    gananciaEstim = calc ? calc.ganancia : 0;
+  } else {
+    totalEstim = info.precioVenta * cant;
+    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+  }
+  return `<div class="modal-overlay" data-action="cerrarModalVenta">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Vender: ${esc(p.nombre)}${tamano ? ` (${esc(tamano)})` : ''}</h3>
+        <button class="close-btn" data-action="cerrarModalVenta">✕</button>
+      </div>
+      ${sinLimite ? '' : `<div class="modal-subtitle" style="color:#10b981">Stock disponible: ${info.stock}</div>`}
+
+      <div class="campo">
+        <div class="campo-label"><label>Piezas a vender <span class="required">*</span></label></div>
+        <input class="input" type="number" inputmode="numeric" min="1" ${sinLimite ? '' : `max="${info.stock}"`} value="${esc(state.formVenta.cantidad)}" placeholder="1" oninput="actualizarFormVenta(this.value)" />
+      </div>
+
+      <div class="precio-real-row" style="margin-bottom:${state.rol === 'admin' ? '12px' : '16px'}">
+        <span class="label">Total a cobrar</span>
+        <span class="monto mono" id="venta-total">${fmt(totalEstim)}</span>
+      </div>
+      ${state.rol === 'admin' ? `
+      <div class="precio-real-row" style="margin-bottom:16px">
+        <span class="label">Ganancia</span>
+        <span class="monto mono" id="venta-ganancia" style="color:#10b981">${fmt(gananciaEstim)}</span>
+      </div>` : ''}
+
+      <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || (!sinLimite && cant > info.stock) ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}" data-tam="${tamano || ''}">
+        ✓ Confirmar venta
+      </button>
+    </div>
+  </div>`;
+}
+
+// Detalle de "Vendido esta semana": lista cada venta de perfumes de la
+// semana en curso (lunes a hoy), para que el Vendedor tenga el control
+// exacto de qué se vendió, no solo el total.
+function renderModalVentasSemana() {
+  if (!state.modalVentasSemana) return '';
+  const ventas = listarVentasPerfumesRango(inicioDeSemana(), Date.now());
+  const totalVendido = ventas.reduce((s, v) => s + v.total, 0);
+  const totalPiezas = ventas.reduce((s, v) => s + v.cantidad, 0);
+  return `<div class="modal-overlay" data-action="cerrarModalVentasSemana">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Ventas de esta semana</h3>
+        <button class="close-btn" data-action="cerrarModalVentasSemana">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#a855f7">${totalPiezas} pza(s) · ${fmt(totalVendido)} en total</div>
+      ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas de perfumes esta semana</div>' :
+        ventas.map(v => renderVentaRow(v)).join('')
+      }
+    </div>
+  </div>`;
+}
+
+// Detalle del "Mejor día" (o cualquier día) que toca el admin desde el
+// Dashboard: qué se vendió exactamente ese día.
+function renderModalVentasDia() {
+  if (!state.modalVentasDia) return '';
+  const { fecha, categoria } = state.modalVentasDia;
+  const ventas = listarVentasDia(fecha, categoria);
+  const totalVendido = ventas.reduce((s, v) => s + v.total, 0);
+  const totalGanancia = ventas.reduce((s, v) => s + v.ganancia, 0);
+  const totalPiezas = ventas.reduce((s, v) => s + v.cantidad, 0);
+  const color = categoria === 'perfumes' ? '#a855f7' : '#f59e0b';
+  return `<div class="modal-overlay" data-action="cerrarModalVentasDia">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Ventas del ${formatearFechaCorta(fecha)}${categoria === 'perfumes' ? ' (perfumes)' : ''}</h3>
+        <button class="close-btn" data-action="cerrarModalVentasDia">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:${color}">${totalPiezas} pza(s) · ${fmt(totalVendido)} cobrado · +${fmt(totalGanancia)} ganancia</div>
+      ${ventas.length === 0 ? '<div class="vacio">No hay ventas registradas ese día</div>' :
+        ventas.map(v => renderVentaRow(v)).join('')
+      }
+    </div>
+  </div>`;
+}
+
+function renderModalScanner() {
+  if (!state.scanner) return '';
+  const esVenta = state.scanner.modo === 'venta';
+  return `<div class="modal-overlay" data-action="cerrarScanner">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>${esVenta ? 'Escanear y vender' : 'Escanear código'}</h3>
+        <button class="close-btn" data-action="cerrarScanner">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#10b981">${esVenta ? 'Apunta al código de barras — vas a confirmar el precio antes de cobrar' : 'Apunta al código de barras del producto'}</div>
+
+      <div class="scanner-video-wrap">
+        <video id="scanner-video" muted playsinline></video>
+        <div class="scanner-frame"></div>
+      </div>
+      <div class="scanner-status" id="scanner-status">Buscando código…</div>
+      ${esVenta ? `<div id="scanner-confirmar" style="display:none; margin-top:10px"></div>` : ''}
+
+      <div class="scanner-manual">
+        <input id="scanner-manual-input" class="input" type="text" placeholder="O escribe el código aquí" />
+        <button class="save-btn" style="width:48px; height:48px; background:#10b981" data-action="buscarCodigoManual">✓</button>
+      </div>
+      ${esVenta ? `<div id="scanner-lista" style="margin-top:14px"></div>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderDashboard() {
+  const datos = calcularDatosMensuales();
+  const conDatos = datos.filter(m => m.ganancia !== 0);
+  const totalAnual = conDatos.reduce((s,m)=>s+m.ganancia,0);
+  const promedio = conDatos.length > 0 ? totalAnual / conDatos.length : 0;
+  const mejorMes = conDatos.reduce((max,m) => m.ganancia > (max?.ganancia || -Infinity) ? m : max, null);
+  const mesActual = datos[datos.length-1];
+  const mesAnt = datos[datos.length-2];
+  let cambio = 0;
+  if (mesAnt && mesAnt.ganancia !== 0) cambio = ((mesActual.ganancia - mesAnt.ganancia) / Math.abs(mesAnt.ganancia)) * 100;
+
+  // Por servicio mes actual
+  const mesK = claveMes(new Date());
+  const pagosM = state.pagosMes[mesK] || {};
+  const porServicio = Object.entries(SERVICIOS).map(([sk, info]) => {
+    const s = state.data[sk];
+    const cob = s.clientes.reduce((sum,c) => sum + (pagosM[sk+':'+c.id] ? c.pago : 0), 0);
+    return { nombre: info.nombre, ganancia: Math.round((cob - s.precioReal)*100)/100, color: info.color };
+  });
+  const maxAbs = Math.max(...porServicio.map(p => Math.abs(p.ganancia)), 1);
+
+  // Ventas de la tienda día por día (mes en curso)
+  const hoyKey = (() => { const h = new Date(); return `${h.getFullYear()}-${String(h.getMonth()+1).padStart(2,'0')}-${String(h.getDate()).padStart(2,'0')}`; })();
+  const ventasPorDia = calcularVentasPorDia();
+  const totalPiezasMes = ventasPorDia.reduce((s, d) => s + d.piezas, 0);
+  const totalVendidoMes = ventasPorDia.reduce((s, d) => s + d.vendido, 0);
+  const ventasHoy = ventasPorDia.find(d => d.fecha === hoyKey) || { fecha: hoyKey, piezas: 0, vendido: 0, ganancia: 0 };
+
+  // Lo mismo pero solo contando perfumes, para ver qué día se vendió más de perfumes
+  const ventasPorDiaPerfumes = calcularVentasPorDia('perfumes');
+  const totalPiezasPerfumesMes = ventasPorDiaPerfumes.reduce((s, d) => s + d.piezas, 0);
+  const totalVendidoPerfumesMes = ventasPorDiaPerfumes.reduce((s, d) => s + d.vendido, 0);
+  const ventasHoyPerfumes = ventasPorDiaPerfumes.find(d => d.fecha === hoyKey) || { fecha: hoyKey, piezas: 0, vendido: 0, ganancia: 0 };
+
+  // Piezas vendidas mes por mes (histórico de 12 meses)
+  const piezasPorMes = calcularPiezasPorMes();
+  const piezasPorMesPerfumes = calcularPiezasPorMes('perfumes');
+
+  // Flujo de dinero de la tienda (productos + perfumes), mes por mes
+  const flujoTienda = calcularFlujoTiendaMensual();
+  const flujoMesActual = flujoTienda[flujoTienda.length - 1];
+  const hayFlujoTienda = flujoTienda.some(m => m.cobrado > 0);
+  const flujoCategorias = calcularFlujoPorCategoria(mesK);
+  const capitalPerfumes = calcularCapitalPerfumes();
+
+  // Ranking de perfumes por piezas vendidas (este mes)
+  const rankingPerfumes = calcularRankingPerfumes(mesK);
+  const maxPiezasPerfume = Math.max(...rankingPerfumes.map(r => r.piezas), 1);
+
+  return `<div class="fade-in" style="padding: 16px 20px">
+    <div class="resumen" style="padding: 0; margin-bottom: 20px">
+      <div class="resumen-card destacado">
+        <div class="resumen-label" style="color:#10b981">Total 12 meses</div>
+        <div class="resumen-value" style="color:#10b981">${fmt(totalAnual)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#06b6d4">Promedio mensual</div>
+        <div class="resumen-value">${fmt(promedio)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:${cambio >= 0 ? '#10b981' : '#ef4444'}">Mes actual</div>
+        <div class="resumen-value">${fmt(mesActual?.ganancia || 0)}</div>
+        ${cambio !== 0 ? `<div class="resumen-sub">${cambio >= 0 ? '↑' : '↓'} ${Math.abs(cambio).toFixed(0)}% vs mes anterior</div>` : '<div class="resumen-sub">sin datos previos</div>'}
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#a78bfa">Mejor mes</div>
+        <div class="resumen-value">${mejorMes ? fmt(mejorMes.ganancia) : '—'}</div>
+        ${mejorMes ? `<div class="resumen-sub">${mejorMes.mes}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#10b981">📈</span> Ganancia mensual</div>
+      ${renderLineChart(datos)}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#06b6d4">📊</span> Cobrado vs Costo (6 meses)</div>
+      ${renderBarChart(datos.slice(-6))}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#f59e0b">🗓️</span> Ventas por día (tienda, este mes)</div>
+      ${totalPiezasMes === 0 ? '<div class="vacio">Aún no hay ventas de tienda este mes</div>' : `
+      <div class="resumen-card destacado" style="margin-bottom:14px; cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${ventasHoy.fecha}">
+        <div class="resumen-label" style="color:#f59e0b">Hoy</div>
+        <div class="resumen-value">${ventasHoy.piezas} pza(s)</div>
+        <div class="resumen-sub">${fmt(ventasHoy.vendido)} · +${fmt(ventasHoy.ganancia)} ganancia</div>
+        <div class="resumen-sub" style="color:#f59e0b">toca para ver el detalle</div>
+      </div>
+      ${renderBarChartDias(ventasPorDia)}
+      <div style="text-align:right; font-size:12px; color:#64748b; margin-top:10px; padding-top:10px; border-top:1px solid rgba(148,163,184,0.1)">
+        Total del mes: <span style="color:#f1f5f9; font-weight:700">${totalPiezasMes} pza(s) · ${fmt(totalVendidoMes)}</span>
+      </div>
+      `}
+      ${piezasPorMes.some(m => m.piezas > 0) ? `
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.1)">
+        <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Piezas vendidas por mes (últimos 12 meses)</div>
+        ${renderBarChartMesesPiezas(piezasPorMes)}
+      </div>
+      ` : ''}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a855f7">🌸</span> Ventas por día — Perfumes (este mes)</div>
+      ${totalPiezasPerfumesMes === 0 ? '<div class="vacio">Aún no hay ventas de perfumes este mes</div>' : `
+      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(168,85,247,0.13), rgba(168,85,247,0.03)); border-color: rgba(168,85,247,0.25); cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${ventasHoyPerfumes.fecha}" data-categoria="perfumes">
+        <div class="resumen-label" style="color:#a855f7">Hoy</div>
+        <div class="resumen-value">${ventasHoyPerfumes.piezas} pza(s)</div>
+        <div class="resumen-sub">${fmt(ventasHoyPerfumes.vendido)} · +${fmt(ventasHoyPerfumes.ganancia)} ganancia</div>
+        <div class="resumen-sub" style="color:#a855f7">toca para ver el detalle</div>
+      </div>
+      ${renderBarChartDias(ventasPorDiaPerfumes, '#a855f7', 'perfumes')}
+      <div style="text-align:right; font-size:12px; color:#64748b; margin-top:10px; padding-top:10px; border-top:1px solid rgba(148,163,184,0.1)">
+        Total del mes: <span style="color:#f1f5f9; font-weight:700">${totalPiezasPerfumesMes} pza(s) · ${fmt(totalVendidoPerfumesMes)}</span>
+      </div>
+      `}
+      ${piezasPorMesPerfumes.some(m => m.piezas > 0) ? `
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.1)">
+        <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Piezas vendidas por mes (últimos 12 meses)</div>
+        ${renderBarChartMesesPiezas(piezasPorMesPerfumes, '#a855f7')}
+      </div>
+      ` : ''}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a855f7">🌸</span> Capital invertido en perfumes</div>
+      ${capitalPerfumes.invertido === 0 ? '<div class="vacio">Aún no tienes perfumes con costo registrado</div>' : `
+      <div class="resumen" style="padding:0">
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#94a3b8">Invertido (frascos)</div>
+          <div class="resumen-value">${fmt(capitalPerfumes.invertido)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#10b981">Recuperado</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(capitalPerfumes.recuperado)}</div>
+        </div>
+        <div class="resumen-card destacado" style="grid-column: span 2">
+          <div class="resumen-label" style="color:#fbbf24">Falta por recuperar</div>
+          <div class="resumen-value" style="color:#fbbf24">${fmt(capitalPerfumes.faltante)}</div>
+        </div>
+      </div>
+      `}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#ec4899">💸</span> Flujo de dinero — Tienda (perfumes y productos)</div>
+      ${!hayFlujoTienda ? '<div class="vacio">Aún no hay ventas de tienda</div>' : `
+      <div class="resumen" style="padding:0; margin-bottom:14px">
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#06b6d4">Cobrado (mes)</div>
+          <div class="resumen-value">${fmt(flujoMesActual.cobrado)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#64748b">Reinvertido (mes)</div>
+          <div class="resumen-value">${fmt(flujoMesActual.costo)}</div>
+        </div>
+        <div class="resumen-card destacado" style="grid-column: span 2">
+          <div class="resumen-label" style="color:#10b981">Ganancia neta (mes)</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(flujoMesActual.ganancia)}</div>
+        </div>
+      </div>
+      ${renderBarChart(flujoTienda.slice(-6))}
+      <div style="margin-top:16px; display:flex; flex-direction:column; gap:10px">
+        ${renderFlujoCategoria('🌸 Perfumes', '#a855f7', flujoCategorias.perfumes)}
+        ${flujoCategorias.generales.length === 0
+          ? renderFlujoCategoria('📦 Productos', '#f59e0b', { cobrado: 0, ganancia: 0, costo: 0 })
+          : flujoCategorias.generales.map(g => renderFlujoCategoria(`📦 ${esc(g.nombre)}`, '#f59e0b', g)).join('')
+        }
+      </div>
+      `}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a855f7">🏆</span> Ranking de perfumes (este mes)</div>
+      ${rankingPerfumes.length === 0 ? '<div class="vacio">Aún no tienes perfumes registrados</div>' : rankingPerfumes.map((r, i) => `
+        <div class="servicio-bar">
+          <div class="servicio-bar-row">
+            <span class="nombre">${i === 0 && r.piezas > 0 ? '🥇 ' : ''}${esc(r.nombre)}</span>
+            <span class="monto" style="color:#a855f7">${r.piezas} pza(s)</span>
+          </div>
+          <div class="servicio-bar-bg">
+            <div class="servicio-bar-fill" style="width: ${(r.piezas/maxPiezasPerfume)*100}%; background: linear-gradient(90deg, #a855f780, #a855f7)"></div>
+          </div>
+          ${r.piezas > 0 ? `<div style="font-size:11px; color:#64748b; margin-top:4px">${Object.entries(r.porTamano).map(([tam, cant]) => `${esc(tam)}: ${cant}`).join(' · ')}</div>` : ''}
+          <div style="font-size:11px; margin-top:2px; color:${r.faltante > 0 ? '#fbbf24' : '#10b981'}">
+            ${r.faltante > 0 ? `Faltan ${fmt(r.faltante)} por recuperar` : `✅ Costo recuperado · Ganancia: +${fmt(r.gananciaFrasco)}`}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a78bfa">📦</span> Por servicio (este mes)</div>
+      ${porServicio.map(s => `
+        <div class="servicio-bar">
+          <div class="servicio-bar-row">
+            <span class="nombre">${s.nombre}</span>
+            <span class="monto" style="color: ${s.ganancia >= 0 ? s.color : '#ef4444'}">${fmt(s.ganancia)}</span>
+          </div>
+          <div class="servicio-bar-bg">
+            <div class="servicio-bar-fill" style="width: ${(Math.abs(s.ganancia)/maxAbs)*100}%; background: linear-gradient(90deg, ${s.ganancia >= 0 ? s.color : '#ef4444'}80, ${s.ganancia >= 0 ? s.color : '#ef4444'})"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title" data-action="toggleExp" data-key="respaldoInfo" style="cursor:pointer; display:flex; align-items:center; gap:6px">
+        <span style="color:#94a3b8">💾</span> Respaldo de datos
+        <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.respaldoInfo ? '▼' : '▶'}</span>
+      </div>
+      ${state.expandido.respaldoInfo ? `
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:8px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
+      <p style="font-size:12px; font-weight:700; margin-bottom:12px; color:${(() => { const d = diasDesdeUltimoRespaldo(); return d !== null && d < DIAS_AVISO_RESPALDO ? '#10b981' : '#fbbf24'; })()}">
+        ${(() => { const d = diasDesdeUltimoRespaldo(); return d === null ? '⚠️ Nunca has hecho un respaldo' : `Último respaldo: hace ${d} día(s)`; })()}
+      </p>
+      <div style="display:flex; gap:8px">
+        <button class="tipo-btn" style="flex:1" onclick="exportarRespaldo()">⬇ Exportar respaldo</button>
+        <button class="tipo-btn" style="flex:1" onclick="document.getElementById('input-restaurar').click()">⬆ Restaurar</button>
+      </div>
+      <button class="tipo-btn" style="width:100%; margin-top:8px" onclick="verRespaldoTexto()">📋 Ver como texto (si lo de arriba no funciona)</button>
+      <input type="file" id="input-restaurar" accept="application/json" style="display:none" onchange="importarRespaldo(this)" />
+      ` : ''}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title" data-action="toggleExp" data-key="notifInfo" style="cursor:pointer; display:flex; align-items:center; gap:6px">
+        <span style="color:#f59e0b">🔔</span> Notificaciones
+        <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.notifInfo ? '▼' : '▶'}</span>
+      </div>
+      ${state.expandido.notifInfo ? `
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
+        Te avisa cuando falten 3 días o menos para que venza una membresía mensual, para que le marques al cliente a tiempo. Funciona mientras tengas la app abierta o recién en segundo plano — en teléfonos Huawei sin Google Play puede no llegar si la app lleva mucho tiempo cerrada, así que ábrela seguido.
+      </p>
+      <button class="tipo-btn" style="width:100%" onclick="activarNotificaciones()">
+        ${(typeof Notification !== 'undefined' && Notification.permission === 'granted') ? '🔔 Notificaciones activadas ✅' : '🔔 Activar notificaciones'}
+      </button>
+      ` : ''}
+    </div>
+
+    <div class="dashboard-card">
+      <div class="dashboard-title" data-action="toggleExp" data-key="usuariosInfo" style="cursor:pointer; display:flex; align-items:center; gap:6px">
+        <span style="color:#a78bfa">👤</span> Usuarios
+        <span style="margin-left:auto; font-size:13px; color:#64748b">${state.expandido.usuariosInfo ? '▼' : '▶'}</span>
+      </div>
+      ${state.expandido.usuariosInfo ? `
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.5">
+        Tu Vendedor entra con solo tocar "Soy Vendedor" (sin PIN) y ve la pestaña "Cobros" — solo lo que hay que cobrar a cada cliente, sin ganancias ni costos. El PIN de aquí es el que te pedirá a ti para entrar como Admin en cualquier teléfono.
+      </p>
+      <div style="display:flex; gap:8px">
+        <button class="tipo-btn" style="flex:1" onclick="cambiarPinAdmin()">🔑 Cambiar PIN de Admin</button>
+        <button class="tipo-btn" style="flex:1" onclick="cerrarSesion()">🚪 Cerrar sesión</button>
+      </div>
+      ` : ''}
+    </div>
+    <div style="height:120px"></div>
+  </div>`;
+}
+
+function renderLineChart(datos) {
+  const W = 320, H = 200, padL = 40, padR = 10, padT = 10, padB = 30;
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const valores = datos.map(d => d.ganancia);
+  let minV = Math.min(...valores, 0);
+  let maxV = Math.max(...valores, 0);
+  if (minV === maxV) { maxV = minV + 100; }
+  const rango = maxV - minV;
+  const xStep = cw / (datos.length - 1 || 1);
+
+  const px = i => padL + i * xStep;
+  const py = v => padT + ch - ((v - minV) / rango) * ch;
+
+  // Líneas grid
+  let grid = '';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (ch / 4) * i;
+    const val = maxV - (rango / 4) * i;
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
+  }
+
+  // Línea cero
+  if (minV < 0 && maxV > 0) {
+    const y0 = py(0);
+    grid += `<line x1="${padL}" y1="${y0}" x2="${W-padR}" y2="${y0}" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>`;
+  }
+
+  // Path
+  const pathD = datos.map((d, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(d.ganancia)}`).join(' ');
+
+  // Área debajo
+  const areaD = pathD + ` L ${px(datos.length-1)} ${padT+ch} L ${px(0)} ${padT+ch} Z`;
+
+  // Puntos y labels X
+  let puntos = '', labelsX = '';
+  datos.forEach((d, i) => {
+    puntos += `<circle cx="${px(i)}" cy="${py(d.ganancia)}" r="3.5" fill="#10b981" stroke="#0a0e1a" stroke-width="2"/>`;
+    if (i % 2 === 0 || i === datos.length - 1) {
+      labelsX += `<text x="${px(i)}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
+    }
+  });
+
+  return `<div class="chart-container">
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
+          <stop offset="100%" stop-color="#10b981" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      ${grid}
+      <path d="${areaD}" fill="url(#areaGrad)"/>
+      <path d="${pathD}" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${puntos}
+      ${labelsX}
+    </svg>
+  </div>`;
+}
+
+// Muestra el mini-desglose de una categoría (Perfumes o Productos) dentro
+// de la tarjeta de Flujo de dinero: cobrado, reinvertido y ganancia neta.
+function renderFlujoCategoria(nombre, color, datos) {
+  if (datos.cobrado === 0 && datos.ganancia === 0) {
+    return `
+      <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px">
+        <div style="font-weight:700; color:${color}; margin-bottom:4px">${nombre}</div>
+        <div class="vacio" style="padding:4px 0">Sin ventas este mes</div>
+      </div>
+    `;
+  }
+  return `
+    <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px">
+      <div style="font-weight:700; color:${color}; margin-bottom:8px">${nombre}</div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px">
+        <span style="color:#94a3b8">Cobrado</span>
+        <span class="mono">${fmt(datos.cobrado)}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px">
+        <span style="color:#94a3b8">Reinvertido</span>
+        <span class="mono">${fmt(datos.costo)}</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:13px">
+        <span style="color:#94a3b8">Ganancia neta</span>
+        <span class="mono" style="color:#10b981; font-weight:700">${fmt(datos.ganancia)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderBarChart(datos) {
+  const W = 320, H = 200, padL = 40, padR = 10, padT = 10, padB = 30;
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const maxV = Math.max(...datos.flatMap(d => [d.cobrado, d.costo]), 1);
+  const groupW = cw / datos.length;
+  const barW = groupW * 0.35;
+  const gap = groupW * 0.05;
+
+  let grid = '';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (ch / 4) * i;
+    const val = maxV - (maxV / 4) * i;
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="9" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
+  }
+
+  let bars = '', labelsX = '';
+  datos.forEach((d, i) => {
+    const gx = padL + i * groupW + groupW * 0.1;
+    const hCob = (d.cobrado / maxV) * ch;
+    const hCos = (d.costo / maxV) * ch;
+    bars += `<rect x="${gx}" y="${padT+ch-hCob}" width="${barW}" height="${hCob}" fill="#06b6d4" rx="3"/>`;
+    bars += `<rect x="${gx+barW+gap}" y="${padT+ch-hCos}" width="${barW}" height="${hCos}" fill="#64748b" rx="3"/>`;
+    labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-12}" fill="#64748b" font-size="9" text-anchor="middle">${d.mes}</text>`;
+  });
+
+  return `<div class="chart-container">
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      ${grid}
+      ${bars}
+      ${labelsX}
+    </svg>
+    <div style="display:flex; gap:16px; justify-content:center; margin-top:8px; font-size:11px">
+      <span style="display:flex; align-items:center; gap:4px"><span style="width:10px; height:10px; background:#06b6d4; border-radius:2px; display:inline-block"></span> Cobrado</span>
+      <span style="display:flex; align-items:center; gap:4px"><span style="width:10px; height:10px; background:#64748b; border-radius:2px; display:inline-block"></span> Costo</span>
+    </div>
+  </div>`;
+}
+
+// Gráfica de piezas vendidas por día (mes en curso). El día con más piezas
+// se resalta en un color distinto para identificarlo de un vistazo.
+function renderBarChartDias(datos, color, categoria) {
+  color = color || '#f59e0b';
+  const W = 320, H = 170, padL = 26, padR = 8, padT = 10, padB = 20;
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const maxV = Math.max(...datos.map(d => d.piezas), 1);
+  const groupW = cw / datos.length;
+  const barW = Math.max(2, groupW * 0.55);
+  const maxPiezas = maxV;
+
+  let grid = '';
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + (ch / 3) * i;
+    const val = maxV - (maxV / 3) * i;
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="8" text-anchor="end" font-family="JetBrains Mono">${Math.round(val)}</text>`;
+  }
+
+  let bars = '', labelsX = '', hitareas = '';
+  datos.forEach((d, i) => {
+    const gx = padL + i * groupW + (groupW - barW) / 2;
+    const h = (d.piezas / maxV) * ch;
+    const diaNum = Number(d.fecha.split('-')[2]);
+    const esMejor = d.piezas > 0 && d.piezas === maxPiezas;
+    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2" style="pointer-events:none"/>`;
+    // Zona invisible más ancha que la barra, para poder tocar cualquier día
+    // (incluidos los que tienen 0 ventas, para que quede claro que no hubo nada).
+    hitareas += `<rect x="${padL + i*groupW}" y="${padT}" width="${groupW}" height="${ch}" fill="transparent" style="cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${d.fecha}" ${categoria ? `data-categoria="${categoria}"` : ''}/>`;
+    if (diaNum === 1 || diaNum % 5 === 0 || i === datos.length - 1) {
+      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle" style="pointer-events:none">${diaNum}</text>`;
+    }
+  });
+
+  return `<div class="chart-container">
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      ${grid}
+      ${bars}
+      ${hitareas}
+      ${labelsX}
+    </svg>
+  </div>`;
+}
+
+// Gráfica de piezas vendidas mes por mes (últimos 12 meses).
+function renderBarChartMesesPiezas(datos, color) {
+  color = color || '#f59e0b';
+  const W = 320, H = 150, padL = 26, padR = 8, padT = 10, padB = 22;
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const maxV = Math.max(...datos.map(d => d.piezas), 1);
+  const groupW = cw / datos.length;
+  const barW = Math.max(4, groupW * 0.5);
+
+  let grid = '';
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + (ch / 3) * i;
+    const val = maxV - (maxV / 3) * i;
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="8" text-anchor="end" font-family="JetBrains Mono">${Math.round(val)}</text>`;
+  }
+
+  let bars = '', labelsX = '';
+  const maxPiezas = maxV;
+  datos.forEach((d, i) => {
+    const gx = padL + i * groupW + (groupW - barW) / 2;
+    const h = (d.piezas / maxV) * ch;
+    const esMejor = d.piezas > 0 && d.piezas === maxPiezas;
+    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2"/>`;
+    if (i % 2 === 0 || i === datos.length - 1) {
+      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle">${d.mes}</text>`;
+    }
+  });
+
+  return `<div class="chart-container">
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      ${grid}
+      ${bars}
+      ${labelsX}
+    </svg>
+  </div>`;
+}
+
+function renderNav() {
+  return `<div class="nav-bottom">
+    <button class="nav-btn ${state.vista === 'inicio' ? 'activo' : ''}" data-action="setVista" data-vista="inicio">
+      <span class="icon">🏠</span> Inicio
+    </button>
+    <button class="nav-btn ${state.vista === 'tienda' ? 'activo' : ''}" data-action="setVista" data-vista="tienda">
+      <span class="icon">🛒</span> Productos
+    </button>
+    <button class="nav-btn ${state.vista === 'dashboard' ? 'activo' : ''}" data-action="setVista" data-vista="dashboard">
+      <span class="icon">📊</span> Dashboard
+    </button>
+  </div>`;
+}
+
+function renderModal() {
+  if (!state.modal) return '';
+  const info = SERVICIOS[state.modal.servicio];
+  const f = state.formCliente;
+  return `<div class="modal-overlay" data-action="cerrarModal">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>${state.modal.clienteId ? 'Editar' : 'Nuevo'} cliente</h3>
+        <button class="close-btn" data-action="cerrarModal">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:${info.color}">${info.nombre}</div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Nombre del cliente <span class="required">*</span></label></div>
+        <input class="input" type="text" value="${esc(f.nombre)}" placeholder="Ej. Juan Pérez" oninput="actualizarForm('nombre', this.value); document.getElementById('btn-guardar').disabled = !this.value.trim()" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>¿Cuánto paga? ($)</label><span class="hint">Lo que te paga</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.pago)}" placeholder="0.00" oninput="actualizarForm('pago', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Tipo de pago</label></div>
+        <div class="tipo-pago-grid">
+          <button class="tipo-btn ${f.tipoPago === 'mensual' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="mensual">Mensual</button>
+          <button class="tipo-btn ${f.tipoPago === 'unico' ? 'activo' : ''}" data-action="setTipoPago" data-tipo="unico">Pago único</button>
+        </div>
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Día de vencimiento (opcional)</label><span class="hint">Día del mes, 1-31</span></div>
+        <input class="input" type="number" inputmode="numeric" min="1" max="31" value="${esc(f.diaPago)}" placeholder="Ej. 15" oninput="actualizarForm('diaPago', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Fecha del último pago (opcional)</label><span class="hint">Se llena sola al marcar pagado</span></div>
+        <input class="input" type="date" value="${esc(f.ultimoPago)}" oninput="actualizarForm('ultimoPago', this.value)" />
+      </div>
+
+      <div class="campo">
+        <div class="campo-label"><label>Notas (opcional)</label></div>
+        <textarea class="input" rows="2" style="resize:vertical; min-height:60px" placeholder="Detalles adicionales" oninput="actualizarForm('notas', this.value)">${esc(f.notas)}</textarea>
+      </div>
+
+      <button id="btn-guardar" class="guardar-btn" ${!f.nombre.trim() ? 'disabled' : ''} data-action="guardarCliente">
+        ✓ ${state.modal.clienteId ? 'Guardar cambios' : 'Agregar cliente'}
+      </button>
+    </div>
+  </div>`;
+}
+
+// ============== EVENTOS ==============
+function bindEvents() {
+  document.querySelectorAll('[data-action]').forEach(el => {
+    el.addEventListener('click', handleClick);
+  });
+  const pi = document.getElementById('precio-input');
+  if (pi) {
+    pi.addEventListener('input', e => { state.precioTemp = e.target.value; });
+    pi.addEventListener('keydown', e => {
+      if (e.key === 'Enter') guardarPrecio(state.editandoPrecio);
+    });
+  }
+  const smi = document.getElementById('scanner-manual-input');
+  if (smi) {
+    smi.addEventListener('keydown', e => {
+      if (e.key === 'Enter') buscarCodigoManual();
+    });
+  }
+}
+
+function handleClick(e) {
+  const action = e.currentTarget.dataset.action;
+  const d = e.currentTarget.dataset;
+  switch(action) {
+    case 'setVista': setVista(d.vista); break;
+    case 'setMes': setMes(d.mes); break;
+    case 'toggleExp': toggleExpandido(d.key); break;
+    case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
+    case 'guardarPrecio': guardarPrecio(d.key); break;
+    case 'togglePago': togglePago(d.servicio, d.cid, d.mes); break;
+    case 'abrirModal': abrirModal(d.servicio, d.cid); break;
+    case 'cerrarModal':
+      if (e.target === e.currentTarget) cerrarModal();
+      break;
+    case 'setTipoPago': actualizarForm('tipoPago', d.tipo); break;
+    case 'guardarCliente': guardarCliente(); break;
+    case 'eliminarCliente':
+      e.stopPropagation();
+      eliminarCliente(d.servicio, d.cid);
+      break;
+    case 'toggleArchivadoCliente':
+      e.stopPropagation();
+      toggleArchivadoCliente(d.servicio, d.cid);
+      break;
+    case 'abrirModalProducto':
+      e.stopPropagation();
+      abrirModalProducto(d.pid, d.categoria);
+      break;
+    case 'setCategoriaProducto': actualizarFormProducto('categoria', d.categoria); render(); break;
+    case 'toggleProdExp':
+      e.stopPropagation();
+      toggleProductoExpandido(d.pid);
+      break;
+    case 'toggleVentasProducto':
+      e.stopPropagation();
+      toggleVentasProducto(d.pid);
+      break;
+    case 'eliminarVenta':
+      e.stopPropagation();
+      eliminarVenta(d.vid);
+      break;
+    case 'cerrarModalProducto':
+      if (e.target === e.currentTarget) cerrarModalProducto();
+      break;
+    case 'guardarProducto': guardarProducto(); break;
+    case 'eliminarProducto':
+      e.stopPropagation();
+      eliminarProducto(d.pid);
+      break;
+    case 'toggleArchivadoProducto':
+      e.stopPropagation();
+      toggleArchivadoProducto(d.pid);
+      break;
+    case 'reiniciarFrascoPerfume':
+      e.stopPropagation();
+      reiniciarFrascoPerfume(d.pid);
+      break;
+    case 'toggleAgotadoVariante':
+      e.stopPropagation();
+      toggleAgotadoVariante(d.pid, d.tam);
+      break;
+    case 'abrirModalVenta':
+      e.stopPropagation();
+      abrirModalVenta(d.pid, d.tam || null);
+      break;
+    case 'cerrarModalVenta':
+      if (e.target === e.currentTarget) cerrarModalVenta();
+      break;
+    case 'abrirModalVentasSemana': abrirModalVentasSemana(); break;
+    case 'cerrarModalVentasSemana':
+      if (e.target === e.currentTarget) cerrarModalVentasSemana();
+      break;
+    case 'abrirModalVentasDia': abrirModalVentasDia(d.fecha, d.categoria || null); break;
+    case 'cerrarModalVentasDia':
+      if (e.target === e.currentTarget) cerrarModalVentasDia();
+      break;
+    case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
+    case 'abrirScannerVenta': abrirScannerVenta(); break;
+    case 'abrirScannerAsignar': abrirScannerAsignar(); break;
+    case 'cerrarScanner':
+      if (e.target === e.currentTarget) cerrarScanner();
+      break;
+    case 'buscarCodigoManual': buscarCodigoManual(); break;
+    case 'intentarLogin': intentarLogin(d.rol); break;
+    case 'cerrarSesion': cerrarSesion(); break;
+  }
+}
+
+// ============== INIT ==============
+cargarLocal();
+render();
+revisarYNotificar(); // por si ya había permiso concedido de antes
+
+// El módulo de Firebase carga por separado y puede tardar un poco más que
+// el resto del código; esperamos a que avise que ya está listo.
+function alFirebaseListo() {
+  sincronizarNube();
+  // Si ya se había dado permiso de notificaciones antes, refrescamos el
+  // token push por si cambió (los tokens pueden expirar/renovarse).
+  if (('Notification' in window) && Notification.permission === 'granted') {
+    refrescarTokenPush();
+  }
+}
+if (window.nubeListo) {
+  alFirebaseListo();
+} else {
+  window.addEventListener('nube-lista', alFirebaseListo, { once: true });
+}
+
+// Le pedimos al navegador que marque el almacenamiento como "persistente":
+// esto reduce (no elimina del todo) el riesgo de que Android borre los datos
+// solo para liberar espacio. No evita que el usuario borre los datos a mano
+// desde Ajustes, ni sustituye al respaldo — es una capa extra de protección.
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
+}
+
+// BUG FIX: si la app se queda abierta en segundo plano y cambia el día (o el mes),
+// el selector de mes y los "pagos por vencer" quedaban congelados con la fecha de
+// cuando se abrió la app. Revisamos cada minuto si cambió el día y volvemos a pintar.
+let ultimoDiaConocido = new Date().toDateString();
+setInterval(() => {
+  const ahora = new Date().toDateString();
+  if (ahora !== ultimoDiaConocido) {
+    ultimoDiaConocido = ahora;
+    render();
+  }
+}, 60000);
+
+// Revisa membresías por vencer cada hora mientras la app esté abierta y avisa
+// con una notificación si ya se dieron permisos.
+setInterval(() => { revisarYNotificar(); }, 60 * 60 * 1000);
+
+// ============== PWA: Service Worker ==============
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
+  });
+}
+</script>
+</body>
+</html>
