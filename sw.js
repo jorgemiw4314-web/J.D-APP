@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jd-ventas-v2';
+const CACHE_NAME = 'jd-ventas-v3';
 const ASSETS = [
   './',
   './index.html',
@@ -25,9 +25,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: network first, fallback to cache
+// Fetch: network first, fallback to cache — SOLO para peticiones a nuestra
+// propia página. Todo lo que vaya hacia otro dominio (Firebase, Firestore,
+// gstatic.com, etc.) se deja pasar de largo sin tocar, para no arriesgarnos
+// a interferir con esas conexiones (antes se interceptaba todo, sin excepción).
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((response) => {

@@ -3322,6 +3322,15 @@ if (window.nubeListo) {
   alFirebaseListo();
 } else {
   window.addEventListener('nube-lista', alFirebaseListo, { once: true });
+  // Si después de varios segundos Firebase todavía no ha avisado que está
+  // listo, algo salió mal al cargarlo (sin internet, un bloqueo, etc.) — se
+  // lo hacemos saber con claridad en vez de dejar el ícono en blanco, para
+  // que sepa que sus ventas se están guardando SOLO en este teléfono.
+  setTimeout(() => {
+    if (!window.nubeListo) {
+      actualizarIndicadorNube('error');
+    }
+  }, 8000);
 }
 
 // Le pedimos al navegador que marque el almacenamiento como "persistente":
