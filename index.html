@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#10b981">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -3346,9 +3349,33 @@ setInterval(() => {
 setInterval(() => { revisarYNotificar(); }, 60 * 60 * 1000);
 
 // ============== PWA: Service Worker ==============
+// Además de instalarlo, revisamos activamente si hay una versión nueva cada
+// vez que se abre la app, y si la hay, recargamos solos para usarla — así
+// nadie (ni tú ni el Vendedor) se queda pegado en una versión vieja sin
+// darse cuenta, ni hay que ir a borrar caché a mano cada vez que se actualiza.
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.update(); // fuerza una revisión inmediata contra el servidor
+      reg.addEventListener('updatefound', () => {
+        const nuevoSW = reg.installing;
+        if (!nuevoSW) return;
+        nuevoSW.addEventListener('statechange', () => {
+          if (nuevoSW.state === 'activated') {
+            window.location.reload();
+          }
+        });
+      });
+    }).catch(err => console.log('SW error:', err));
+
+    // Evita recargar más de una vez seguida si el navegador dispara el
+    // evento varias veces.
+    let yaRecargo = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (yaRecargo) return;
+      yaRecargo = true;
+      window.location.reload();
+    });
   });
 }
 </script>
