@@ -394,6 +394,10 @@ let state = {
   pagosMes: {},
   productos: [],
   ventas: [],
+  // "Marcas de borrado": id de venta -> cuándo se borró. Sirve para que, al
+  // combinar ventas de varios teléfonos, una venta borrada no se "reviva"
+  // por accidente si otro teléfono todavía la tenía guardada sin sincronizar.
+  ventasEliminadas: {},
   config: { pinAdmin: '1234', cajaCambio: 0 },
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
@@ -413,6 +417,7 @@ let state = {
   formVenta: { cantidad: '' },
   scanner: null,
   modalVentasSemana: false,
+  modalVentasHoy: false,
   modalVentasDia: null
 };
 
@@ -438,6 +443,7 @@ function guardarLocal() {
     localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
     localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
     localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+    localStorage.setItem('tienda-ventas-eliminadas', JSON.stringify(state.ventasEliminadas));
     localStorage.setItem('app-config', JSON.stringify(state.config));
     localStorage.setItem('local-actualizado', String(Date.now()));
   } catch(e) { console.error(e); }
@@ -456,11 +462,13 @@ function cargarLocal() {
     const p = localStorage.getItem('pagos-mes');
     const pr = localStorage.getItem('tienda-productos');
     const v = localStorage.getItem('tienda-ventas');
+    const ve = localStorage.getItem('tienda-ventas-eliminadas');
     const cfg = localStorage.getItem('app-config');
     if (d) state.data = { ...state.data, ...JSON.parse(d) };
     if (p) state.pagosMes = JSON.parse(p);
     if (pr) state.productos = JSON.parse(pr);
     if (v) state.ventas = JSON.parse(v);
+    if (ve) state.ventasEliminadas = JSON.parse(ve);
     if (cfg) state.config = { ...state.config, ...JSON.parse(cfg) };
   } catch(e) { console.error(e); }
   // La sesión (rol) es propia de este dispositivo, no se sincroniza con la nube.
@@ -490,9 +498,42 @@ async function subirANube() {
     pagosMes: state.pagosMes,
     productos: state.productos,
     ventas: state.ventas,
+    ventasEliminadas: state.ventasEliminadas,
     config: state.config
   });
   actualizarIndicadorNube(ok ? 'ok' : 'error');
+}
+
+// Si hay una subida pendiente (programada por guardarLocal) y el teléfono va a
+// cerrar la app o apagar la pantalla, la mandamos YA en vez de esperar los 1.5s
+// normales — evita que una venta se quede solo guardada en el teléfono y nunca
+// llegue a la nube por cerrar la app justo antes de que se subiera sola.
+function forzarSubidaPendiente() {
+  if (nubeTimeout) {
+    clearTimeout(nubeTimeout);
+    nubeTimeout = null;
+    subirANube();
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) forzarSubidaPendiente();
+});
+window.addEventListener('pagehide', forzarSubidaPendiente);
+
+// Combina las ventas de este teléfono con las de la nube por su "id" único,
+// sin duplicar. Así, si este teléfono tenía una venta que aún no había
+// subido (p. ej. porque se cerró la app antes de tiempo), esa venta no se
+// pierde aunque la nube "gane" por tener una fecha de actualización más
+// reciente en otros datos (clientes, pagos, etc.). Las ventas marcadas como
+// borradas (por cualquiera de los dos lados) nunca se "revivan" al combinar.
+function combinarVentas(localesArr, remotasArr, eliminadasCombinadas) {
+  const porId = new Map();
+  (remotasArr || []).forEach(v => porId.set(v.id, v));
+  (localesArr || []).forEach(v => porId.set(v.id, v)); // local gana si hay conflicto de contenido
+  if (eliminadasCombinadas) {
+    Object.keys(eliminadasCombinadas).forEach(id => porId.delete(id));
+  }
+  return Array.from(porId.values());
 }
 
 async function sincronizarNube() {
@@ -501,26 +542,41 @@ async function sincronizarNube() {
   const remoto = await window.nubeLeer();
   const remotoTs = remoto?.actualizado || 0;
   const localTs = parseInt(localStorage.getItem('local-actualizado') || '0');
+  const ventasLocalesPrevias = state.ventas;
+  // Unimos las marcas de borrado de ambos lados (una vez borrada, se queda
+  // borrada — nunca se "deshace" un borrado al combinar entre dispositivos).
+  const eliminadasCombinadas = { ...(remoto?.ventasEliminadas || {}), ...state.ventasEliminadas };
 
   if (remoto && remotoTs > localTs) {
     // La nube tiene algo más nuevo que este teléfono (p. ej. se perdieron los
-    // datos locales, o los editaste desde otro dispositivo). Traemos la nube.
+    // datos locales, o los editaste desde otro dispositivo). Traemos la nube,
+    // pero las ventas se combinan (nunca se descartan ventas que ya estaban
+    // guardadas en este teléfono, aunque no hubieran alcanzado a subir).
+    const ventasCombinadas = combinarVentas(ventasLocalesPrevias, remoto.ventas, eliminadasCombinadas);
+    const huboVentasNuevasLocales = ventasCombinadas.length !== (remoto.ventas || []).length;
+
     state.data = remoto.data || state.data;
     state.pagosMes = remoto.pagosMes || state.pagosMes;
     state.productos = remoto.productos || state.productos;
-    state.ventas = remoto.ventas || state.ventas;
+    state.ventas = ventasCombinadas;
+    state.ventasEliminadas = eliminadasCombinadas;
     state.config = remoto.config || state.config;
     try {
       localStorage.setItem('pagos-data', JSON.stringify(state.data));
       localStorage.setItem('pagos-mes', JSON.stringify(state.pagosMes));
       localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
       localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
+      localStorage.setItem('tienda-ventas-eliminadas', JSON.stringify(state.ventasEliminadas));
       localStorage.setItem('app-config', JSON.stringify(state.config));
       localStorage.setItem('local-actualizado', String(remotoTs));
     } catch(e) {}
     actualizarIndicadorNube('ok');
     render();
+    // Si se recuperó alguna venta que la nube no tenía, la volvemos a subir
+    // de inmediato para "sanar" la nube con la versión completa.
+    if (huboVentasNuevasLocales) subirANube();
   } else {
+    state.ventasEliminadas = eliminadasCombinadas;
     // Este teléfono está igual o más al día: subimos para que la nube quede sincronizada.
     subirANube();
   }
@@ -807,6 +863,10 @@ function eliminarVenta(ventaId) {
     p.stock += venta.cantidad; // se regresan las piezas al stock (solo aplica a productos generales)
   }
   state.ventas = state.ventas.filter(v => v.id !== ventaId);
+  // Dejamos marcada esta venta como borrada (no solo la quitamos del arreglo)
+  // para que, si otro teléfono la traía guardada sin sincronizar todavía, no
+  // se vuelva a agregar sola al combinar ventas entre dispositivos.
+  state.ventasEliminadas[ventaId] = Date.now();
   guardarLocal();
   render();
 }
@@ -944,6 +1004,14 @@ function abrirModalVentasSemana() {
 }
 function cerrarModalVentasSemana() {
   state.modalVentasSemana = false;
+  render();
+}
+function abrirModalVentasHoy() {
+  state.modalVentasHoy = true;
+  render();
+}
+function cerrarModalVentasHoy() {
+  state.modalVentasHoy = false;
   render();
 }
 
@@ -1716,7 +1784,7 @@ function render() {
   if (state.rol === 'vendedor') {
     state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
     const vista = renderTienda();
-    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy();
     bindEvents();
     return;
   }
@@ -2095,10 +2163,10 @@ function renderTienda() {
     const semana = calcularVentasPerfumesRango(inicioDeSemana(), Date.now());
     html += `
       <div class="resumen">
-        <div class="resumen-card destacado">
+        <div class="resumen-card destacado" data-action="abrirModalVentasHoy" style="cursor:pointer">
           <div class="resumen-label" style="color:#06b6d4">Vendido hoy</div>
           <div class="resumen-value">${fmt(hoy.vendido)}</div>
-          <div class="resumen-sub">${hoy.piezas} pza(s)</div>
+          <div class="resumen-sub">${hoy.piezas} pza(s) · toca para ver detalle</div>
         </div>
         <div class="resumen-card" data-action="abrirModalVentasSemana" style="cursor:pointer">
           <div class="resumen-label" style="color:#a855f7">Vendido esta semana</div>
@@ -2507,6 +2575,25 @@ function renderModalVentasSemana() {
       </div>
       <div class="modal-subtitle" style="color:#a855f7">${totalPiezas} pza(s) · ${fmt(totalVendido)} en total</div>
       ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas de perfumes esta semana</div>' :
+        ventas.map(v => renderVentaRow(v)).join('')
+      }
+    </div>
+  </div>`;
+}
+
+function renderModalVentasHoy() {
+  if (!state.modalVentasHoy) return '';
+  const ventas = listarVentasPerfumesRango(inicioDeHoy(), Date.now());
+  const totalVendido = ventas.reduce((s, v) => s + v.total, 0);
+  const totalPiezas = ventas.reduce((s, v) => s + v.cantidad, 0);
+  return `<div class="modal-overlay" data-action="cerrarModalVentasHoy">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Ventas de hoy</h3>
+        <button class="close-btn" data-action="cerrarModalVentasHoy">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#06b6d4">${totalPiezas} pza(s) · ${fmt(totalVendido)} en total</div>
+      ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas de perfumes hoy</div>' :
         ventas.map(v => renderVentaRow(v)).join('')
       }
     </div>
@@ -3192,6 +3279,10 @@ function handleClick(e) {
     case 'abrirModalVentasSemana': abrirModalVentasSemana(); break;
     case 'cerrarModalVentasSemana':
       if (e.target === e.currentTarget) cerrarModalVentasSemana();
+      break;
+    case 'abrirModalVentasHoy': abrirModalVentasHoy(); break;
+    case 'cerrarModalVentasHoy':
+      if (e.target === e.currentTarget) cerrarModalVentasHoy();
       break;
     case 'abrirModalVentasDia': abrirModalVentasDia(d.fecha, d.categoria || null); break;
     case 'cerrarModalVentasDia':
