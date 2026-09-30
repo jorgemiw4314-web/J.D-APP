@@ -453,10 +453,17 @@ function guardarLocal() {
 
   // Sube a Firebase unos segundos después del último cambio (no en cada click,
   // para no mandar de más escrituras si estás marcando varios pagos seguidos).
+  // Si no hay internet en este momento, ni lo intentamos — se queda guardado
+  // en el teléfono, y en cuanto vuelva la conexión (evento 'online' abajo) se
+  // sube solo, sin que tengas que hacer nada ni volver a abrir la app.
   if (window.nubeListo) {
     clearTimeout(nubeTimeout);
-    actualizarIndicadorNube('sincronizando');
-    nubeTimeout = setTimeout(subirANube, 1500);
+    if (navigator.onLine) {
+      actualizarIndicadorNube('sincronizando');
+      nubeTimeout = setTimeout(subirANube, 1500);
+    } else {
+      actualizarIndicadorNube('pendiente');
+    }
   }
 }
 function cargarLocal() {
@@ -487,7 +494,8 @@ function actualizarIndicadorNube(estado) {
   const mapa = {
     sincronizando: { icono: '🔄', titulo: 'Sincronizando…' },
     ok: { icono: '☁️', titulo: 'Sincronizado con la nube' },
-    error: { icono: '⚠️', titulo: 'Sin conexión — solo guardado en el teléfono' }
+    error: { icono: '⚠️', titulo: 'Sin conexión — solo guardado en el teléfono' },
+    pendiente: { icono: '📴', titulo: 'Sin internet ahorita — se subirá solo en cuanto vuelva la conexión' }
   };
   const m = mapa[estado] || mapa.error;
   el.textContent = m.icono;
@@ -522,6 +530,15 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) forzarSubidaPendiente();
 });
 window.addEventListener('pagehide', forzarSubidaPendiente);
+
+// En cuanto el teléfono recupera internet (aunque haya estado horas sin
+// conexión), sincronizamos de inmediato — sin esperar a que se haga otra
+// venta ni a que se vuelva a abrir la app.
+window.addEventListener('online', () => {
+  if (!window.nubeListo) return;
+  actualizarIndicadorNube('sincronizando');
+  sincronizarNube();
+});
 
 // Combina las ventas de este teléfono con las de la nube por su "id" único,
 // sin duplicar. Así, si este teléfono tenía una venta que aún no había
