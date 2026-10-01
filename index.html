@@ -401,7 +401,7 @@ let state = {
   // combinar ventas de varios teléfonos, una venta borrada no se "reviva"
   // por accidente si otro teléfono todavía la tenía guardada sin sincronizar.
   ventasEliminadas: {},
-  config: { pinAdmin: '1234', cajaCambio: 0 },
+  config: { pinAdmin: '1234', cajaCambio: 0, metaPiezasMes: null }, // metaPiezasMes: { mes: 'YYYY-MM', meta: N } o null
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
@@ -421,7 +421,10 @@ let state = {
   scanner: null,
   modalVentasSemana: false,
   modalVentasHoy: false,
-  modalVentasDia: null
+  modalVentasDia: null,
+  modalCierreMes: false,
+  modalComparativaMeses: false,
+  modalResumenMes: null // clave 'YYYY-MM' del mes que se está viendo en el modal, o null si está cerrado
 };
 
 let videoStreamActivo = null;
@@ -1453,9 +1456,84 @@ function calcularPiezasPorMes(soloCategoria) {
       piezas += v.cantidad;
       vendido += v.total;
     });
-    meses.push({ mes: formatoMesCorto(key), piezas, vendido: Math.round(vendido * 100) / 100 });
+    meses.push({ mes: formatoMesCorto(key), claveMes: key, piezas, vendido: Math.round(vendido * 100) / 100 });
   }
   return meses;
+}
+
+// Resumen para el aviso de "cierre de mes": cómo le fue al mes que acaba de
+// terminar (de perfumes/decants), comparado con el mes antes de ese, y cuál
+// es el mejor mes histórico — para ayudar a poner una meta del mes nuevo.
+function calcularResumenCierreMes() {
+  const historico = calcularPiezasPorMes('perfumes'); // 12 meses, el actual es el último
+  const mesCerrado = historico[historico.length - 2] || null;
+  const mesAnteriorAlCerrado = historico[historico.length - 3] || null;
+  const mejorMes = historico.reduce((max, m) => (m.piezas > (max ? max.piezas : -1) ? m : max), null);
+  const diffVsAnterior = (mesCerrado && mesAnteriorAlCerrado) ? mesCerrado.piezas - mesAnteriorAlCerrado.piezas : null;
+  return { mesCerrado, mejorMes, diffVsAnterior };
+}
+
+// Clave 'YYYY-MM' de hace N meses contando desde el mes en curso.
+function obtenerClaveMesHace(nMeses) {
+  const hoy = new Date();
+  return claveMes(new Date(hoy.getFullYear(), hoy.getMonth() - nMeses, 1));
+}
+
+// Detalle por perfume de la comparativa entre el mes que cerró y el mes
+// anterior a ese — para ver exactamente cuáles subieron y cuáles bajaron.
+function calcularComparativaPerfumes() {
+  const mesCerradoKey = obtenerClaveMesHace(1);
+  const mesAnteriorKey = obtenerClaveMesHace(2);
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
+  const filas = perfumes.map(p => {
+    const piezasCerrado = state.ventas.filter(v => v.productoId === p.id && v.mes === mesCerradoKey).reduce((s, v) => s + v.cantidad, 0);
+    const piezasAnterior = state.ventas.filter(v => v.productoId === p.id && v.mes === mesAnteriorKey).reduce((s, v) => s + v.cantidad, 0);
+    return { nombre: p.nombre, piezasCerrado, piezasAnterior, diff: piezasCerrado - piezasAnterior };
+  }).filter(f => f.piezasCerrado > 0 || f.piezasAnterior > 0);
+  filas.sort((a, b) => b.diff - a.diff);
+  return filas;
+}
+function abrirModalComparativaMeses() {
+  state.modalComparativaMeses = true;
+  render();
+}
+function cerrarModalComparativaMeses() {
+  state.modalComparativaMeses = false;
+  render();
+}
+function abrirModalResumenMes(mesKey) {
+  state.modalResumenMes = mesKey || claveMes(new Date());
+  render();
+}
+function cerrarModalResumenMes() {
+  state.modalResumenMes = null;
+  render();
+}
+
+// Revisa si cambió el mes desde la última vez que se abrió la app en este
+// teléfono; si sí (y es Admin), prepara el aviso de cierre de mes.
+function revisarCierreMes() {
+  if (state.rol !== 'admin') return;
+  const mesActualStr = claveMes(new Date());
+  let ultimoMesVisto = null;
+  try { ultimoMesVisto = localStorage.getItem('ultimo-mes-visto'); } catch(e) {}
+  if (ultimoMesVisto && ultimoMesVisto !== mesActualStr) {
+    state.modalCierreMes = true;
+  }
+  try { localStorage.setItem('ultimo-mes-visto', mesActualStr); } catch(e) {}
+}
+function cerrarModalCierreMes() {
+  state.modalCierreMes = false;
+  render();
+}
+function guardarMetaMes() {
+  const input = document.getElementById('input-meta-mes');
+  const valor = input ? parseInt(input.value) : NaN;
+  if (!isNaN(valor) && valor > 0) {
+    state.config.metaPiezasMes = { mes: claveMes(new Date()), meta: valor };
+    guardarLocal();
+  }
+  cerrarModalCierreMes();
 }
 
 // Mismo flujo de dinero (cobrado / reinvertido / ganancia) pero separado por
@@ -1814,7 +1892,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes();
   bindEvents();
 }
 
@@ -2644,6 +2722,125 @@ function renderModalVentasDia() {
   </div>`;
 }
 
+// Aviso de "cierre de mes": sale una sola vez al abrir la app en un mes
+// nuevo, con el resumen del mes que acaba de terminar y un lugar para
+// poner la meta de piezas del mes que empieza.
+function renderModalCierreMes() {
+  if (!state.modalCierreMes) return '';
+  const r = calcularResumenCierreMes();
+  if (!r.mesCerrado) return '';
+  const esMejorMes = r.mejorMes && r.mejorMes.mes === r.mesCerrado.mes && r.mesCerrado.piezas > 0;
+  return `<div class="modal-overlay" data-action="cerrarModalCierreMes">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>📊 Cierre de ${esc(r.mesCerrado.mes)}</h3>
+        <button class="close-btn" data-action="cerrarModalCierreMes">✕</button>
+      </div>
+      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(168,85,247,0.13), rgba(168,85,247,0.03)); border-color: rgba(168,85,247,0.25)">
+        <div class="resumen-label" style="color:#a855f7">Decants vendidos</div>
+        <div class="resumen-value">${r.mesCerrado.piezas} pza(s)</div>
+        <div class="resumen-sub">${fmt(r.mesCerrado.vendido)} cobrado</div>
+      </div>
+      ${esMejorMes ? `
+      <div class="resumen-card destacado" style="margin-bottom:14px; background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.03)); border-color: rgba(251,191,36,0.3)">
+        <div class="resumen-label" style="color:#fbbf24">🏆 ¡Nuevo récord!</div>
+        <div class="resumen-sub">Este fue tu mejor mes hasta ahora</div>
+      </div>
+      ` : r.mejorMes && r.mejorMes.piezas > 0 ? `
+      <div class="cliente-notas" style="margin-bottom:14px">Tu mejor mes sigue siendo <b style="color:#f1f5f9">${esc(r.mejorMes.mes)}</b>, con ${r.mejorMes.piezas} pza(s).</div>
+      ` : ''}
+      ${r.diffVsAnterior !== null ? `
+      <div class="cliente-notas" data-action="abrirModalComparativaMeses" style="margin-bottom:14px; cursor:pointer; text-decoration:underline; color:${r.diffVsAnterior >= 0 ? '#10b981' : '#ef4444'}">
+        ${r.diffVsAnterior >= 0 ? `📈 ${r.diffVsAnterior} pza(s) más que el mes anterior` : `📉 ${Math.abs(r.diffVsAnterior)} pza(s) menos que el mes anterior`} · toca para ver el detalle
+      </div>
+      ` : ''}
+      <div class="campo">
+        <div class="campo-label"><label>¿Cuál es tu meta de decants para este mes?</label></div>
+        <input id="input-meta-mes" class="input" type="number" inputmode="numeric" placeholder="Ej. 40" />
+      </div>
+      <button class="guardar-btn" onclick="guardarMetaMes()">Guardar meta y empezar el mes</button>
+    </div>
+  </div>`;
+}
+
+// Detalle por perfume de la comparativa mes-contra-mes, abierto desde el
+// aviso de cierre de mes.
+function renderModalComparativaMeses() {
+  if (!state.modalComparativaMeses) return '';
+  const filas = calcularComparativaPerfumes();
+  const mesCerrado = formatoMesCorto(obtenerClaveMesHace(1));
+  const mesAnterior = formatoMesCorto(obtenerClaveMesHace(2));
+  return `<div class="modal-overlay" data-action="cerrarModalComparativaMeses">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>${esc(mesAnterior)} → ${esc(mesCerrado)}</h3>
+        <button class="close-btn" data-action="cerrarModalComparativaMeses">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#a855f7">Piezas vendidas por perfume, mes contra mes</div>
+      ${filas.length === 0 ? '<div class="vacio">No hay ventas de perfumes en ninguno de los 2 meses</div>' :
+        filas.map(f => `
+        <div class="servicio-bar">
+          <div class="servicio-bar-row">
+            <span class="nombre">${esc(f.nombre)}</span>
+            <span class="monto" style="color:${f.diff > 0 ? '#10b981' : f.diff < 0 ? '#ef4444' : '#64748b'}">${f.diff > 0 ? '+' : ''}${f.diff}</span>
+          </div>
+          <div class="cliente-notas">${f.piezasAnterior} → ${f.piezasCerrado} pza(s)</div>
+        </div>
+        `).join('')
+      }
+    </div>
+  </div>`;
+}
+
+// Resumen completo de UN mes (el actual o cualquier mes pasado de los
+// últimos 12): piezas, cobrado y ganancia de perfumes, más el detalle por
+// perfume — abierto desde la tarjeta de "Meta del mes" (mes actual) o
+// tocando cualquier barra de "Piezas vendidas por mes" (mes pasado).
+function renderModalResumenMes() {
+  if (!state.modalResumenMes) return '';
+  const mesK = state.modalResumenMes;
+  const esMesActual = mesK === claveMes(new Date());
+  const ranking = calcularRankingPerfumes(mesK);
+  const totalPiezas = ranking.reduce((s, r) => s + r.piezas, 0);
+  const flujo = calcularFlujoPorCategoria(mesK).perfumes;
+  const metaInfo = (esMesActual && state.config.metaPiezasMes && state.config.metaPiezasMes.mes === mesK) ? state.config.metaPiezasMes.meta : null;
+  return `<div class="modal-overlay" data-action="cerrarModalResumenMes">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>${esc(formatoMesCorto(mesK))} — resumen del mes</h3>
+        <button class="close-btn" data-action="cerrarModalResumenMes">✕</button>
+      </div>
+      <div class="resumen" style="padding:0; margin-bottom:14px">
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#a855f7">Decants vendidos</div>
+          <div class="resumen-value">${totalPiezas}</div>
+          ${metaInfo ? `<div class="resumen-sub">Meta: ${metaInfo}</div>` : ''}
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#06b6d4">Cobrado</div>
+          <div class="resumen-value">${fmt(flujo.cobrado)}</div>
+        </div>
+        <div class="resumen-card destacado" style="grid-column: span 2">
+          <div class="resumen-label" style="color:#10b981">Ganancia neta</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(flujo.ganancia)}</div>
+        </div>
+      </div>
+      <div class="modal-subtitle" style="color:#a855f7">Por perfume</div>
+      ${ranking.length === 0 ? `<div class="vacio">${esMesActual ? 'Aún no hay ventas de perfumes este mes' : 'No hubo ventas de perfumes ese mes'}</div>` :
+        ranking.map(r => `
+        <div class="servicio-bar">
+          <div class="servicio-bar-row">
+            <span class="nombre">${esc(r.nombre)}</span>
+            <span class="monto" style="color:#a855f7">${r.piezas} pza(s)</span>
+          </div>
+          ${r.piezas > 0 ? `<div class="cliente-notas">${Object.entries(r.porTamano).map(([tam, cant]) => `${esc(tam)}: ${cant}`).join(' · ')}</div>` : ''}
+        </div>
+        `).join('')
+      }
+    </div>
+  </div>`;
+}
+
 function renderModalScanner() {
   if (!state.scanner) return '';
   const esVenta = state.scanner.modo === 'venta';
@@ -2791,7 +2988,7 @@ function renderDashboard() {
       ${piezasPorMesPerfumes.some(m => m.piezas > 0) ? `
       <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.1)">
         <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Piezas vendidas por mes (últimos 12 meses)</div>
-        ${renderBarChartMesesPiezas(piezasPorMesPerfumes, '#a855f7')}
+        ${renderBarChartMesesPiezas(piezasPorMesPerfumes, '#a855f7', true)}
       </div>
       ` : ''}
     </div>
@@ -2843,6 +3040,28 @@ function renderDashboard() {
       </div>
       `}
     </div>
+
+    ${state.config.metaPiezasMes && state.config.metaPiezasMes.mes === claveMes(new Date()) ? (() => {
+      const meta = state.config.metaPiezasMes.meta;
+      const logrado = totalPiezasPerfumesMes;
+      const pct = Math.min(100, Math.round((logrado / meta) * 100));
+      return `
+    <div class="dashboard-card" data-action="abrirModalResumenMes" data-mes="${mesK}" style="cursor:pointer">
+      <div class="dashboard-title"><span style="color:#fbbf24">🎯</span> Meta del mes</div>
+      <div class="servicio-bar">
+        <div class="servicio-bar-row">
+          <span class="nombre">${logrado} de ${meta} decants</span>
+          <span class="monto" style="color:#fbbf24">${pct}%</span>
+        </div>
+        <div class="servicio-bar-bg">
+          <div class="servicio-bar-fill" style="width: ${pct}%; background: linear-gradient(90deg, #fbbf2480, #fbbf24)"></div>
+        </div>
+      </div>
+      ${logrado >= meta ? '<div class="cliente-notas" style="margin-top:8px; color:#10b981">🎉 ¡Meta cumplida este mes!</div>' : ''}
+      <div class="cliente-notas" style="margin-top:8px; color:#64748b">toca para ver el resumen completo del mes</div>
+    </div>
+      `;
+    })() : ''}
 
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#a855f7">🏆</span> Ranking de perfumes (este mes)</div>
@@ -3105,7 +3324,7 @@ function renderBarChartDias(datos, color, categoria) {
 }
 
 // Gráfica de piezas vendidas mes por mes (últimos 12 meses).
-function renderBarChartMesesPiezas(datos, color) {
+function renderBarChartMesesPiezas(datos, color, clicable) {
   color = color || '#f59e0b';
   const W = 320, H = 150, padL = 26, padR = 8, padT = 10, padB = 22;
   const cw = W - padL - padR, ch = H - padT - padB;
@@ -3121,15 +3340,21 @@ function renderBarChartMesesPiezas(datos, color) {
     grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="8" text-anchor="end" font-family="JetBrains Mono">${Math.round(val)}</text>`;
   }
 
-  let bars = '', labelsX = '';
+  let bars = '', labelsX = '', hitareas = '';
   const maxPiezas = maxV;
   datos.forEach((d, i) => {
     const gx = padL + i * groupW + (groupW - barW) / 2;
     const h = (d.piezas / maxV) * ch;
     const esMejor = d.piezas > 0 && d.piezas === maxPiezas;
-    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2"/>`;
+    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2" style="pointer-events:none"/>`;
+    // Zona de toque más ancha que la barra, para poder ver el resumen
+    // completo de cualquier mes (incluidos los que están en $0). Solo en la
+    // gráfica de Perfumes — el modal que abre es específico de perfumes.
+    if (clicable) {
+      hitareas += `<rect x="${padL + i*groupW}" y="${padT}" width="${groupW}" height="${ch}" fill="transparent" style="cursor:pointer" data-action="abrirModalResumenMes" data-mes="${d.claveMes}"/>`;
+    }
     if (i % 2 === 0 || i === datos.length - 1) {
-      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle">${d.mes}</text>`;
+      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle" style="pointer-events:none">${d.mes}</text>`;
     }
   });
 
@@ -3137,6 +3362,7 @@ function renderBarChartMesesPiezas(datos, color) {
     <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       ${grid}
       ${bars}
+      ${hitareas}
       ${labelsX}
     </svg>
   </div>`;
@@ -3308,6 +3534,23 @@ function handleClick(e) {
     case 'cerrarModalVentasDia':
       if (e.target === e.currentTarget) cerrarModalVentasDia();
       break;
+    case 'cerrarModalCierreMes':
+      if (e.target === e.currentTarget) cerrarModalCierreMes();
+      break;
+    case 'abrirModalComparativaMeses':
+      e.stopPropagation();
+      abrirModalComparativaMeses();
+      break;
+    case 'cerrarModalComparativaMeses':
+      if (e.target === e.currentTarget) cerrarModalComparativaMeses();
+      break;
+    case 'abrirModalResumenMes':
+      e.stopPropagation();
+      abrirModalResumenMes(d.mes);
+      break;
+    case 'cerrarModalResumenMes':
+      if (e.target === e.currentTarget) cerrarModalResumenMes();
+      break;
     case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
     case 'abrirScannerAsignar': abrirScannerAsignar(); break;
@@ -3322,6 +3565,7 @@ function handleClick(e) {
 
 // ============== INIT ==============
 cargarLocal();
+revisarCierreMes(); // antes del primer render, para que el aviso salga de una vez si aplica
 render();
 revisarYNotificar(); // por si ya había permiso concedido de antes
 
