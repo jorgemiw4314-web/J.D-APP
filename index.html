@@ -1449,14 +1449,15 @@ function calcularPiezasPorMes(soloCategoria) {
   for (let i = 11; i >= 0; i--) {
     const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     const key = claveMes(d);
-    let piezas = 0, vendido = 0;
+    let piezas = 0, vendido = 0, ganancia = 0;
     state.ventas.forEach(v => {
       if (v.mes !== key) return;
       if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return;
       piezas += v.cantidad;
       vendido += v.total;
+      ganancia += v.ganancia;
     });
-    meses.push({ mes: formatoMesCorto(key), claveMes: key, piezas, vendido: Math.round(vendido * 100) / 100 });
+    meses.push({ mes: formatoMesCorto(key), claveMes: key, piezas, vendido: Math.round(vendido * 100) / 100, ganancia: Math.round(ganancia * 100) / 100 });
   }
   return meses;
 }
@@ -2990,6 +2991,10 @@ function renderDashboard() {
         <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Piezas vendidas por mes (últimos 12 meses)</div>
         ${renderBarChartMesesPiezas(piezasPorMesPerfumes, '#a855f7', true)}
       </div>
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.1)">
+        <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Ganancia neta por mes (últimos 12 meses)</div>
+        ${renderBarChartMesesGanancia(piezasPorMesPerfumes, '#10b981', true)}
+      </div>
       ` : ''}
     </div>
 
@@ -3350,6 +3355,51 @@ function renderBarChartMesesPiezas(datos, color, clicable) {
     // Zona de toque más ancha que la barra, para poder ver el resumen
     // completo de cualquier mes (incluidos los que están en $0). Solo en la
     // gráfica de Perfumes — el modal que abre es específico de perfumes.
+    if (clicable) {
+      hitareas += `<rect x="${padL + i*groupW}" y="${padT}" width="${groupW}" height="${ch}" fill="transparent" style="cursor:pointer" data-action="abrirModalResumenMes" data-mes="${d.claveMes}"/>`;
+    }
+    if (i % 2 === 0 || i === datos.length - 1) {
+      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle" style="pointer-events:none">${d.mes}</text>`;
+    }
+  });
+
+  return `<div class="chart-container">
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      ${grid}
+      ${bars}
+      ${hitareas}
+      ${labelsX}
+    </svg>
+  </div>`;
+}
+
+// Gráfica de GANANCIA NETA por mes (últimos 12 meses) — para ver de un
+// vistazo en qué mes quedó más dinero limpio, no solo cuántas piezas.
+function renderBarChartMesesGanancia(datos, color, clicable) {
+  color = color || '#10b981';
+  const W = 320, H = 150, padL = 36, padR = 8, padT = 10, padB = 22;
+  const cw = W - padL - padR, ch = H - padT - padB;
+  const maxV = Math.max(...datos.map(d => d.ganancia), 1);
+  const groupW = cw / datos.length;
+  const barW = Math.max(4, groupW * 0.5);
+
+  let grid = '';
+  for (let i = 0; i <= 3; i++) {
+    const y = padT + (ch / 3) * i;
+    const val = maxV - (maxV / 3) * i;
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="7" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
+  }
+
+  let bars = '', labelsX = '', hitareas = '';
+  const maxGanancia = maxV;
+  datos.forEach((d, i) => {
+    const gx = padL + i * groupW + (groupW - barW) / 2;
+    const h = (d.ganancia / maxV) * ch;
+    const esMejor = d.ganancia > 0 && d.ganancia === maxGanancia;
+    bars += `<rect x="${gx}" y="${padT+ch-h}" width="${barW}" height="${Math.max(h,0)}" fill="${esMejor ? color : color+'60'}" rx="2" style="pointer-events:none"/>`;
+    // Misma zona de toque ancha que en "Piezas por mes", para ver el
+    // resumen completo de ese mes (solo en la gráfica de Perfumes).
     if (clicable) {
       hitareas += `<rect x="${padL + i*groupW}" y="${padT}" width="${groupW}" height="${ch}" fill="transparent" style="cursor:pointer" data-action="abrirModalResumenMes" data-mes="${d.claveMes}"/>`;
     }
