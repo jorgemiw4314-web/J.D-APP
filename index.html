@@ -424,7 +424,8 @@ let state = {
   modalVentasDia: null,
   modalCierreMes: false,
   modalComparativaMeses: false,
-  modalResumenMes: null // clave 'YYYY-MM' del mes que se está viendo en el modal, o null si está cerrado
+  modalResumenMes: null, // clave 'YYYY-MM' del mes que se está viendo en el modal, o null si está cerrado
+  sumaCobradoDesde: null // clave 'YYYY-MM' desde donde se suma el cobrado real de perfumes, o null = aún no elegido
 };
 
 let videoStreamActivo = null;
@@ -1509,6 +1510,22 @@ function abrirModalResumenMes(mesKey) {
 function cerrarModalResumenMes() {
   state.modalResumenMes = null;
   render();
+}
+function setSumaCobradoDesde(mesKey) {
+  state.sumaCobradoDesde = mesKey || null;
+  render();
+}
+// Suma el cobrado real (sin topes) y las piezas de perfumes, desde un mes
+// elegido hasta el mes actual (incluyéndolo) — para saber cuánto dinero
+// debería haber en total si no has sacado nada de ahí, p. ej. en un sobre.
+function calcularSumaCobradoDesde(datosMensuales, desdeClave) {
+  const idx = datosMensuales.findIndex(m => m.claveMes === desdeClave);
+  const tramo = idx === -1 ? [] : datosMensuales.slice(idx);
+  return {
+    piezas: tramo.reduce((s, m) => s + m.piezas, 0),
+    cobrado: Math.round(tramo.reduce((s, m) => s + m.vendido, 0) * 100) / 100,
+    meses: tramo
+  };
 }
 
 // Revisa si cambió el mes desde la última vez que se abrió la app en este
@@ -2995,6 +3012,24 @@ function renderDashboard() {
         <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Ganancia neta por mes (últimos 12 meses)</div>
         ${renderBarChartMesesGanancia(piezasPorMesPerfumes, '#10b981', true)}
       </div>
+      ${(() => {
+        const desdeClave = state.sumaCobradoDesde || claveMes(new Date());
+        const suma = calcularSumaCobradoDesde(piezasPorMesPerfumes, desdeClave);
+        return `
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.1)">
+        <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">💰 Suma de cobrado entre meses</div>
+        <div style="color:#64748b; font-size:12px; margin-bottom:6px">¿Desde qué mes quieres sumar? (hasta hoy)</div>
+        <div class="meses-scroll" style="margin-bottom:12px">
+          ${piezasPorMesPerfumes.map(m => `<button class="mes-btn ${m.claveMes === desdeClave ? 'activo' : ''}" data-action="setSumaCobradoDesde" data-mes="${m.claveMes}">${esc(m.mes)}</button>`).join('')}
+        </div>
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#10b981">Cobrado real (${esc(suma.meses[0] ? suma.meses[0].mes : '')} → hoy)</div>
+          <div class="resumen-value">${fmt(suma.cobrado)}</div>
+          <div class="resumen-sub">${suma.piezas} pza(s) en total</div>
+        </div>
+      </div>
+        `;
+      })()}
       ` : ''}
     </div>
 
@@ -3510,6 +3545,7 @@ function handleClick(e) {
   switch(action) {
     case 'setVista': setVista(d.vista); break;
     case 'setMes': setMes(d.mes); break;
+    case 'setSumaCobradoDesde': setSumaCobradoDesde(d.mes); break;
     case 'toggleExp': toggleExpandido(d.key); break;
     case 'iniciarPrecio': iniciarEditarPrecio(d.key); break;
     case 'guardarPrecio': guardarPrecio(d.key); break;
