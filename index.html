@@ -386,6 +386,13 @@ const SERVICIOS = {
 const MESES_NOMBRES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 // Las presentaciones que puede tener un perfume: 2 decants + el frasco completo.
 const TAMANOS_PERFUME = ['5ml', '10ml', 'Frasco completo'];
+// Si 2 perfumes son el mismo producto pero con costos distintos (p. ej. uno
+// para decants y otro para frascos sellados aparte), se pueden "agrupar" con
+// el mismo texto en grupoRanking — así cada uno sigue llevando su propio
+// costo/recuperación por separado, pero en el Ranking y los reportes
+// aparecen juntos bajo ese nombre compartido.
+function claveGrupoPerfume(p) { return (p.grupoRanking && p.grupoRanking.trim()) || p.id; }
+function nombreGrupoPerfume(p) { return (p.grupoRanking && p.grupoRanking.trim()) || p.nombre; }
 
 let state = {
   data: {
@@ -413,7 +420,7 @@ let state = {
   modal: null,
   formCliente: { nombre: '', pago: '', tipoPago: 'mensual', notas: '', diaPago: '' },
   modalProducto: null,
-  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general',
+  formProducto: { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general', grupoRanking: '',
     variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
@@ -724,7 +731,7 @@ function toggleArchivadoCliente(servicio, id) {
 // ============== TIENDA (productos por pieza) ==============
 function variantesFormVacias() {
   const v = {};
-  TAMANOS_PERFUME.forEach(tam => { v[tam] = { precioVenta: '' }; });
+  TAMANOS_PERFUME.forEach(tam => { v[tam] = { precioVenta: '', stock: '' }; });
   return v;
 }
 
@@ -746,6 +753,7 @@ function calcularCicloPerfume(p) {
 function calcularVentaPerfume(p, tamano, cantidad) {
   const v = (p.variantes || []).find(vv => vv.tamano === tamano);
   if (!v || v.agotado) return null; // no se puede vender una presentación agotada
+  if (v.stock != null && cantidad > v.stock) return null; // no hay piezas suficientes en inventario
   const total = Math.round(v.precioVenta * cantidad * 100) / 100;
   const { ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
@@ -759,7 +767,7 @@ function abrirModalProducto(productoId, categoriaDefault) {
   if (p && p.categoria === 'perfumes' && Array.isArray(p.variantes)) {
     p.variantes.forEach(v => {
       if (variantesForm[v.tamano]) {
-        variantesForm[v.tamano] = { precioVenta: v.precioVenta != null ? String(v.precioVenta) : '' };
+        variantesForm[v.tamano] = { precioVenta: v.precioVenta != null ? String(v.precioVenta) : '', stock: v.stock != null ? String(v.stock) : '' };
       }
     });
   }
@@ -770,6 +778,7 @@ function abrirModalProducto(productoId, categoriaDefault) {
     stock: p?.stock != null ? String(p.stock) : '',
     codigo: p?.codigo || '',
     categoria: p?.categoria || categoriaDefault || 'general',
+    grupoRanking: p?.grupoRanking || '',
     variantes: variantesForm
   };
   state.modalProducto = { productoId };
@@ -777,7 +786,7 @@ function abrirModalProducto(productoId, categoriaDefault) {
 }
 function cerrarModalProducto() {
   state.modalProducto = null;
-  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general', variantes: variantesFormVacias() };
+  state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general', grupoRanking: '', variantes: variantesFormVacias() };
   render();
 }
 function actualizarFormProducto(campo, valor) {
@@ -801,9 +810,14 @@ function guardarProducto() {
     const variantes = TAMANOS_PERFUME.map(tam => {
       const v = state.formProducto.variantes[tam];
       const vExistente = variantesExistentes.find(vv => vv.tamano === tam);
+      // stock es opcional: si se deja vacío, no se lleva inventario de esta
+      // presentación (se puede vender sin límite, como siempre). Solo tiene
+      // sentido ponerlo normalmente en "Frasco completo".
+      const stockTexto = (v.stock || '').toString().trim();
       return {
         tamano: tam,
         precioVenta: parseFloat(v.precioVenta) || 0,
+        stock: stockTexto === '' ? null : Math.max(0, parseInt(stockTexto) || 0),
         agotado: vExistente ? !!vExistente.agotado : false
       };
     });
@@ -814,6 +828,7 @@ function guardarProducto() {
       codigo: state.formProducto.codigo ? state.formProducto.codigo.trim() : '',
       categoria: 'perfumes',
       variantes,
+      grupoRanking: state.formProducto.grupoRanking ? state.formProducto.grupoRanking.trim() : '',
       cicloInicio: (existente && existente.cicloInicio) || creado,
       archivado: existente ? !!existente.archivado : false,
       creado
@@ -898,7 +913,9 @@ function eliminarVenta(ventaId) {
 function obtenerInfoVenta(p, tamano) {
   if (tamano) {
     const v = (p.variantes || []).find(vv => vv.tamano === tamano);
-    return v ? { precioVenta: v.precioVenta, stock: null } : null; // stock null = sin límite (perfumes)
+    // stock null = sin límite (el caso normal: 5ml/10ml, o Frasco completo
+    // sin inventario activado). Si tiene un número, sí se lleva el conteo.
+    return v ? { precioVenta: v.precioVenta, stock: v.stock != null ? v.stock : null } : null;
   }
   return { precioCosto: p.precioCosto, precioVenta: p.precioVenta, stock: p.stock };
 }
@@ -967,9 +984,17 @@ function registrarVenta(productoId, tamano) {
     mes: claveMes(new Date())
   };
   state.ventas.push(venta);
-  // sinLimite es true siempre que haya "tamano" (perfumes ya no llevan stock),
-  // así que aquí solo se descuenta stock de productos generales.
-  if (!sinLimite) p.stock -= cant;
+  // Si hay límite de stock, se descuenta del lugar correcto: el producto
+  // general, o la presentación específica del perfume (p. ej. Frasco
+  // completo, si le activaste el conteo de piezas).
+  if (!sinLimite) {
+    if (tamano) {
+      const v = (p.variantes || []).find(vv => vv.tamano === tamano);
+      if (v) v.stock -= cant;
+    } else {
+      p.stock -= cant;
+    }
+  }
   guardarLocal();
   cerrarModalVenta();
   render();
@@ -1171,7 +1196,7 @@ function procesarCodigoDetectado(codigo) {
     // mostrando de una vez el precio de cada una. El "Frasco completo" solo
     // aparece como opción si le pusiste un precio (si no, no se ofrece), y
     // las presentaciones marcadas como agotadas tampoco se ofrecen.
-    const variantesDisponibles = p.variantes.filter(v => (v.tamano !== 'Frasco completo' || v.precioVenta > 0) && !v.agotado);
+    const variantesDisponibles = p.variantes.filter(v => (v.tamano !== 'Frasco completo' || v.precioVenta > 0) && !v.agotado && (v.stock == null || v.stock > 0));
 
     if (variantesDisponibles.length === 0) {
       if (statusEl) { statusEl.textContent = `⚠️ ${p.nombre} está agotado en todas sus presentaciones`; statusEl.style.color = '#ef4444'; }
@@ -1309,11 +1334,13 @@ function elegirTamanoScanner(tamano) {
   const statusEl = document.getElementById('scanner-status');
   const confirmarEl = document.getElementById('scanner-confirmar');
   const calc = p ? calcularVentaPerfume(p, tamano, 1) : null;
+  const variante = p ? (p.variantes || []).find(vv => vv.tamano === tamano) : null;
+  const sinStock = variante && variante.stock != null && variante.stock < 1;
 
-  if (!p || !calc) {
+  if (!p || !calc || sinStock) {
     scannerPendiente = null;
     if (confirmarEl) { confirmarEl.style.display = 'none'; confirmarEl.innerHTML = ''; }
-    if (statusEl) { statusEl.textContent = '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
+    if (statusEl) { statusEl.textContent = sinStock ? `⚠️ Ya no quedan piezas de "${tamano}"` : '⚠️ El producto ya no está disponible'; statusEl.style.color = '#ef4444'; }
     return;
   }
 
@@ -1329,6 +1356,9 @@ function elegirTamanoScanner(tamano) {
     mes: claveMes(new Date())
   };
   state.ventas.push(venta);
+  // Si esta presentación lleva inventario (p. ej. Frasco completo), se
+  // descuenta 1 pieza.
+  if (variante && variante.stock != null) variante.stock -= 1;
   guardarLocal();
 
   scannerPendiente = null;
@@ -1487,11 +1517,23 @@ function calcularComparativaPerfumes() {
   const mesCerradoKey = obtenerClaveMesHace(1);
   const mesAnteriorKey = obtenerClaveMesHace(2);
   const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
-  const filas = perfumes.map(p => {
-    const piezasCerrado = state.ventas.filter(v => v.productoId === p.id && v.mes === mesCerradoKey).reduce((s, v) => s + v.cantidad, 0);
-    const piezasAnterior = state.ventas.filter(v => v.productoId === p.id && v.mes === mesAnteriorKey).reduce((s, v) => s + v.cantidad, 0);
-    return { nombre: p.nombre, piezasCerrado, piezasAnterior, diff: piezasCerrado - piezasAnterior };
-  }).filter(f => f.piezasCerrado > 0 || f.piezasAnterior > 0);
+  // Mismo agrupado que en el Ranking: perfumes con el mismo "grupoRanking"
+  // se combinan en una sola fila de la comparativa.
+  const grupos = new Map();
+  perfumes.forEach(p => {
+    const piezasCerradoP = state.ventas.filter(v => v.productoId === p.id && v.mes === mesCerradoKey).reduce((s, v) => s + v.cantidad, 0);
+    const piezasAnteriorP = state.ventas.filter(v => v.productoId === p.id && v.mes === mesAnteriorKey).reduce((s, v) => s + v.cantidad, 0);
+    const clave = claveGrupoPerfume(p);
+    if (!grupos.has(clave)) {
+      grupos.set(clave, { nombre: nombreGrupoPerfume(p), piezasCerrado: 0, piezasAnterior: 0 });
+    }
+    const g = grupos.get(clave);
+    g.piezasCerrado += piezasCerradoP;
+    g.piezasAnterior += piezasAnteriorP;
+  });
+  const filas = Array.from(grupos.values())
+    .map(g => ({ ...g, diff: g.piezasCerrado - g.piezasAnterior }))
+    .filter(f => f.piezasCerrado > 0 || f.piezasAnterior > 0);
   filas.sort((a, b) => b.diff - a.diff);
   return filas;
 }
@@ -1616,22 +1658,37 @@ function calcularCapitalPerfumes() {
 // del mes en curso — se reinicia solo cada mes porque solo cuenta las ventas de ese mes.
 function calcularRankingPerfumes(mesKey) {
   const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
-  const ranking = perfumes.map(p => {
+  // Se agrupa por claveGrupoPerfume: normalmente es el propio producto (1
+  // renglón = 1 perfume), pero si 2 perfumes comparten el mismo
+  // "grupoRanking" (p. ej. decants y frascos sellados del mismo perfume con
+  // costos distintos), se combinan en un solo renglón para el ranking.
+  const grupos = new Map();
+  perfumes.forEach(p => {
     const ventasMes = state.ventas.filter(v => v.productoId === p.id && v.mes === mesKey);
-    const piezas = ventasMes.reduce((s, v) => s + v.cantidad, 0);
-    const porTamano = {};
+    const piezasP = ventasMes.reduce((s, v) => s + v.cantidad, 0);
+    const porTamanoP = {};
     ventasMes.forEach(v => {
       const tam = v.tamano || 'Único';
-      porTamano[tam] = (porTamano[tam] || 0) + v.cantidad;
+      porTamanoP[tam] = (porTamanoP[tam] || 0) + v.cantidad;
     });
     // Cuánto lleva recuperado del costo del frasco actual (no solo este mes,
     // desde que empezó el ciclo/frasco), para saber si ya dio ganancia o no.
     const { ingresoAcumulado } = calcularCicloPerfume(p);
     const costo = p.precioCosto || 0;
-    const faltante = Math.max(0, Math.round((costo - ingresoAcumulado) * 100) / 100);
-    const gananciaFrasco = Math.max(0, Math.round((ingresoAcumulado - costo) * 100) / 100);
-    return { id: p.id, nombre: p.nombre, piezas, porTamano, faltante, gananciaFrasco };
+    const faltanteP = Math.max(0, Math.round((costo - ingresoAcumulado) * 100) / 100);
+    const gananciaFrascoP = Math.max(0, Math.round((ingresoAcumulado - costo) * 100) / 100);
+
+    const clave = claveGrupoPerfume(p);
+    if (!grupos.has(clave)) {
+      grupos.set(clave, { id: clave, nombre: nombreGrupoPerfume(p), piezas: 0, porTamano: {}, faltante: 0, gananciaFrasco: 0 });
+    }
+    const g = grupos.get(clave);
+    g.piezas += piezasP;
+    Object.entries(porTamanoP).forEach(([tam, cant]) => { g.porTamano[tam] = (g.porTamano[tam] || 0) + cant; });
+    g.faltante = Math.round((g.faltante + faltanteP) * 100) / 100;
+    g.gananciaFrasco = Math.round((g.gananciaFrasco + gananciaFrascoP) * 100) / 100;
   });
+  const ranking = Array.from(grupos.values());
   ranking.sort((a, b) => b.piezas - a.piezas);
   return ranking;
 }
@@ -2476,19 +2533,22 @@ function renderPerfumeExpandido(p) {
 function renderVarianteRow(p, v) {
   const esAdmin = state.rol === 'admin';
   const agotado = !!v.agotado;
+  const llevaStock = v.stock != null;
+  const sinStock = llevaStock && v.stock <= 0;
+  const bloqueado = agotado || sinStock;
   const key = p.id + ':' + v.tamano;
   const ventasVariante = [...state.ventas].filter(vv => vv.productoId === p.id && (vv.tamano || null) === (v.tamano === 'Único' ? null : v.tamano)).sort((a,b) => b.fecha - a.fecha);
   const ventasAbiertas = !!state.ventasProductoExpandido[key];
   return `
-    <div style="border-top:1px solid rgba(148,163,184,0.12); padding-top:10px; ${agotado ? 'opacity:0.55' : ''}">
+    <div style="border-top:1px solid rgba(148,163,184,0.12); padding-top:10px; ${bloqueado ? 'opacity:0.55' : ''}">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
-          <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}${agotado ? ' <span style="color:#ef4444; font-size:11px; font-weight:700">· AGOTADO</span>' : ''}</div>
-          <div class="cliente-notas">Venta ${fmt(v.precioVenta)}</div>
+          <div class="nombre" style="font-size:14px">🧴 ${esc(v.tamano)}${agotado ? ' <span style="color:#ef4444; font-size:11px; font-weight:700">· AGOTADO</span>' : sinStock ? ' <span style="color:#ef4444; font-size:11px; font-weight:700">· SIN STOCK</span>' : ''}</div>
+          <div class="cliente-notas">Venta ${fmt(v.precioVenta)}${llevaStock ? ` · Stock: ${v.stock}` : ''}</div>
         </div>
         <div class="cliente-acciones" style="flex-direction:row">
           ${esAdmin ? `<button class="icon-btn" style="background:${agotado ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'}; color:${agotado ? '#10b981' : '#ef4444'}" data-action="toggleAgotadoVariante" data-pid="${p.id}" data-tam="${v.tamano}" title="${agotado ? 'Marcar disponible' : 'Marcar agotado'}">${agotado ? '✅' : '🚫'}</button>` : ''}
-          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${agotado ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}" ${agotado ? 'disabled' : ''}>🛒</button>
+          <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${bloqueado ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}" ${bloqueado ? 'disabled' : ''}>🛒</button>
         </div>
       </div>
       <div data-action="toggleVentasProducto" data-pid="${key}" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:8px; color:#64748b; font-size:12px">
@@ -2575,6 +2635,11 @@ function renderModalProducto() {
           <button type="button" class="save-btn" style="width:48px; height:48px; background:#06b6d4" data-action="abrirScannerAsignar">📷</button>
         </div>
       </div>
+      <div class="campo">
+        <div class="campo-label"><label>Agrupar en Ranking como (opcional)</label><span class="hint">Para 2 frascos del mismo perfume con costo distinto</span></div>
+        <input class="input" type="text" value="${esc(f.grupoRanking || '')}" placeholder="Ej. Aqua Odyssey" oninput="actualizarFormProducto('grupoRanking', this.value)" />
+        <div style="font-size:11px; color:#64748b; margin-top:4px; line-height:1.4">Si tienes 2 perfumes separados (uno para decants y otro para frascos sellados, cada uno con su propio costo), escribe aquí el mismo nombre en los 2 — en el Ranking y los reportes van a aparecer juntos bajo ese nombre, aunque cada uno siga llevando su costo por separado. Si es un solo perfume normal, deja esto vacío.</div>
+      </div>
       ${renderCamposVariantesPerfume(f)}
       ` : renderCamposProductoGeneral(f)}
 
@@ -2622,6 +2687,10 @@ function renderCamposVariantesPerfume(f) {
 
         <div class="campo-label"><label>Precio cliente ($)</label>${esFrasco ? '<span class="hint">Déjalo en 0 si no vendes el frasco completo</span>' : ''}</div>
         <input class="input" type="number" inputmode="decimal" value="${esc(v.precioVenta)}" placeholder="0.00" oninput="actualizarFormProductoVariante('${tam}', 'precioVenta', this.value)" />
+        ${esFrasco ? `
+        <div class="campo-label" style="margin-top:10px"><label>Piezas disponibles (opcional)</label><span class="hint">Déjalo vacío si no quieres llevar inventario</span></div>
+        <input class="input" type="number" inputmode="numeric" value="${esc(v.stock)}" placeholder="Ej. 10" oninput="actualizarFormProductoVariante('${tam}', 'stock', this.value)" />
+        ` : ''}
       </div>
     `;
   }).join('');
