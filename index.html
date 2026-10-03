@@ -412,7 +412,7 @@ let state = {
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
-  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false, usuariosInfo: false, productosArchivados: false },
+  expandido: { internet: true, netflix: true, spotify: true, otros: true, perfumes: false, respaldoInfo: false, notifInfo: false, usuariosInfo: false, productosArchivados: false, productosGeneral: true },
   productoExpandido: {},
   ventasProductoExpandido: {},
   editandoPrecio: null,
@@ -432,7 +432,8 @@ let state = {
   modalCierreMes: false,
   modalComparativaMeses: false,
   modalResumenMes: null, // clave 'YYYY-MM' del mes que se está viendo en el modal, o null si está cerrado
-  sumaCobradoDesde: null // clave 'YYYY-MM' desde donde se suma el cobrado real de perfumes, o null = aún no elegido
+  sumaCobradoDesde: null, // clave 'YYYY-MM' desde donde se suma el cobrado real de perfumes, o null = aún no elegido
+  busquedaProductos: '' // texto para filtrar Productos/Perfumes por nombre
 };
 
 let videoStreamActivo = null;
@@ -788,6 +789,16 @@ function cerrarModalProducto() {
   state.modalProducto = null;
   state.formProducto = { nombre: '', precioCosto: '', precioVenta: '', stock: '', codigo: '', categoria: 'general', grupoRanking: '', variantes: variantesFormVacias() };
   render();
+}
+// A diferencia de los campos de formulario (que no re-dibujan nada mientras
+// escribes), esta búsqueda SÍ necesita actualizar la lista en vivo — así que
+// después de redibujar, le devolvemos el foco y el cursor al mismo campo
+// para que el teclado no se cierre ni se pierda la posición al escribir.
+function actualizarBusquedaProductos(valor) {
+  state.busquedaProductos = valor;
+  render();
+  const el = document.getElementById('busqueda-productos');
+  if (el) { el.focus(); const p = valor.length; el.setSelectionRange(p, p); }
 }
 function actualizarFormProducto(campo, valor) {
   state.formProducto[campo] = valor;
@@ -2306,9 +2317,12 @@ function renderClienteRow(servicioKey, c, color) {
 
 function renderTienda() {
   const esAdmin = state.rol === 'admin';
-  const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes' && !p.archivado);
+  const q = state.busquedaProductos.trim().toLowerCase();
+  const buscando = q !== '';
+  const coincide = (p) => p.nombre.toLowerCase().includes(q);
+  const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes' && !p.archivado && (!buscando || coincide(p)));
   const productosArchivados = state.productos.filter(p => p.categoria !== 'perfumes' && p.archivado);
-  const perfumes = state.productos.filter(p => p.categoria === 'perfumes');
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes' && (!buscando || coincide(p)));
   let html = '<div class="fade-in">';
 
   if (esAdmin) {
@@ -2367,13 +2381,25 @@ function renderTienda() {
     </div>
   `;
 
+  html += `
+    <div style="padding: 0 20px 4px">
+      <div style="position:relative">
+        <span style="position:absolute; left:14px; top:50%; transform:translateY(-50%); color:#64748b; pointer-events:none">🔍</span>
+        <input id="busqueda-productos" class="input" style="padding-left:38px" type="text" value="${esc(state.busquedaProductos)}" placeholder="Buscar por nombre…" oninput="actualizarBusquedaProductos(this.value)" />
+      </div>
+    </div>
+  `;
+
   html += '<div class="secciones">';
   // El Vendedor también ve Productos (para poder marcar esas ventas y que
   // cuenten en su corte), pero sin agregar/archivar — eso sigue siendo solo
   // de Admin (renderProductoRow ya oculta esos botones si no es Admin).
+  // Mientras hay una búsqueda activa, se fuerza a ver la sección abierta.
+  const productosAbierto = buscando || state.expandido.productosGeneral;
   html += `<div class="seccion">
-    <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
-      <div class="seccion-top">
+    <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); ${productosAbierto ? 'border-bottom: 1px solid rgba(245,158,11,0.15);' : ''}">
+      <div class="seccion-top" data-action="toggleExp" data-key="productosGeneral" style="cursor:pointer">
+        <span class="chevron-btn" style="font-size:14px">${productosAbierto ? '▼' : '▶'}</span>
         <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
         <div class="seccion-info">
           <h2>Productos</h2>
@@ -2381,8 +2407,9 @@ function renderTienda() {
         </div>
       </div>
     </div>
+    ${productosAbierto ? `
     <div class="seccion-body">
-      ${productosGenerales.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
+      ${productosGenerales.length === 0 ? `<div class="vacio">${buscando ? 'No se encontró ningún producto con ese nombre' : 'Sin productos, agrega el primero'}</div>` :
         productosGenerales.map(p => renderProductoRow(p)).join('')
       }
       ${esAdmin ? `
@@ -2401,8 +2428,9 @@ function renderTienda() {
       ` : ''}
       ` : ''}
     </div>
+    ` : ''}
   </div>`;
-  html += renderSeccionPerfumes(perfumes, esAdmin);
+  html += renderSeccionPerfumes(perfumes, esAdmin, buscando);
   html += '</div>';
 
   html += '<div style="height:120px"></div></div>';
@@ -2451,8 +2479,10 @@ function renderProductoRow(p) {
 
 // Sección de Perfumes: acordeón oculto por defecto (igual que Netflix/Spotify),
 // y dentro cada perfume también aparece colapsado (solo nombre) hasta tocarlo.
-function renderSeccionPerfumes(perfumes, esAdmin) {
-  const abierto = state.expandido.perfumes;
+function renderSeccionPerfumes(perfumes, esAdmin, buscando) {
+  // Mientras hay una búsqueda activa, se fuerza a ver la sección abierta
+  // (sin importar si estaba colapsada) para que los resultados sean visibles.
+  const abierto = buscando || state.expandido.perfumes;
   return `<div class="seccion" style="margin-top:12px">
     <div class="seccion-header" style="background: linear-gradient(135deg, rgba(168,85,247,0.08), rgba(168,85,247,0.02)); ${abierto ? 'border-bottom: 1px solid rgba(168,85,247,0.15);' : ''}">
       <div class="seccion-top" data-action="toggleExp" data-key="perfumes" style="cursor:pointer">
@@ -2466,8 +2496,8 @@ function renderSeccionPerfumes(perfumes, esAdmin) {
     </div>
     ${abierto ? `
     <div class="seccion-body">
-      ${perfumes.length === 0 ? '<div class="vacio">Sin perfumes, agrega el primero</div>' :
-        perfumes.map(p => renderProductoRowColapsable(p)).join('')
+      ${perfumes.length === 0 ? `<div class="vacio">${buscando ? 'No se encontró ningún perfume con ese nombre' : 'Sin perfumes, agrega el primero'}</div>` :
+        perfumes.map(p => renderProductoRowColapsable(p, buscando)).join('')
       }
       ${esAdmin ? `
       <button class="add-cliente-btn" style="background: rgba(168,85,247,0.1); color: #a855f7; border: 1px dashed rgba(168,85,247,0.4)" data-action="abrirModalProducto" data-categoria="perfumes">
@@ -2479,8 +2509,8 @@ function renderSeccionPerfumes(perfumes, esAdmin) {
 
 // Cada perfume inicia colapsado (solo el nombre); al tocarlo se expande
 // mostrando sus presentaciones (5ml, 10ml, y frasco completo si aplica) con su propio precio/código.
-function renderProductoRowColapsable(p) {
-  const abierto = !!state.productoExpandido[p.id];
+function renderProductoRowColapsable(p, forzarAbierto) {
+  const abierto = forzarAbierto || !!state.productoExpandido[p.id];
   if (!abierto) {
     return `
     <div class="cliente card" data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
