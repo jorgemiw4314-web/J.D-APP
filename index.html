@@ -1028,23 +1028,26 @@ function inicioDeSemana() {
 }
 // Ventas SOLO de perfumes dentro de un rango de fechas — usado para el
 // resumen del Vendedor (hoy / esta semana), ya que él no ve productos generales.
-function calcularVentasPerfumesRango(desde, hasta) {
-  const idsPerfumes = new Set(state.productos.filter(p => p.categoria === 'perfumes').map(p => p.id));
+// soloCategoria es opcional: si no se pasa, cuenta TODA la tienda (perfumes
+// + productos generales) — esto es lo que usa el corte del Vendedor, para
+// que cualquier venta que haga (de lo que sea) se refleje en su total.
+function calcularVentasPerfumesRango(desde, hasta, soloCategoria) {
+  const idsFiltro = soloCategoria ? new Set(state.productos.filter(p => p.categoria === soloCategoria).map(p => p.id)) : null;
   let vendido = 0, piezas = 0;
   state.ventas.forEach(v => {
-    if (v.fecha >= desde && v.fecha <= hasta && idsPerfumes.has(v.productoId)) {
-      vendido += v.total;
-      piezas += v.cantidad;
-    }
+    if (v.fecha < desde || v.fecha > hasta) return;
+    if (idsFiltro && !idsFiltro.has(v.productoId)) return;
+    vendido += v.total;
+    piezas += v.cantidad;
   });
   return { vendido: Math.round(vendido*100)/100, piezas };
 }
-// Lista (no solo el total) de las ventas de perfumes dentro de un rango de
-// fechas, más recientes primero — usada para el detalle de "Vendido esta semana".
-function listarVentasPerfumesRango(desde, hasta) {
-  const idsPerfumes = new Set(state.productos.filter(p => p.categoria === 'perfumes').map(p => p.id));
+// Lista (no solo el total) de las ventas dentro de un rango de fechas, más
+// recientes primero — usada para el detalle de "Vendido esta semana/hoy".
+function listarVentasPerfumesRango(desde, hasta, soloCategoria) {
+  const idsFiltro = soloCategoria ? new Set(state.productos.filter(p => p.categoria === soloCategoria).map(p => p.id)) : null;
   return state.ventas
-    .filter(v => v.fecha >= desde && v.fecha <= hasta && idsPerfumes.has(v.productoId))
+    .filter(v => v.fecha >= desde && v.fecha <= hasta && (!idsFiltro || idsFiltro.has(v.productoId)))
     .sort((a, b) => b.fecha - a.fecha);
 }
 function abrirModalVentasSemana() {
@@ -2331,7 +2334,9 @@ function renderTienda() {
       </div>
     `;
   } else {
-    // El Vendedor solo ve perfumes: su corte es de hoy y de la semana, no del mes.
+    // El corte del Vendedor es de hoy y de la semana (no del mes), y cuenta
+    // TODA la tienda (perfumes + productos), para reflejar cualquier venta
+    // que haga sin importar qué fue.
     const hoy = calcularVentasPerfumesRango(inicioDeHoy(), Date.now());
     const semana = calcularVentasPerfumesRango(inicioDeSemana(), Date.now());
     html += `
@@ -2362,46 +2367,41 @@ function renderTienda() {
     </div>
   `;
 
-  html += `
-    <div style="padding: 0 20px 4px">
-      <button class="add-cliente-btn" style="background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(6,182,212,0.1)); color:#10b981; border: 1px solid rgba(16,185,129,0.3)" data-action="abrirScannerVenta">
-        📷 Escanear y vender
-      </button>
-    </div>
-  `;
-
   html += '<div class="secciones">';
-  if (esAdmin) {
-    html += `<div class="seccion">
-      <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
-        <div class="seccion-top">
-          <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
-          <div class="seccion-info">
-            <h2>Productos</h2>
-            <p>${productosGenerales.length} producto(s) en catálogo</p>
-          </div>
+  // El Vendedor también ve Productos (para poder marcar esas ventas y que
+  // cuenten en su corte), pero sin agregar/archivar — eso sigue siendo solo
+  // de Admin (renderProductoRow ya oculta esos botones si no es Admin).
+  html += `<div class="seccion">
+    <div class="seccion-header" style="background: linear-gradient(135deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02)); border-bottom: 1px solid rgba(245,158,11,0.15);">
+      <div class="seccion-top">
+        <div class="seccion-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706)">📦</div>
+        <div class="seccion-info">
+          <h2>Productos</h2>
+          <p>${productosGenerales.length} producto(s) en catálogo</p>
         </div>
       </div>
-      <div class="seccion-body">
-        ${productosGenerales.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
-          productosGenerales.map(p => renderProductoRow(p)).join('')
-        }
-        <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
-          + Agregar producto
-        </button>
-        ${productosArchivados.length > 0 ? `
-        <div data-action="toggleExp" data-key="productosArchivados" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:10px; color:#64748b; font-size:12px">
-          <span>${state.expandido.productosArchivados ? '▼' : '▶'}</span>
-          <span>🗄️ Archivados (${productosArchivados.length})</span>
-        </div>
-        ${state.expandido.productosArchivados ? `
-        <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; opacity:0.7">
-          ${productosArchivados.map(p => renderProductoRow(p)).join('')}
-        </div>` : ''}
-        ` : ''}
+    </div>
+    <div class="seccion-body">
+      ${productosGenerales.length === 0 ? '<div class="vacio">Sin productos, agrega el primero</div>' :
+        productosGenerales.map(p => renderProductoRow(p)).join('')
+      }
+      ${esAdmin ? `
+      <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
+        + Agregar producto
+      </button>
+      ${productosArchivados.length > 0 ? `
+      <div data-action="toggleExp" data-key="productosArchivados" style="cursor:pointer; display:flex; align-items:center; gap:6px; padding-top:10px; color:#64748b; font-size:12px">
+        <span>${state.expandido.productosArchivados ? '▼' : '▶'}</span>
+        <span>🗄️ Archivados (${productosArchivados.length})</span>
       </div>
-    </div>`;
-  }
+      ${state.expandido.productosArchivados ? `
+      <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; opacity:0.7">
+        ${productosArchivados.map(p => renderProductoRow(p)).join('')}
+      </div>` : ''}
+      ` : ''}
+      ` : ''}
+    </div>
+  </div>`;
   html += renderSeccionPerfumes(perfumes, esAdmin);
   html += '</div>';
 
@@ -2759,7 +2759,7 @@ function renderModalVentasSemana() {
         <button class="close-btn" data-action="cerrarModalVentasSemana">✕</button>
       </div>
       <div class="modal-subtitle" style="color:#a855f7">${totalPiezas} pza(s) · ${fmt(totalVendido)} en total</div>
-      ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas de perfumes esta semana</div>' :
+      ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas esta semana</div>' :
         ventas.map(v => renderVentaRow(v)).join('')
       }
     </div>
@@ -2778,7 +2778,7 @@ function renderModalVentasHoy() {
         <button class="close-btn" data-action="cerrarModalVentasHoy">✕</button>
       </div>
       <div class="modal-subtitle" style="color:#06b6d4">${totalPiezas} pza(s) · ${fmt(totalVendido)} en total</div>
-      ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas de perfumes hoy</div>' :
+      ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas hoy</div>' :
         ventas.map(v => renderVentaRow(v)).join('')
       }
     </div>
@@ -3213,6 +3213,9 @@ function renderDashboard() {
       </div>
       ${state.expandido.respaldoInfo ? `
       <p style="font-size:12px; color:#94a3b8; margin-bottom:8px">Los datos se guardan solo en este teléfono. Si el sistema limpia el almacenamiento del navegador (común en Huawei/Android para ahorrar batería), podrías perderlos. Guarda un respaldo de vez en cuando.</p>
+      <p style="font-size:12px; margin-bottom:8px; color:${window.almacenamientoPersistente === true ? '#10b981' : window.almacenamientoPersistente === false ? '#ef4444' : '#94a3b8'}">
+        ${window.almacenamientoPersistente === true ? '🛡️ Este navegador SÍ protegió los datos contra borrado automático' : window.almacenamientoPersistente === false ? '⚠️ Este navegador NO concedió protección contra borrado automático — por eso te conviene respaldar seguido' : 'Revisando protección contra borrado automático…'}
+      </p>
       <p style="font-size:12px; font-weight:700; margin-bottom:12px; color:${(() => { const d = diasDesdeUltimoRespaldo(); return d !== null && d < DIAS_AVISO_RESPALDO ? '#10b981' : '#fbbf24'; })()}">
         ${(() => { const d = diasDesdeUltimoRespaldo(); return d === null ? '⚠️ Nunca has hecho un respaldo' : `Último respaldo: hace ${d} día(s)`; })()}
       </p>
@@ -3753,8 +3756,13 @@ if (window.nubeListo) {
 // esto reduce (no elimina del todo) el riesgo de que Android borre los datos
 // solo para liberar espacio. No evita que el usuario borre los datos a mano
 // desde Ajustes, ni sustituye al respaldo — es una capa extra de protección.
+// A diferencia de antes, ahora SÍ guardamos si el navegador lo concedió o no,
+// para poder avisarte con certeza en vez de solo "pedirlo y ya".
+window.almacenamientoPersistente = null; // null = aún no se sabe, true/false = respuesta real
 if (navigator.storage && navigator.storage.persist) {
-  navigator.storage.persist().catch(() => {});
+  navigator.storage.persist()
+    .then(concedido => { window.almacenamientoPersistente = concedido; render(); })
+    .catch(() => { window.almacenamientoPersistente = false; render(); });
 }
 
 // BUG FIX: si la app se queda abierta en segundo plano y cambia el día (o el mes),
