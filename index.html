@@ -3117,6 +3117,15 @@ function renderDashboard() {
   const flujoTienda = calcularFlujoTiendaMensual();
   const flujoMesActual = flujoTienda[flujoTienda.length - 1];
   const hayFlujoTienda = flujoTienda.some(m => m.cobrado > 0);
+  // Mismo resumen de 12 meses que ya tienes para Cobros, pero de la Tienda
+  // (perfumes + productos) — total, promedio, mes actual vs anterior, mejor mes.
+  const tiendaConDatos = flujoTienda.filter(m => m.ganancia !== 0);
+  const tiendaTotalAnual = tiendaConDatos.reduce((s, m) => s + m.ganancia, 0);
+  const tiendaPromedio = tiendaConDatos.length > 0 ? tiendaTotalAnual / tiendaConDatos.length : 0;
+  const tiendaMejorMes = tiendaConDatos.reduce((max, m) => m.ganancia > (max?.ganancia || -Infinity) ? m : max, null);
+  const tiendaMesAnt = flujoTienda[flujoTienda.length - 2];
+  let tiendaCambio = 0;
+  if (tiendaMesAnt && tiendaMesAnt.ganancia !== 0) tiendaCambio = ((flujoMesActual.ganancia - tiendaMesAnt.ganancia) / Math.abs(tiendaMesAnt.ganancia)) * 100;
   const flujoCategorias = calcularFlujoPorCategoria(mesK);
   const capitalPerfumes = calcularCapitalPerfumes();
 
@@ -3241,6 +3250,29 @@ function renderDashboard() {
       </div>
       `}
     </div>
+
+    ${hayFlujoTienda ? `
+    <div class="resumen" style="padding:0; margin-bottom:20px">
+      <div class="resumen-card destacado">
+        <div class="resumen-label" style="color:#ec4899">Total 12 meses (Tienda)</div>
+        <div class="resumen-value" style="color:#ec4899">${fmt(tiendaTotalAnual)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#06b6d4">Promedio mensual</div>
+        <div class="resumen-value">${fmt(tiendaPromedio)}</div>
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:${tiendaCambio >= 0 ? '#10b981' : '#ef4444'}">Mes actual</div>
+        <div class="resumen-value">${fmt(flujoMesActual.ganancia)}</div>
+        ${tiendaCambio !== 0 ? `<div class="resumen-sub">${tiendaCambio >= 0 ? '↑' : '↓'} ${Math.abs(tiendaCambio).toFixed(0)}% vs mes anterior</div>` : '<div class="resumen-sub">sin datos previos</div>'}
+      </div>
+      <div class="resumen-card">
+        <div class="resumen-label" style="color:#a78bfa">Mejor mes</div>
+        <div class="resumen-value">${tiendaMejorMes ? fmt(tiendaMejorMes.ganancia) : '—'}</div>
+        ${tiendaMejorMes ? `<div class="resumen-sub">${tiendaMejorMes.mes}</div>` : ''}
+      </div>
+    </div>
+    ` : ''}
 
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#ec4899">💸</span> Flujo de dinero — Tienda (perfumes y productos)</div>
