@@ -1532,12 +1532,24 @@ function calcularFlujoTiendaMensual() {
     const ganancia = ventasMes.reduce((s, v) => s + v.ganancia, 0);
     meses.push({
       mes: formatoMesCorto(key),
+      claveMes: key,
       cobrado: Math.round(cobrado * 100) / 100,
       costo: Math.round((cobrado - ganancia) * 100) / 100, // reinvertido
       ganancia: Math.round(ganancia * 100) / 100
     });
   }
   return meses;
+}
+
+// "Ganancia real" mes por mes (últimos 12 meses): ganancia de TODA la tienda
+// (perfumes + productos generales) menos los gastos/compras varias de ese
+// mismo mes — el panorama completo, no solo de perfumes.
+function calcularGananciaRealPorMes() {
+  const flujo = calcularFlujoTiendaMensual();
+  return flujo.map(m => {
+    const gastosMes = calcularGastosMes(m.claveMes).total;
+    return { mes: m.mes, claveMes: m.claveMes, gananciaReal: Math.round((m.ganancia - gastosMes) * 100) / 100 };
+  });
 }
 
 // Piezas vendidas mes por mes (últimos 12 meses) — opcionalmente solo de una
@@ -3291,6 +3303,10 @@ function renderDashboard() {
           <div class="resumen-sub">Ganancia de tienda menos gastos</div>
         </div>
       </div>
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.1)">
+        <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Ganancia real por mes (últimos 12 meses)</div>
+        ${renderBarChartMesesGananciaReal(calcularGananciaRealPorMes())}
+      </div>
     </div>
       `;
     })()}
@@ -3665,6 +3681,50 @@ function renderBarChartMesesGanancia(datos, color, clicable) {
       ${grid}
       ${bars}
       ${hitareas}
+      ${labelsX}
+    </svg>
+  </div>`;
+}
+
+// Gráfica de "Ganancia real" por mes (toda la tienda menos gastos). Admite
+// meses en negativo (si los gastos superaron la ganancia ese mes) — las
+// barras positivas suben en verde desde la línea de cero, las negativas
+// bajan en rojo.
+function renderBarChartMesesGananciaReal(datos) {
+  const W = 320, H = 160, padL = 36, padR = 8, padT = 10, padB = 22;
+  const cw = W - padL - padR, chTotal = H - padT - padB;
+  const maxAbs = Math.max(...datos.map(d => Math.abs(d.gananciaReal)), 1);
+  const zeroY = padT + chTotal / 2;
+  const mitadAlto = chTotal / 2;
+  const groupW = cw / datos.length;
+  const barW = Math.max(4, groupW * 0.5);
+
+  let grid = '';
+  [0, 0.5, 1].forEach(frac => {
+    const y = padT + chTotal * frac;
+    const val = maxAbs - (maxAbs * 2) * frac;
+    grid += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-dasharray="3 3"/>`;
+    grid += `<text x="${padL-4}" y="${y+3}" fill="#64748b" font-size="7" text-anchor="end" font-family="JetBrains Mono">${fmtCorto(val)}</text>`;
+  });
+  grid += `<line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="rgba(255,255,255,0.18)"/>`;
+
+  let bars = '', labelsX = '';
+  datos.forEach((d, i) => {
+    const gx = padL + i * groupW + (groupW - barW) / 2;
+    const val = d.gananciaReal;
+    const h = Math.abs(val) / maxAbs * mitadAlto;
+    const color = val >= 0 ? '#10b981' : '#ef4444';
+    const y = val >= 0 ? zeroY - h : zeroY;
+    bars += `<rect x="${gx}" y="${y}" width="${barW}" height="${Math.max(h, 1)}" fill="${color}" rx="2"/>`;
+    if (i % 2 === 0 || i === datos.length - 1) {
+      labelsX += `<text x="${padL + i*groupW + groupW/2}" y="${H-8}" fill="#64748b" font-size="8" text-anchor="middle">${d.mes}</text>`;
+    }
+  });
+
+  return `<div class="chart-container">
+    <svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      ${grid}
+      ${bars}
       ${labelsX}
     </svg>
   </div>`;
