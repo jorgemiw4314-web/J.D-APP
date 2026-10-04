@@ -408,6 +408,7 @@ let state = {
   // combinar ventas de varios teléfonos, una venta borrada no se "reviva"
   // por accidente si otro teléfono todavía la tenía guardada sin sincronizar.
   ventasEliminadas: {},
+  gastos: [], // compras/gastos varios (frasquitos, insumos, etc.): { id, descripcion, monto, fecha, mes }
   config: { pinAdmin: '1234', cajaCambio: 0, metaPiezasMes: null }, // metaPiezasMes: { mes: 'YYYY-MM', meta: N } o null
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
@@ -433,7 +434,9 @@ let state = {
   modalComparativaMeses: false,
   modalResumenMes: null, // clave 'YYYY-MM' del mes que se está viendo en el modal, o null si está cerrado
   sumaCobradoDesde: null, // clave 'YYYY-MM' desde donde se suma el cobrado real de perfumes, o null = aún no elegido
-  busquedaProductos: '' // texto para filtrar Productos/Perfumes por nombre
+  busquedaProductos: '', // texto para filtrar Productos/Perfumes por nombre
+  modalGasto: false,
+  formGasto: { descripcion: '', monto: '' }
 };
 
 let videoStreamActivo = null;
@@ -459,6 +462,7 @@ function guardarLocal() {
     localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
     localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
     localStorage.setItem('tienda-ventas-eliminadas', JSON.stringify(state.ventasEliminadas));
+    localStorage.setItem('tienda-gastos', JSON.stringify(state.gastos));
     localStorage.setItem('app-config', JSON.stringify(state.config));
     localStorage.setItem('local-actualizado', String(Date.now()));
   } catch(e) { console.error(e); }
@@ -485,12 +489,14 @@ function cargarLocal() {
     const pr = localStorage.getItem('tienda-productos');
     const v = localStorage.getItem('tienda-ventas');
     const ve = localStorage.getItem('tienda-ventas-eliminadas');
+    const ga = localStorage.getItem('tienda-gastos');
     const cfg = localStorage.getItem('app-config');
     if (d) state.data = { ...state.data, ...JSON.parse(d) };
     if (p) state.pagosMes = JSON.parse(p);
     if (pr) state.productos = JSON.parse(pr);
     if (v) state.ventas = JSON.parse(v);
     if (ve) state.ventasEliminadas = JSON.parse(ve);
+    if (ga) state.gastos = JSON.parse(ga);
     if (cfg) state.config = { ...state.config, ...JSON.parse(cfg) };
   } catch(e) { console.error(e); }
   // La sesión (rol) es propia de este dispositivo, no se sincroniza con la nube.
@@ -522,6 +528,7 @@ async function subirANube() {
     productos: state.productos,
     ventas: state.ventas,
     ventasEliminadas: state.ventasEliminadas,
+    gastos: state.gastos,
     config: state.config
   });
   actualizarIndicadorNube(ok ? 'ok' : 'error');
@@ -592,6 +599,7 @@ async function sincronizarNube() {
     state.productos = remoto.productos || state.productos;
     state.ventas = ventasCombinadas;
     state.ventasEliminadas = eliminadasCombinadas;
+    state.gastos = remoto.gastos || state.gastos;
     state.config = remoto.config || state.config;
     try {
       localStorage.setItem('pagos-data', JSON.stringify(state.data));
@@ -599,6 +607,7 @@ async function sincronizarNube() {
       localStorage.setItem('tienda-productos', JSON.stringify(state.productos));
       localStorage.setItem('tienda-ventas', JSON.stringify(state.ventas));
       localStorage.setItem('tienda-ventas-eliminadas', JSON.stringify(state.ventasEliminadas));
+      localStorage.setItem('tienda-gastos', JSON.stringify(state.gastos));
       localStorage.setItem('app-config', JSON.stringify(state.config));
       localStorage.setItem('local-actualizado', String(remotoTs));
     } catch(e) {}
@@ -872,6 +881,53 @@ function eliminarProducto(id) {
   state.ventas = state.ventas.filter(v => v.productoId !== id);
   guardarLocal();
   render();
+}
+
+// ============== GASTOS / COMPRAS VARIAS ==============
+// Registro de compras que no son "productos para vender" — frasquitos,
+// insumos, bolsas, etc. Se restan de la ganancia total para ver qué tan real
+// es la ganancia después de estos gastos chiquitos que se acumulan.
+function abrirModalGasto() {
+  if (state.rol !== 'admin') return;
+  state.formGasto = { descripcion: '', monto: '' };
+  state.modalGasto = true;
+  render();
+}
+function cerrarModalGasto() {
+  state.modalGasto = false;
+  render();
+}
+function actualizarFormGasto(campo, valor) {
+  state.formGasto[campo] = valor;
+}
+function guardarGasto() {
+  if (state.rol !== 'admin') return;
+  const descripcion = state.formGasto.descripcion.trim();
+  const monto = parseFloat(state.formGasto.monto) || 0;
+  if (!descripcion || monto <= 0) return;
+  state.gastos.push({
+    id: 'g_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    descripcion,
+    monto: Math.round(monto * 100) / 100,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  });
+  guardarLocal();
+  cerrarModalGasto();
+}
+function eliminarGasto(id) {
+  if (state.rol !== 'admin') return;
+  if (!confirm('¿Eliminar este gasto?')) return;
+  state.gastos = state.gastos.filter(g => g.id !== id);
+  guardarLocal();
+  render();
+}
+function calcularGastosMes(mesKey) {
+  const delMes = state.gastos.filter(g => g.mes === mesKey);
+  return {
+    total: Math.round(delMes.reduce((s, g) => s + g.monto, 0) * 100) / 100,
+    lista: delMes.sort((a, b) => b.fecha - a.fecha)
+  };
 }
 
 // Archivar oculta el producto de la lista activa SIN borrar nada — el
@@ -1981,7 +2037,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto();
   bindEvents();
 }
 
@@ -2628,6 +2684,28 @@ function renderVentaRow(v) {
   `;
 }
 
+function renderModalGasto() {
+  if (!state.modalGasto) return '';
+  const f = state.formGasto;
+  return `<div class="modal-overlay" data-action="cerrarModalGasto">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>+ Nuevo gasto</h3>
+        <button class="close-btn" data-action="cerrarModalGasto">✕</button>
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Qué compraste?</label></div>
+        <input class="input" type="text" value="${esc(f.descripcion)}" placeholder="Ej. Frasquitos de 5ml x50" oninput="actualizarFormGasto('descripcion', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Cuánto gastaste? ($)</label></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormGasto('monto', this.value)" />
+      </div>
+      <button class="guardar-btn" onclick="guardarGasto()">✓ Guardar gasto</button>
+    </div>
+  </div>`;
+}
+
 function renderModalProducto() {
   if (!state.modalProducto) return '';
   const f = state.formProducto;
@@ -3180,6 +3258,43 @@ function renderDashboard() {
       `}
     </div>
 
+    ${(() => {
+      const gastosMes = calcularGastosMes(mesK);
+      const gananciaReal = Math.round((flujoMesActual.ganancia - gastosMes.total) * 100) / 100;
+      return `
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#ef4444">📋</span> Gastos / Compras varias (este mes)</div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Frasquitos, insumos, bolsas — cualquier compra que no sea para revender, pero que sí sale de tu bolsillo.</p>
+      ${gastosMes.lista.length === 0 ? '<div class="vacio">Sin gastos registrados este mes</div>' :
+        gastosMes.lista.map(g => `
+        <div class="cliente" style="margin-bottom:8px">
+          <div class="cliente-info">
+            <div class="nombre">${esc(g.descripcion)}</div>
+            <div class="cliente-notas">${new Date(g.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</div>
+          </div>
+          <div class="monto mono" style="color:#ef4444">-${fmt(g.monto)}</div>
+          <button class="icon-btn delete" data-action="eliminarGasto" data-gid="${g.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
+        </div>
+        `).join('')
+      }
+      <button class="add-cliente-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px dashed rgba(239,68,68,0.4)" data-action="abrirModalGasto">
+        + Agregar gasto
+      </button>
+      <div class="resumen" style="padding:0; margin-top:14px">
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#ef4444">Gastos del mes</div>
+          <div class="resumen-value" style="color:#ef4444">-${fmt(gastosMes.total)}</div>
+        </div>
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#10b981">Ganancia real</div>
+          <div class="resumen-value" style="color:${gananciaReal >= 0 ? '#10b981' : '#ef4444'}">${fmt(gananciaReal)}</div>
+          <div class="resumen-sub">Ganancia de tienda menos gastos</div>
+        </div>
+      </div>
+    </div>
+      `;
+    })()}
+
     ${state.config.metaPiezasMes && state.config.metaPiezasMes.mes === claveMes(new Date()) ? (() => {
       const meta = state.config.metaPiezasMes.meta;
       const logrado = totalPiezasPerfumesMes;
@@ -3690,6 +3805,14 @@ function handleClick(e) {
     case 'eliminarProducto':
       e.stopPropagation();
       eliminarProducto(d.pid);
+      break;
+    case 'abrirModalGasto': abrirModalGasto(); break;
+    case 'cerrarModalGasto':
+      if (e.target === e.currentTarget) cerrarModalGasto();
+      break;
+    case 'eliminarGasto':
+      e.stopPropagation();
+      eliminarGasto(d.gid);
       break;
     case 'toggleArchivadoProducto':
       e.stopPropagation();
