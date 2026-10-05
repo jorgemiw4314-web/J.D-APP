@@ -2522,7 +2522,7 @@ function renderTienda() {
     ${productosAbierto ? `
     <div class="seccion-body">
       ${productosGenerales.length === 0 ? `<div class="vacio">${buscando ? 'No se encontró ningún producto con ese nombre' : 'Sin productos, agrega el primero'}</div>` :
-        productosGenerales.map(p => renderProductoRow(p)).join('')
+        productosGenerales.map(p => renderProductoRow(p, buscando)).join('')
       }
       ${esAdmin ? `
       <button class="add-cliente-btn" style="background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px dashed rgba(245,158,11,0.4)" data-action="abrirModalProducto" data-categoria="general">
@@ -2549,7 +2549,7 @@ function renderTienda() {
   return html;
 }
 
-function renderProductoRow(p) {
+function renderProductoRow(p, sinAnimacion) {
   const gananciaPza = p.precioVenta - p.precioCosto;
   const sinStock = p.stock <= 0;
   const esAdmin = state.rol === 'admin';
@@ -2557,7 +2557,7 @@ function renderProductoRow(p) {
   const ventasProducto = [...state.ventas].filter(v => v.productoId === p.id).sort((a,b) => b.fecha - a.fecha);
   const ventasAbiertas = !!state.ventasProductoExpandido[p.id];
   return `
-    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:8px; ${archivado ? 'opacity:0.7' : ''}">
+    <div class="cliente card" style="${sinAnimacion ? 'animation:none;' : ''} flex-direction:column; align-items:stretch; gap:8px; ${archivado ? 'opacity:0.7' : ''}">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
           <div class="nombre">${esc(p.nombre)}${archivado ? ' <span style="color:#64748b; font-size:11px; font-weight:700">· ARCHIVADO</span>' : ''}</div>
@@ -2623,9 +2623,14 @@ function renderSeccionPerfumes(perfumes, esAdmin, buscando) {
 // mostrando sus presentaciones (5ml, 10ml, y frasco completo si aplica) con su propio precio/código.
 function renderProductoRowColapsable(p, forzarAbierto) {
   const abierto = forzarAbierto || !!state.productoExpandido[p.id];
+  // forzarAbierto solo se pone en true mientras hay una búsqueda activa —
+  // en ese caso también quitamos la animación de la tarjeta (sinAnimacion),
+  // porque cada letra que escribes vuelve a dibujar las filas y la
+  // animación se reiniciaba una y otra vez, dando un efecto de parpadeo.
+  const sinAnimacion = forzarAbierto;
   if (!abierto) {
     return `
-    <div class="cliente card" data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
+    <div class="cliente card" data-action="toggleProdExp" data-pid="${p.id}" style="${sinAnimacion ? 'animation:none;' : ''} cursor:pointer">
       <div class="cliente-info">
         <div class="nombre">${esc(p.nombre)}</div>
       </div>
@@ -2635,12 +2640,12 @@ function renderProductoRowColapsable(p, forzarAbierto) {
   }
   return `
     <div data-action="toggleProdExp" data-pid="${p.id}" style="cursor:pointer">
-      ${renderPerfumeExpandido(p)}
+      ${renderPerfumeExpandido(p, sinAnimacion)}
     </div>
   `;
 }
 
-function renderPerfumeExpandido(p) {
+function renderPerfumeExpandido(p, sinAnimacion) {
   const esAdmin = state.rol === 'admin';
   // Compatibilidad: si por alguna razón el perfume no tiene variantes (dato viejo),
   // se muestra como una sola presentación "Único" para no romper la vista.
@@ -2652,7 +2657,7 @@ function renderPerfumeExpandido(p) {
   const { piezasVendidas, ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
   return `
-    <div class="cliente card" style="flex-direction:column; align-items:stretch; gap:10px">
+    <div class="cliente card" style="${sinAnimacion ? 'animation:none;' : ''} flex-direction:column; align-items:stretch; gap:10px">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
           <div class="nombre">🌸 ${esc(p.nombre)}</div>
