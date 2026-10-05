@@ -844,11 +844,19 @@ function cerrarModalProducto() {
 // escribes), esta búsqueda SÍ necesita actualizar la lista en vivo — así que
 // después de redibujar, le devolvemos el foco y el cursor al mismo campo
 // para que el teclado no se cierre ni se pierda la posición al escribir.
+let busquedaProductosTimeout = null;
 function actualizarBusquedaProductos(valor) {
   state.busquedaProductos = valor;
-  render();
-  const el = document.getElementById('busqueda-productos');
-  if (el) { el.focus(); const p = valor.length; el.setSelectionRange(p, p); }
+  // En vez de redibujar la pantalla completa en CADA letra (lo cual, en una
+  // pantalla tan grande como la de Productos, se siente como un parpadeo en
+  // teléfonos más limitados), esperamos un instante breve después de que la
+  // persona deja de escribir, y ahí sí se redibuja una sola vez.
+  clearTimeout(busquedaProductosTimeout);
+  busquedaProductosTimeout = setTimeout(() => {
+    render();
+    const el = document.getElementById('busqueda-productos');
+    if (el) { el.focus(); const p = el.value.length; el.setSelectionRange(p, p); }
+  }, 250);
 }
 function actualizarFormProducto(campo, valor) {
   state.formProducto[campo] = valor;
