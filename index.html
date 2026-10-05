@@ -2432,7 +2432,10 @@ function renderTienda() {
   const productosGenerales = state.productos.filter(p => p.categoria !== 'perfumes' && !p.archivado && (!buscando || coincide(p)));
   const productosArchivados = state.productos.filter(p => p.categoria !== 'perfumes' && p.archivado);
   const perfumes = state.productos.filter(p => p.categoria === 'perfumes' && (!buscando || coincide(p)));
-  let html = '<div class="fade-in">';
+  // Mientras hay una búsqueda activa, quitamos la animación de aparición —
+  // si no, cada letra que escribes vuelve a dibujar toda la pantalla y la
+  // animación se reinicia una y otra vez, dando un efecto de parpadeo.
+  let html = buscando ? '<div>' : '<div class="fade-in">';
 
   if (esAdmin) {
     const t = calcularTotalesTienda();
