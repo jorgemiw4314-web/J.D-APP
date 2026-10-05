@@ -436,7 +436,9 @@ let state = {
   sumaCobradoDesde: null, // clave 'YYYY-MM' desde donde se suma el cobrado real de perfumes, o null = aún no elegido
   busquedaProductos: '', // texto para filtrar Productos/Perfumes por nombre
   modalGasto: false,
-  formGasto: { descripcion: '', monto: '' }
+  formGasto: { descripcion: '', monto: '' },
+  modalVentaPersonalizada: null, // productoId del perfume, o null si está cerrado
+  formVentaPersonalizada: { descripcion: '', monto: '' }
 };
 
 let videoStreamActivo = null;
@@ -769,6 +771,45 @@ function calcularVentaPerfume(p, tamano, cantidad) {
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
   const ganancia = Math.round(Math.max(0, total - costoRestante) * 100) / 100;
   return { precioVenta: v.precioVenta, total, ganancia };
+}
+// Venta "personalizada" de un perfume: para cuando vendes una cantidad que
+// no es ni 5ml, ni 10ml, ni el frasco completo al 100% — por ejemplo, "lo que
+// queda" de un frasco ya empezado, a un precio que tú decides en el momento.
+// La ganancia se calcula igual que las demás presentaciones: usando lo que
+// ya llevabas recuperado del costo de ese frasco.
+function abrirModalVentaPersonalizada(productoId) {
+  state.formVentaPersonalizada = { descripcion: '', monto: '' };
+  state.modalVentaPersonalizada = productoId;
+  render();
+}
+function cerrarModalVentaPersonalizada() {
+  state.modalVentaPersonalizada = null;
+  render();
+}
+function actualizarFormVentaPersonalizada(campo, valor) {
+  state.formVentaPersonalizada[campo] = valor;
+}
+function registrarVentaPersonalizada() {
+  const p = state.productos.find(pp => pp.id === state.modalVentaPersonalizada);
+  if (!p) return;
+  const descripcion = state.formVentaPersonalizada.descripcion.trim();
+  const total = Math.round((parseFloat(state.formVentaPersonalizada.monto) || 0) * 100) / 100;
+  if (!descripcion || total <= 0) return;
+  const { ingresoAcumulado } = calcularCicloPerfume(p);
+  const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
+  const ganancia = Math.round(Math.max(0, total - costoRestante) * 100) / 100;
+  state.ventas.push({
+    id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    productoId: p.id,
+    tamano: descripcion,
+    cantidad: 1,
+    total,
+    ganancia,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  });
+  guardarLocal();
+  cerrarModalVentaPersonalizada();
 }
 function abrirModalProducto(productoId, categoriaDefault) {
   if (state.rol !== 'admin') return;
@@ -2039,7 +2080,7 @@ function render() {
   if (state.rol === 'vendedor') {
     state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
     const vista = renderTienda();
-    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada();
     bindEvents();
     return;
   }
@@ -2049,7 +2090,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada();
   bindEvents();
 }
 
@@ -2624,6 +2665,9 @@ function renderPerfumeExpandido(p) {
         </div>` : ''}
       </div>
       ${variantes.map(v => renderVarianteRow(p, v)).join('')}
+      <button class="tipo-btn" style="width:100%; border-style:dashed" data-action="abrirModalVentaPersonalizada" data-pid="${p.id}">
+        ✏️ Venta personalizada (ej. lo que queda del frasco)
+      </button>
     </div>
   `;
 }
@@ -2714,6 +2758,34 @@ function renderModalGasto() {
         <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormGasto('monto', this.value)" />
       </div>
       <button class="guardar-btn" onclick="guardarGasto()">✓ Guardar gasto</button>
+    </div>
+  </div>`;
+}
+
+function renderModalVentaPersonalizada() {
+  if (!state.modalVentaPersonalizada) return '';
+  const p = state.productos.find(pp => pp.id === state.modalVentaPersonalizada);
+  if (!p) return '';
+  const f = state.formVentaPersonalizada;
+  const { ingresoAcumulado } = calcularCicloPerfume(p);
+  const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
+  return `<div class="modal-overlay" data-action="cerrarModalVentaPersonalizada">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Venta personalizada</h3>
+        <button class="close-btn" data-action="cerrarModalVentaPersonalizada">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#a855f7">🌸 ${esc(p.nombre)}</div>
+      ${state.rol === 'admin' ? `<p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Faltan ${fmt(costoRestante)} por recuperar de este frasco — lo que cobres por arriba de eso ya es ganancia.</p>` : ''}
+      <div class="campo">
+        <div class="campo-label"><label>¿Qué vendiste?</label></div>
+        <input class="input" type="text" value="${esc(f.descripcion)}" placeholder="Ej. Resto del frasco" oninput="actualizarFormVentaPersonalizada('descripcion', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Cuánto cobraste en total? ($)</label></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormVentaPersonalizada('monto', this.value)" />
+      </div>
+      <button class="guardar-btn" onclick="registrarVentaPersonalizada()">✓ Registrar venta</button>
     </div>
   </div>`;
 }
@@ -3905,6 +3977,13 @@ function handleClick(e) {
     case 'eliminarGasto':
       e.stopPropagation();
       eliminarGasto(d.gid);
+      break;
+    case 'abrirModalVentaPersonalizada':
+      e.stopPropagation();
+      abrirModalVentaPersonalizada(d.pid);
+      break;
+    case 'cerrarModalVentaPersonalizada':
+      if (e.target === e.currentTarget) cerrarModalVentaPersonalizada();
       break;
     case 'toggleArchivadoProducto':
       e.stopPropagation();
