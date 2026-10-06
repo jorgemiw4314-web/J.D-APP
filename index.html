@@ -411,7 +411,7 @@ let state = {
   // por accidente si otro teléfono todavía la tenía guardada sin sincronizar.
   ventasEliminadas: {},
   gastos: [], // compras/gastos varios (frasquitos, insumos, etc.): { id, descripcion, monto, fecha, mes }
-  config: { pinAdmin: '1234', cajaCambio: 0, metaPiezasMes: null }, // metaPiezasMes: { mes: 'YYYY-MM', meta: N } o null
+  config: { pinAdmin: '1234', cajaCambio: 0, metaPiezasMes: null, insumoPorPieza: 0, comprasInsumos: [] }, // insumos: compras generales (frasquitos, stickers, bolsas) y cuánto recupera cada decant // metaPiezasMes: { mes: 'YYYY-MM', meta: N } o null
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
@@ -757,7 +757,9 @@ function variantesFormVacias() {
 function calcularCicloPerfume(p) {
   const desde = p.cicloInicio || p.creado || 0;
   const ventasCiclo = state.ventas.filter(v => v.productoId === p.id && v.fecha >= desde);
-  const ingresoAcumulado = ventasCiclo.reduce((s, v) => s + v.total, 0);
+  // Lo que se apartó para insumos (frasquito, sticker, bolsa) no cuenta
+  // como recuperado del costo del perfume.
+  const ingresoAcumulado = ventasCiclo.reduce((s, v) => s + v.total - (v.insumos || 0), 0);
   const piezasVendidas = ventasCiclo.reduce((s, v) => s + v.cantidad, 0);
   return { ingresoAcumulado, piezasVendidas };
 }
@@ -767,13 +769,35 @@ function calcularCicloPerfume(p) {
 // de esta venta (lo que falte por recuperar no cuenta como ganancia).
 function calcularVentaPerfume(p, tamano, cantidad) {
   const v = (p.variantes || []).find(vv => vv.tamano === tamano);
-  if (!v || v.agotado) return null; // no se puede vender una presentación agotada
+  if (p.agotado || !v || v.agotado) return null; // no se puede vender un perfume o presentación agotada
   if (v.stock != null && cantidad > v.stock) return null; // no hay piezas suficientes en inventario
   const total = Math.round(v.precioVenta * cantidad * 100) / 100;
+  // Primero se aparta el costo de insumos de cada pieza (solo decants 5ml/10ml),
+  // luego se recupera el costo del perfume, y lo que sobre es ganancia.
+  // Nunca se aparta más de lo que falta por recuperar de las compras de insumos.
+  const insumos = Math.round(Math.min(total, costoInsumos(tamano) * cantidad, calcularCapitalInsumos().faltante) * 100) / 100;
   const { ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
-  const ganancia = Math.round(Math.max(0, total - costoRestante) * 100) / 100;
-  return { precioVenta: v.precioVenta, total, ganancia };
+  const ganancia = Math.round(Math.max(0, total - insumos - costoRestante) * 100) / 100;
+  return { precioVenta: v.precioVenta, total, ganancia, insumos };
+}
+// Cuánto recupera de insumos cada decant (5ml o 10ml). Un solo monto para todos.
+function costoInsumos(tamano) {
+  if (tamano !== '5ml' && tamano !== '10ml') return 0; // frasco completo no usa insumos
+  return parseFloat(state.config && state.config.insumoPorPieza) || 0;
+}
+// Capital de insumos: lo que has comprado (todas las compras juntas), lo que
+// ya se recuperó con las ventas, y lo que falta.
+function calcularCapitalInsumos() {
+  const compras = (state.config && state.config.comprasInsumos) || [];
+  const invertido = compras.reduce((s, c) => s + (c.monto || 0), 0);
+  const recuperado = state.ventas.reduce((s, v) => s + (v.insumos || 0), 0);
+  return {
+    invertido: Math.round(invertido * 100) / 100,
+    recuperado: Math.round(recuperado * 100) / 100,
+    faltante: Math.round(Math.max(0, invertido - recuperado) * 100) / 100,
+    compras
+  };
 }
 // Venta "personalizada" de un perfume: para cuando vendes una cantidad que
 // no es ni 5ml, ni 10ml, ni el frasco completo al 100% — por ejemplo, "lo que
@@ -794,7 +818,7 @@ function actualizarFormVentaPersonalizada(campo, valor) {
 }
 function registrarVentaPersonalizada() {
   const p = state.productos.find(pp => pp.id === state.modalVentaPersonalizada);
-  if (!p) return;
+  if (!p || p.agotado) return;
   const descripcion = state.formVentaPersonalizada.descripcion.trim();
   const total = Math.round((parseFloat(state.formVentaPersonalizada.monto) || 0) * 100) / 100;
   if (!descripcion || total <= 0) return;
@@ -905,6 +929,7 @@ function guardarProducto() {
       variantes,
       grupoRanking: state.formProducto.grupoRanking ? state.formProducto.grupoRanking.trim() : '',
       cicloInicio: (existente && existente.cicloInicio) || creado,
+      frascosTerminados: (existente && existente.frascosTerminados) || 0, // se conserva al editar con ✎
       archivado: existente ? !!existente.archivado : false,
       creado
     };
@@ -1004,8 +1029,43 @@ function reiniciarFrascoPerfume(id) {
   if (state.rol !== 'admin') return;
   const p = state.productos.find(pp => pp.id === id);
   if (!p) return;
-  if (!confirm(`¿Registrar un frasco nuevo de "${p.nombre}"?\n\nEsto reinicia el conteo de piezas vendidas y de costo recuperado (empieza de cero). Si el costo del frasco nuevo cambió, edítalo con ✎ después de esto.`)) return;
+  const r = prompt(`Frasco nuevo de "${p.nombre}"\n\n¿Cuánto te costó? (reinicia piezas vendidas y costo recuperado)`, p.precioCosto || 0);
+  if (r === null) return;
+  const costo = parseFloat(r);
+  if (isNaN(costo) || costo < 0) { alert('Escribe un costo válido.'); return; }
+  p.precioCosto = Math.round(costo * 100) / 100;
+  p.agotado = false; // ya hay perfume otra vez
   p.cicloInicio = Date.now();
+  p.frascosTerminados = (p.frascosTerminados || 0) + 1; // el frasco anterior se terminó
+  guardarLocal();
+  render();
+}
+
+// Marca todo el perfume como agotado (se acabó el frasco y aún no compras
+// otro). No se puede vender hasta que registres un frasco nuevo con 🔄 o
+// lo vuelvas a marcar disponible.
+function toggleAgotadoPerfume(id) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === id);
+  if (!p) return;
+  if (!p.agotado && !confirm(`¿Marcar "${p.nombre}" como agotado?\n\nNo se podrá vender hasta que registres un frasco nuevo con 🔄.`)) return;
+  p.agotado = !p.agotado;
+  guardarLocal();
+  render();
+}
+
+// Permite al admin corregir a mano el número de frascos terminados
+// (por ejemplo, para poner los que ya se habían acabado antes de que
+// existiera este contador).
+function editarFrascosTerminados(id) {
+  if (state.rol !== 'admin') return;
+  const p = state.productos.find(pp => pp.id === id);
+  if (!p) return;
+  const nuevo = prompt(`¿Cuántos frascos de "${p.nombre}" se han terminado?`, p.frascosTerminados || 0);
+  if (nuevo === null) return;
+  const valor = parseInt(nuevo, 10);
+  if (isNaN(valor) || valor < 0) { alert('Escribe un número válido (0 o más).'); return; }
+  p.frascosTerminados = valor;
   guardarLocal();
   render();
 }
@@ -1085,12 +1145,13 @@ function registrarVenta(productoId, tamano) {
   const cant = parseInt(state.formVenta.cantidad) || 0;
   if (cant < 1 || (!sinLimite && cant > info.stock)) return;
 
-  let total, ganancia;
+  let total, ganancia, insumos = 0;
   if (tamano) {
     const calc = calcularVentaPerfume(p, tamano, cant);
     if (!calc) return;
     total = calc.total;
     ganancia = calc.ganancia;
+    insumos = calc.insumos;
   } else {
     total = Math.round(info.precioVenta * cant * 100) / 100;
     ganancia = Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100;
@@ -1102,6 +1163,7 @@ function registrarVenta(productoId, tamano) {
     cantidad: cant,
     total,
     ganancia,
+    insumos, // se guarda con la venta para que el historial no cambie si luego ajustas el costo
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
@@ -1321,7 +1383,7 @@ function procesarCodigoDetectado(codigo) {
     // mostrando de una vez el precio de cada una. El "Frasco completo" solo
     // aparece como opción si le pusiste un precio (si no, no se ofrece), y
     // las presentaciones marcadas como agotadas tampoco se ofrecen.
-    const variantesDisponibles = p.variantes.filter(v => (v.tamano !== 'Frasco completo' || v.precioVenta > 0) && !v.agotado && (v.stock == null || v.stock > 0));
+    const variantesDisponibles = p.agotado ? [] : p.variantes.filter(v => (v.tamano !== 'Frasco completo' || v.precioVenta > 0) && !v.agotado && (v.stock == null || v.stock > 0));
 
     if (variantesDisponibles.length === 0) {
       if (statusEl) { statusEl.textContent = `⚠️ ${p.nombre} está agotado en todas sus presentaciones`; statusEl.style.color = '#ef4444'; }
@@ -1477,6 +1539,7 @@ function elegirTamanoScanner(tamano) {
     cantidad: 1,
     total: calc.total,
     ganancia: calc.ganancia,
+    insumos: calc.insumos,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
@@ -1585,10 +1648,12 @@ function calcularFlujoTiendaMensual() {
     const ventasMes = state.ventas.filter(v => v.mes === key);
     const cobrado = ventasMes.reduce((s, v) => s + v.total, 0);
     const ganancia = ventasMes.reduce((s, v) => s + v.ganancia, 0);
+    const insumos = ventasMes.reduce((s, v) => s + (v.insumos || 0), 0);
     meses.push({
       mes: formatoMesCorto(key),
       claveMes: key,
       cobrado: Math.round(cobrado * 100) / 100,
+      insumos: Math.round(insumos * 100) / 100, // parte de lo reinvertido que es para insumos
       costo: Math.round((cobrado - ganancia) * 100) / 100, // reinvertido
       ganancia: Math.round(ganancia * 100) / 100
     });
@@ -1775,7 +1840,8 @@ function calcularFlujoPorCategoria(mesKey) {
 // cuánto se ha recuperado hasta ahora, y cuánto falta — sin importar el mes,
 // para ver el panorama completo de la inversión en perfumes.
 function calcularCapitalPerfumes() {
-  const perfumes = state.productos.filter(p => p.categoria === 'perfumes' && !p.archivado);
+  // Los perfumes agotados ya no cuentan: ese frasco se terminó.
+  const perfumes = state.productos.filter(p => p.categoria === 'perfumes' && !p.archivado && !p.agotado);
   let invertido = 0, recuperado = 0;
   perfumes.forEach(p => {
     const costo = p.precioCosto || 0;
@@ -1999,6 +2065,42 @@ async function intentarLogin(rol) {
 function cerrarSesion() {
   state.rol = null;
   try { localStorage.removeItem('sesion-rol'); } catch(e) {}
+  render();
+}
+// Insumos generales: registras cada compra (frasquitos, stickers, bolsas…)
+// y defines cuánto recupera cada decant vendido.
+function agregarCompraInsumos() {
+  if (state.rol !== 'admin') return;
+  const r = prompt('¿Cuánto pagaste por esta compra de insumos? (frasquitos, stickers, bolsas…)');
+  if (r === null) return;
+  const monto = parseFloat(r);
+  if (isNaN(monto) || monto <= 0) { alert('Escribe un monto válido.'); return; }
+  const descripcion = (prompt('¿Qué compraste? (opcional)', 'Insumos') || 'Insumos').trim();
+  if (!Array.isArray(state.config.comprasInsumos)) state.config.comprasInsumos = [];
+  state.config.comprasInsumos.push({
+    id: 'i_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    descripcion,
+    monto: Math.round(monto * 100) / 100,
+    fecha: Date.now()
+  });
+  guardarLocal();
+  render();
+}
+function eliminarCompraInsumos(id) {
+  if (state.rol !== 'admin') return;
+  if (!confirm('¿Eliminar esta compra de insumos?')) return;
+  state.config.comprasInsumos = (state.config.comprasInsumos || []).filter(c => c.id !== id);
+  guardarLocal();
+  render();
+}
+function editarInsumoPorPieza() {
+  if (state.rol !== 'admin') return;
+  const r = prompt('¿Cuánto recupera de insumos cada decant vendido (5ml o 10ml)?', state.config.insumoPorPieza || 0);
+  if (r === null) return;
+  const val = parseFloat(r);
+  if (isNaN(val) || val < 0) { alert('Escribe un número válido (0 o más).'); return; }
+  state.config.insumoPorPieza = Math.round(val * 100) / 100;
+  guardarLocal();
   render();
 }
 function cambiarPinAdmin() {
@@ -2509,6 +2611,15 @@ function renderTienda() {
         </div>
         <div class="monto mono" style="color:#10b981; font-size:20px">${fmt(state.config.cajaCambio || 0)}</div>
       </div>
+      ${esAdmin ? (() => { const ci = calcularCapitalInsumos(); return `
+      <div class="cliente card" style="${buscando ? 'animation:none;' : ''} justify-content:space-between; align-items:center">
+        <div class="cliente-info">
+          <div class="nombre">📦 Insumos</div>
+          <div class="cliente-notas">${ci.invertido === 0 ? 'Sin compras registradas' : (ci.faltante > 0 ? `Faltan ${fmt(ci.faltante)} por recuperar` : 'Insumos ya recuperados ✅')}</div>
+          <div class="cliente-notas" style="cursor:pointer" onclick="editarInsumoPorPieza()">Cada decant recupera ${fmt(state.config.insumoPorPieza || 0)} ✎</div>
+        </div>
+        <button class="icon-btn" style="background:rgba(245,158,11,0.12); color:#f59e0b; width:auto; padding:0 12px; font-weight:700" onclick="agregarCompraInsumos()">+ Compra</button>
+      </div>`; })() : ''}
     </div>
   `;
 
@@ -2651,7 +2762,7 @@ function renderProductoRowColapsable(p, forzarAbierto) {
     return `
     <div class="cliente card" data-action="toggleProdExp" data-pid="${p.id}" style="${sinAnimacion ? 'animation:none;' : ''} cursor:pointer">
       <div class="cliente-info">
-        <div class="nombre">${esc(p.nombre)}</div>
+        <div class="nombre">${esc(p.nombre)}${p.agotado ? ' <span style="color:#ef4444; font-size:11px; font-weight:700">· AGOTADO</span>' : ''}</div>
       </div>
       <div style="color:#64748b; font-size:14px">▶ Ver</div>
     </div>
@@ -2679,29 +2790,31 @@ function renderPerfumeExpandido(p, sinAnimacion) {
     <div class="cliente card" style="${sinAnimacion ? 'animation:none;' : ''} flex-direction:column; align-items:stretch; gap:10px">
       <div style="display:flex; gap:12px; align-items:center">
         <div class="cliente-info">
-          <div class="nombre">🌸 ${esc(p.nombre)}</div>
+          <div class="nombre">🌸 ${esc(p.nombre)}${p.agotado ? ' <span style="color:#ef4444; font-size:11px; font-weight:700">· AGOTADO</span>' : ''}</div>
           ${p.codigo ? `<div class="cliente-notas">Cód: ${esc(p.codigo)}</div>` : ''}
           ${esAdmin ? `<div class="cliente-notas">Costo del frasco: ${fmt(p.precioCosto)} · ${costoRestante > 0 ? `faltan ${fmt(costoRestante)} por recuperar` : 'costo ya recuperado ✅'}</div>` : ''}
           ${esAdmin ? `<div class="cliente-notas">Piezas vendidas de este frasco: ${piezasVendidas}</div>` : ''}
+          ${esAdmin ? `<div class="cliente-notas" style="cursor:pointer" data-action="editarFrascosTerminados" data-pid="${p.id}" title="Toca para corregir">Frascos terminados: ${p.frascosTerminados || 0} ✎</div>` : ''}
         </div>
         ${esAdmin ? `
         <div class="cliente-acciones" style="flex-direction:row">
           <button class="icon-btn" style="background:rgba(6,182,212,0.12); color:#06b6d4" data-action="reiniciarFrascoPerfume" data-pid="${p.id}" title="Nuevo frasco">🔄</button>
+          <button class="icon-btn" style="background:${p.agotado ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'}; color:${p.agotado ? '#10b981' : '#ef4444'}" data-action="toggleAgotadoPerfume" data-pid="${p.id}" title="${p.agotado ? 'Marcar disponible' : 'Marcar agotado'}">${p.agotado ? '✅' : '🚫'}</button>
           <button class="icon-btn edit" data-action="abrirModalProducto" data-pid="${p.id}">✎</button>
           <button class="icon-btn delete" data-action="eliminarProducto" data-pid="${p.id}">🗑</button>
         </div>` : ''}
       </div>
       ${variantes.map(v => renderVarianteRow(p, v)).join('')}
-      <button class="tipo-btn" style="width:100%; border-style:dashed" data-action="abrirModalVentaPersonalizada" data-pid="${p.id}">
+      ${p.agotado ? '' : `<button class="tipo-btn" style="width:100%; border-style:dashed" data-action="abrirModalVentaPersonalizada" data-pid="${p.id}">
         ✏️ Venta personalizada (ej. lo que queda del frasco)
-      </button>
+      </button>`}
     </div>
   `;
 }
 
 function renderVarianteRow(p, v) {
   const esAdmin = state.rol === 'admin';
-  const agotado = !!v.agotado;
+  const agotado = !!v.agotado || !!p.agotado;
   const llevaStock = v.stock != null;
   const sinStock = llevaStock && v.stock <= 0;
   const bloqueado = agotado || sinStock;
@@ -2716,7 +2829,7 @@ function renderVarianteRow(p, v) {
           <div class="cliente-notas">Venta ${fmt(v.precioVenta)}${llevaStock ? ` · Stock: ${v.stock}` : ''}</div>
         </div>
         <div class="cliente-acciones" style="flex-direction:row">
-          ${esAdmin ? `<button class="icon-btn" style="background:${agotado ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'}; color:${agotado ? '#10b981' : '#ef4444'}" data-action="toggleAgotadoVariante" data-pid="${p.id}" data-tam="${v.tamano}" title="${agotado ? 'Marcar disponible' : 'Marcar agotado'}">${agotado ? '✅' : '🚫'}</button>` : ''}
+          ${esAdmin && !p.agotado ? `<button class="icon-btn" style="background:${v.agotado ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)'}; color:${v.agotado ? '#10b981' : '#ef4444'}" data-action="toggleAgotadoVariante" data-pid="${p.id}" data-tam="${v.tamano}" title="${v.agotado ? 'Marcar disponible' : 'Marcar agotado'}">${v.agotado ? '✅' : '🚫'}</button>` : ''}
           <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; ${bloqueado ? 'opacity:0.4' : ''}" data-action="abrirModalVenta" data-pid="${p.id}" data-tam="${v.tamano === 'Único' ? '' : v.tamano}" ${bloqueado ? 'disabled' : ''}>🛒</button>
         </div>
       </div>
@@ -3350,6 +3463,35 @@ function renderDashboard() {
       `}
     </div>
 
+    ${(() => {
+      const ci = calcularCapitalInsumos();
+      return `
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#f59e0b">📦</span> Capital en insumos</div>
+      ${ci.invertido === 0 ? '<div class="vacio">Aún no registras compras de insumos (se agregan en Tienda → 📦 Insumos)</div>' : `
+      <div class="resumen" style="padding:0; margin-bottom:12px">
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#94a3b8">Invertido</div>
+          <div class="resumen-value">${fmt(ci.invertido)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#10b981">Recuperado</div>
+          <div class="resumen-value" style="color:#10b981">${fmt(Math.min(ci.recuperado, ci.invertido))}</div>
+        </div>
+        <div class="resumen-card destacado" style="grid-column: span 2">
+          <div class="resumen-label" style="color:#fbbf24">Falta por recuperar</div>
+          <div class="resumen-value" style="color:#fbbf24">${fmt(ci.faltante)}</div>
+        </div>
+      </div>
+      ${ci.compras.slice().sort((a, b) => b.fecha - a.fecha).map(c => `
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:6px 0; border-top:1px solid rgba(255,255,255,0.05)">
+          <span style="color:#94a3b8">${esc(c.descripcion)} · ${new Date(c.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</span>
+          <span style="display:flex; gap:10px; align-items:center"><span class="mono">${fmt(c.monto)}</span><span style="cursor:pointer; color:#ef4444" onclick="eliminarCompraInsumos('${c.id}')">✕</span></span>
+        </div>`).join('')}
+      `}
+    </div>`;
+    })()}
+
     ${hayFlujoTienda ? `
     <div class="resumen" style="padding:0; margin-bottom:20px">
       <div class="resumen-card destacado">
@@ -3384,6 +3526,7 @@ function renderDashboard() {
         <div class="resumen-card">
           <div class="resumen-label" style="color:#64748b">Reinvertido (mes)</div>
           <div class="resumen-value">${fmt(flujoMesActual.costo)}</div>
+          ${flujoMesActual.insumos > 0 ? `<div class="resumen-sub">📦 ${fmt(flujoMesActual.insumos)} para insumos</div>` : ''}
         </div>
         <div class="resumen-card destacado" style="grid-column: span 2">
           <div class="resumen-label" style="color:#10b981">Ganancia neta (mes)</div>
@@ -3407,7 +3550,7 @@ function renderDashboard() {
       return `
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#ef4444">📋</span> Gastos / Compras varias (este mes)</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Frasquitos, insumos, bolsas — cualquier compra que no sea para revender, pero que sí sale de tu bolsillo.</p>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Compras que sí salen de tu ganancia. Los insumos de decants (frasquitos, stickers, bolsas) ya no van aquí: se cubren con el precio y los ves en Reinvertido.</p>
       ${gastosMes.lista.length === 0 ? '<div class="vacio">Sin gastos registrados este mes</div>' :
         gastosMes.lista.map(g => `
         <div class="cliente" style="margin-bottom:8px">
@@ -4019,6 +4162,14 @@ function handleClick(e) {
     case 'reiniciarFrascoPerfume':
       e.stopPropagation();
       reiniciarFrascoPerfume(d.pid);
+      break;
+    case 'toggleAgotadoPerfume':
+      e.stopPropagation();
+      toggleAgotadoPerfume(d.pid);
+      break;
+    case 'editarFrascosTerminados':
+      e.stopPropagation();
+      editarFrascosTerminados(d.pid);
       break;
     case 'toggleAgotadoVariante':
       e.stopPropagation();
