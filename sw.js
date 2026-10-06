@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jd-ventas-v3';
+const CACHE_NAME = 'jd-ventas-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -27,17 +27,21 @@ self.addEventListener('activate', (event) => {
 
 // Fetch: network first, fallback to cache — SOLO para peticiones a nuestra
 // propia página. Todo lo que vaya hacia otro dominio (Firebase, Firestore,
-// gstatic.com, etc.) se deja pasar de largo sin tocar, para no arriesgarnos
-// a interferir con esas conexiones (antes se interceptaba todo, sin excepción).
+// gstatic.com, etc.) se deja pasar de largo sin tocar.
+// cache: 'no-cache' obliga a preguntarle al servidor si hay versión nueva,
+// en vez de usar la copia que el navegador guarda hasta 10 min.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-cache' })
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        // Solo guardar en caché respuestas buenas (no errores 404/500)
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
       .catch(() => caches.match(event.request).then(r => r || caches.match('./index.html')))
