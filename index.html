@@ -119,6 +119,8 @@
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   .card { animation: slideUp 0.3s ease-out; }
   .fade-in { animation: fadeIn 0.3s ease-out; }
+  /* Redibujos automáticos (p. ej. al llegar datos de la nube) sin animación, para que no parpadee */
+  body.sin-anim .card, body.sin-anim .fade-in { animation: none !important; }
 
   /* Header */
   .header {
@@ -614,6 +616,7 @@ async function sincronizarNube() {
       localStorage.setItem('local-actualizado', String(remotoTs));
     } catch(e) {}
     actualizarIndicadorNube('ok');
+    renderSilencioso = true; // se actualiza solo: sin animación para que no parpadee
     render();
     // Si se recuperó alguna venta que la nube no tenía, la volvemos a subir
     // de inmediato para "sanar" la nube con la versión completa.
@@ -853,6 +856,9 @@ function actualizarBusquedaProductos(valor) {
   // persona deja de escribir, y ahí sí se redibuja una sola vez.
   clearTimeout(busquedaProductosTimeout);
   busquedaProductosTimeout = setTimeout(() => {
+    // Sin animación también cuando borras todo el texto: si no, al quedar
+    // vacío el buscador, toda la pantalla volvía a animarse y parpadeaba.
+    renderSilencioso = true;
     render();
     const el = document.getElementById('busqueda-productos');
     if (el) { el.focus(); const p = el.value.length; el.setSelectionRange(p, p); }
@@ -2076,7 +2082,12 @@ function renderVencimientos() {
 }
 
 // ============== RENDER ==============
+// Si es true, el siguiente render() se dibuja sin animaciones de entrada.
+// Se usa cuando la pantalla se actualiza sola (datos de la nube), no por el usuario.
+let renderSilencioso = false;
 function render() {
+  document.body.classList.toggle('sin-anim', renderSilencioso);
+  renderSilencioso = false;
   const app = document.getElementById('app');
 
   if (!state.rol) {
@@ -4128,6 +4139,14 @@ setInterval(() => { revisarYNotificar(); }, 60 * 60 * 1000);
 // darse cuenta, ni hay que ir a borrar caché a mano cada vez que se actualiza.
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
   window.addEventListener('load', () => {
+    // Evita recargar más de una vez seguida (antes podía recargar dos veces:
+    // una al activarse el SW nuevo y otra al cambiar de controlador).
+    let yaRecargo = false;
+    const recargarUnaVez = () => {
+      if (yaRecargo) return;
+      yaRecargo = true;
+      window.location.reload();
+    };
     navigator.serviceWorker.register('sw.js').then(reg => {
       reg.update(); // fuerza una revisión inmediata contra el servidor
       reg.addEventListener('updatefound', () => {
@@ -4135,20 +4154,13 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
         if (!nuevoSW) return;
         nuevoSW.addEventListener('statechange', () => {
           if (nuevoSW.state === 'activated') {
-            window.location.reload();
+            recargarUnaVez();
           }
         });
       });
     }).catch(err => console.log('SW error:', err));
 
-    // Evita recargar más de una vez seguida si el navegador dispara el
-    // evento varias veces.
-    let yaRecargo = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (yaRecargo) return;
-      yaRecargo = true;
-      window.location.reload();
-    });
+    navigator.serviceWorker.addEventListener('controllerchange', recargarUnaVez);
   });
 }
 </script>
