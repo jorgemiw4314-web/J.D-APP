@@ -2491,7 +2491,7 @@ function renderTienda() {
 
   html += `
     <div style="padding: 0 20px 4px">
-      <div class="cliente card" style="justify-content:space-between; align-items:center; ${esAdmin ? 'cursor:pointer' : ''}" ${esAdmin ? 'onclick="actualizarCajaCambio()"' : ''}>
+      <div class="cliente card" style="${buscando ? 'animation:none;' : ''} justify-content:space-between; align-items:center; ${esAdmin ? 'cursor:pointer' : ''}" ${esAdmin ? 'onclick="actualizarCajaCambio()"' : ''}>
         <div class="cliente-info">
           <div class="nombre">💵 Caja para cambio</div>
           <div class="cliente-notas">${esAdmin ? 'Toca para actualizar' : 'Dinero disponible para dar cambio'}</div>
