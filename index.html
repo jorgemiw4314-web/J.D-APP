@@ -385,6 +385,14 @@ const SERVICIOS = {
   spotify: { nombre: 'Spotify', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>', color: '#10b981', gradient: 'linear-gradient(135deg, #10b981, #059669)' },
   otros: { nombre: 'Otros', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4l-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>', color: '#a78bfa', gradient: 'linear-gradient(135deg, #a78bfa, #8b5cf6)' }
 };
+// Servicios que se muestran y cuentan en la app. Netflix, Spotify y Otros se
+// ocultan, pero sus datos NO se borran (siguen guardados por si algún día se
+// vuelven a usar: basta con agregarlos de nuevo a esta lista).
+const SERVICIOS_ACTIVOS = ['internet'];
+function serviciosActivos() { return Object.entries(SERVICIOS).filter(([k]) => SERVICIOS_ACTIVOS.includes(k)); }
+function datosActivos() { return Object.entries(state.data).filter(([k]) => SERVICIOS_ACTIVOS.includes(k)); }
+// Comisiones del vendedor: listas, pero apagadas por ahora. Cambia a true para activarlas.
+const COMISIONES_ACTIVAS = false;
 const MESES_NOMBRES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 // Las presentaciones que puede tener un perfume: 2 decants + el frasco completo.
 const TAMANOS_PERFUME = ['5ml', '10ml', 'Frasco completo'];
@@ -411,7 +419,7 @@ let state = {
   // por accidente si otro teléfono todavía la tenía guardada sin sincronizar.
   ventasEliminadas: {},
   gastos: [], // compras/gastos varios (frasquitos, insumos, etc.): { id, descripcion, monto, fecha, mes }
-  config: { pinAdmin: '1234', cajaCambio: 0, metaPiezasMes: null, insumoPorPieza: 0, comprasInsumos: [] }, // insumos: compras generales (frasquitos, stickers, bolsas) y cuánto recupera cada decant // metaPiezasMes: { mes: 'YYYY-MM', meta: N } o null
+  config: { pinAdmin: '1234', cajaCambio: 0, metaPiezasMes: null, insumoPorPieza: 0, comprasInsumos: [], comision: { '5ml': 5, '10ml': 10, porcentaje: 10 }, comisionPagadaHasta: 0, pagosComision: [] }, // insumos: compras generales (frasquitos, stickers, bolsas) y cuánto recupera cada decant // metaPiezasMes: { mes: 'YYYY-MM', meta: N } o null
   rol: null, // 'admin' | 'vendedor' | null (sin iniciar sesión)
   vista: 'inicio',
   mesActual: claveMes(new Date()),
@@ -759,7 +767,7 @@ function calcularCicloPerfume(p) {
   const ventasCiclo = state.ventas.filter(v => v.productoId === p.id && v.fecha >= desde);
   // Lo que se apartó para insumos (frasquito, sticker, bolsa) no cuenta
   // como recuperado del costo del perfume.
-  const ingresoAcumulado = ventasCiclo.reduce((s, v) => s + v.total - (v.insumos || 0), 0);
+  const ingresoAcumulado = ventasCiclo.reduce((s, v) => s + v.total - (v.insumos || 0) - (v.comision || 0), 0);
   const piezasVendidas = ventasCiclo.reduce((s, v) => s + v.cantidad, 0);
   return { ingresoAcumulado, piezasVendidas };
 }
@@ -776,11 +784,83 @@ function calcularVentaPerfume(p, tamano, cantidad) {
   // luego se recupera el costo del perfume, y lo que sobre es ganancia.
   // Nunca se aparta más de lo que falta por recuperar de las compras de insumos.
   const insumos = Math.round(Math.min(total, costoInsumos(tamano) * cantidad, calcularCapitalInsumos().faltante) * 100) / 100;
+  // La comisión del vendedor sale de la venta (la absorbes tú, no el cliente).
+  const comision = calcularComision(tamano, total, cantidad, false);
   const { ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
-  const ganancia = Math.round(Math.max(0, total - insumos - costoRestante) * 100) / 100;
-  return { precioVenta: v.precioVenta, total, ganancia, insumos };
+  const ganancia = Math.round(Math.max(0, total - insumos - comision - costoRestante) * 100) / 100;
+  return { precioVenta: v.precioVenta, total, ganancia, insumos, comision };
 }
+// ============== COMISIONES DEL VENDEDOR ==============
+// Solo las ventas que hace el Vendedor generan comisión (las del Admin no).
+// 5ml y 10ml: monto fijo por pieza. Frasco completo y venta personalizada:
+// porcentaje del total. Productos generales: sin comisión.
+function calcularComision(tamano, total, cantidad, esPersonalizada) {
+  if (!COMISIONES_ACTIVAS || state.rol !== 'vendedor') return 0;
+  const c = comisionConfig();
+  let monto = 0;
+  if (esPersonalizada || tamano === 'Frasco completo') {
+    monto = total * ((parseFloat(c.porcentaje) || 0) / 100);
+  } else if (tamano === '5ml' || tamano === '10ml') {
+    monto = (parseFloat(c[tamano]) || 0) * cantidad;
+  }
+  return Math.round(Math.min(total, monto) * 100) / 100;
+}
+// Montos de comisión (con valores por defecto si aún no se configuran).
+function comisionConfig() {
+  return (state.config && state.config.comision) || { '5ml': 5, '10ml': 10, porcentaje: 10 };
+}
+// Comisión pendiente: ventas del vendedor desde el último pago.
+function calcularComisionPendiente() {
+  const desde = (state.config && state.config.comisionPagadaHasta) || 0;
+  const ventas = state.ventas.filter(v => v.vendidoPor === 'vendedor' && (v.comision || 0) > 0 && v.fecha > desde);
+  return {
+    total: Math.round(ventas.reduce((s, v) => s + v.comision, 0) * 100) / 100,
+    piezas: ventas.reduce((s, v) => s + v.cantidad, 0),
+    desde,
+    ventas: ventas.slice().sort((a, b) => b.fecha - a.fecha)
+  };
+}
+// Abre/cierra el detalle de lo que vendió el vendedor (en la tarjeta de comisión).
+let comisionDetalleAbierto = false;
+function toggleDetalleComision() {
+  comisionDetalleAbierto = !comisionDetalleAbierto;
+  renderSilencioso = true;
+  render();
+}
+function pagarComision() {
+  if (state.rol !== 'admin') return;
+  const pend = calcularComisionPendiente();
+  if (pend.total <= 0) { alert('No hay comisión pendiente.'); return; }
+  if (!confirm(`¿Marcar como pagada la comisión de ${fmt(pend.total)}?\n\nEl conteo empieza de cero para la siguiente semana.`)) return;
+  if (!Array.isArray(state.config.pagosComision)) state.config.pagosComision = [];
+  const ahora = Date.now();
+  state.config.pagosComision.push({ id: 'pc_'+ahora, monto: pend.total, piezas: pend.piezas, fecha: ahora });
+  state.config.comisionPagadaHasta = ahora;
+  guardarLocal();
+  render();
+}
+function editarComisiones() {
+  if (state.rol !== 'admin') return;
+  const c = comisionConfig();
+  const preguntas = [
+    ['5ml', 'Comisión por cada decant de 5ml ($):'],
+    ['10ml', 'Comisión por cada decant de 10ml ($):'],
+    ['porcentaje', 'Comisión por frasco completo y venta personalizada (%):']
+  ];
+  const nuevo = {};
+  for (const [k, txt] of preguntas) {
+    const r = prompt(txt, c[k] || 0);
+    if (r === null) return;
+    const val = parseFloat(r);
+    if (isNaN(val) || val < 0) { alert('Escribe un número válido (0 o más).'); return; }
+    nuevo[k] = Math.round(val * 100) / 100;
+  }
+  state.config.comision = nuevo;
+  guardarLocal();
+  render();
+}
+
 // Cuánto recupera de insumos cada decant (5ml o 10ml). Un solo monto para todos.
 function costoInsumos(tamano) {
   if (tamano !== '5ml' && tamano !== '10ml') return 0; // frasco completo no usa insumos
@@ -822,9 +902,10 @@ function registrarVentaPersonalizada() {
   const descripcion = state.formVentaPersonalizada.descripcion.trim();
   const total = Math.round((parseFloat(state.formVentaPersonalizada.monto) || 0) * 100) / 100;
   if (!descripcion || total <= 0) return;
+  const comision = calcularComision(null, total, 1, true);
   const { ingresoAcumulado } = calcularCicloPerfume(p);
   const costoRestante = Math.max(0, (p.precioCosto || 0) - ingresoAcumulado);
-  const ganancia = Math.round(Math.max(0, total - costoRestante) * 100) / 100;
+  const ganancia = Math.round(Math.max(0, total - comision - costoRestante) * 100) / 100;
   state.ventas.push({
     id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     productoId: p.id,
@@ -832,6 +913,8 @@ function registrarVentaPersonalizada() {
     cantidad: 1,
     total,
     ganancia,
+    comision,
+    vendidoPor: state.rol,
     fecha: Date.now(),
     mes: claveMes(new Date())
   });
@@ -1145,13 +1228,14 @@ function registrarVenta(productoId, tamano) {
   const cant = parseInt(state.formVenta.cantidad) || 0;
   if (cant < 1 || (!sinLimite && cant > info.stock)) return;
 
-  let total, ganancia, insumos = 0;
+  let total, ganancia, insumos = 0, comision = 0;
   if (tamano) {
     const calc = calcularVentaPerfume(p, tamano, cant);
     if (!calc) return;
     total = calc.total;
     ganancia = calc.ganancia;
     insumos = calc.insumos;
+    comision = calc.comision;
   } else {
     total = Math.round(info.precioVenta * cant * 100) / 100;
     ganancia = Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100;
@@ -1164,6 +1248,8 @@ function registrarVenta(productoId, tamano) {
     total,
     ganancia,
     insumos, // se guarda con la venta para que el historial no cambie si luego ajustas el costo
+    comision, // lo que le toca al vendedor por esta venta (0 si vendió el Admin)
+    vendidoPor: state.rol,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
@@ -1500,6 +1586,7 @@ function confirmarVentaScanner() {
     cantidad: 1,
     total: Math.round(p.precioVenta * 100) / 100,
     ganancia: Math.round((p.precioVenta - p.precioCosto) * 100) / 100,
+    vendidoPor: state.rol,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
@@ -1540,6 +1627,8 @@ function elegirTamanoScanner(tamano) {
     total: calc.total,
     ganancia: calc.ganancia,
     insumos: calc.insumos,
+    comision: calc.comision,
+    vendidoPor: state.rol,
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
@@ -1565,7 +1654,7 @@ function cancelarVentaScanner() {
 // ============== CÁLCULOS ==============
 function calcularTotalesMes() {
   let cobrado = 0, costoReal = 0, mensual = 0;
-  Object.entries(state.data).forEach(([sk, s]) => {
+  datosActivos().forEach(([sk, s]) => {
     let huboPagos = false;
     s.clientes.forEach(c => {
       if (c.archivado) return; // ya canceló, no cuenta para el mes en curso
@@ -1585,7 +1674,7 @@ function calcularDatosMensuales() {
     const key = claveMes(d);
     const pagos = state.pagosMes[key] || {};
     let cobrado = 0, costo = 0;
-    Object.entries(state.data).forEach(([sk, s]) => {
+    datosActivos().forEach(([sk, s]) => {
       let hubo = false;
       s.clientes.forEach(c => {
         if (pagos[sk+':'+c.id]) { cobrado += c.pago; hubo = true; }
@@ -1649,11 +1738,13 @@ function calcularFlujoTiendaMensual() {
     const cobrado = ventasMes.reduce((s, v) => s + v.total, 0);
     const ganancia = ventasMes.reduce((s, v) => s + v.ganancia, 0);
     const insumos = ventasMes.reduce((s, v) => s + (v.insumos || 0), 0);
+    const comisiones = ventasMes.reduce((s, v) => s + (v.comision || 0), 0);
     meses.push({
       mes: formatoMesCorto(key),
       claveMes: key,
       cobrado: Math.round(cobrado * 100) / 100,
       insumos: Math.round(insumos * 100) / 100, // parte de lo reinvertido que es para insumos
+      comisiones: Math.round(comisiones * 100) / 100, // pagado al vendedor (incluido en "costo")
       costo: Math.round((cobrado - ganancia) * 100) / 100, // reinvertido
       ganancia: Math.round(ganancia * 100) / 100
     });
@@ -2012,7 +2103,7 @@ function calcularVencimientos() {
   const claveReal = claveMes(hoy);
   const pagosReales = state.pagosMes[claveReal] || {};
   const lista = [];
-  Object.entries(state.data).forEach(([sk, s]) => {
+  datosActivos().forEach(([sk, s]) => {
     s.clientes.forEach(c => {
       if (c.archivado) return; // ya canceló, no se le recuerda nada
       if (c.tipoPago !== 'mensual' || (!c.diaPago && !c.ultimoPago)) return;
@@ -2211,7 +2302,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada();
   bindEvents();
 }
 
@@ -2246,7 +2337,7 @@ function renderNavRecepcion() {
 // Vista de recepción: solo lo que hay que cobrar, sin costos ni ganancias
 function renderCobros() {
   let totalCobrado = 0, totalPendiente = 0;
-  Object.entries(state.data).forEach(([sk, s]) => {
+  datosActivos().forEach(([sk, s]) => {
     s.clientes.forEach(c => {
       if (estaPagado(sk, c.id)) totalCobrado += c.pago;
       else totalPendiente += c.pago;
@@ -2269,7 +2360,7 @@ function renderCobros() {
   `;
 
   html += '<div class="secciones">';
-  Object.entries(SERVICIOS).forEach(([sk, info]) => {
+  serviciosActivos().forEach(([sk, info]) => {
     const s = state.data[sk];
     if (!s.clientes.length) return;
     const pagaron = s.clientes.filter(c => estaPagado(sk, c.id)).length;
@@ -2331,7 +2422,7 @@ function renderInicio() {
   `;
 
   html += '<div class="secciones">';
-  Object.entries(SERVICIOS).forEach(([key, info]) => {
+  serviciosActivos().forEach(([key, info]) => {
     html += renderSeccion(key, info);
   });
   html += '</div><div style="height:120px"></div></div>';
@@ -2580,6 +2671,23 @@ function renderTienda() {
         </div>
       </div>
     `;
+    // Igual que el Vendedor: lo vendido hoy y en la semana (de los dos), tocable para ver el detalle.
+    const hoyA = calcularVentasPerfumesRango(inicioDeHoy(), Date.now());
+    const semanaA = calcularVentasPerfumesRango(inicioDeSemana(), Date.now());
+    html += `
+      <div class="resumen" style="padding-top:0">
+        <div class="resumen-card" data-action="abrirModalVentasHoy" style="cursor:pointer">
+          <div class="resumen-label" style="color:#06b6d4">Vendido hoy</div>
+          <div class="resumen-value">${fmt(hoyA.vendido)}</div>
+          <div class="resumen-sub">${hoyA.piezas} pza(s) · toca para ver detalle</div>
+        </div>
+        <div class="resumen-card" data-action="abrirModalVentasSemana" style="cursor:pointer">
+          <div class="resumen-label" style="color:#a855f7">Vendido esta semana</div>
+          <div class="resumen-value">${fmt(semanaA.vendido)}</div>
+          <div class="resumen-sub">${semanaA.piezas} pza(s) · toca para ver detalle</div>
+        </div>
+      </div>
+    `;
   } else {
     // El corte del Vendedor es de hoy y de la semana (no del mes), y cuenta
     // TODA la tienda (perfumes + productos), para reflejar cualquier venta
@@ -2611,6 +2719,33 @@ function renderTienda() {
         </div>
         <div class="monto mono" style="color:#10b981; font-size:20px">${fmt(state.config.cajaCambio || 0)}</div>
       </div>
+      ${!COMISIONES_ACTIVAS ? '' : (() => { const cp = calcularComisionPendiente(); const cc = comisionConfig(); return `
+      <div class="cliente card" style="${buscando ? 'animation:none;' : ''} flex-direction:column; align-items:stretch; gap:8px; cursor:pointer" onclick="toggleDetalleComision()">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px">
+        <div class="cliente-info">
+          <div class="nombre">💸 ${esAdmin ? 'Comisión del vendedor' : 'Tu comisión'} <span style="color:#64748b; font-size:12px">${comisionDetalleAbierto ? '▼' : '▶ ver ventas'}</span></div>
+          <div class="cliente-notas">${cp.piezas} pza(s) desde ${cp.desde ? 'el pago del ' + new Date(cp.desde).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : 'el inicio'}</div>
+          ${esAdmin ? `<div class="cliente-notas" style="cursor:pointer" onclick="event.stopPropagation(); editarComisiones()">5ml ${fmt(cc['5ml'] || 0)} · 10ml ${fmt(cc['10ml'] || 0)} · frasco ${cc.porcentaje || 0}% ✎</div>` : ''}
+        </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px">
+          <div class="monto mono" style="color:#ec4899; font-size:20px">${fmt(cp.total)}</div>
+          ${esAdmin && cp.total > 0 ? `<button class="icon-btn" style="background:rgba(236,72,153,0.12); color:#ec4899; width:auto; padding:0 12px; font-weight:700" onclick="event.stopPropagation(); pagarComision()">Pagado</button>` : ''}
+        </div>
+      </div>
+      ${comisionDetalleAbierto ? (cp.ventas.length === 0
+        ? '<div class="vacio" style="padding:4px 0">Sin ventas con comisión desde el último pago</div>'
+        : cp.ventas.map(v => {
+            const prod = state.productos.find(pp => pp.id === v.productoId);
+            const f = new Date(v.fecha);
+            return `
+        <div style="display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:6px 0; border-top:1px solid rgba(255,255,255,0.05)">
+          <div style="min-width:0">
+            <div style="color:#cbd5e1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${esc(prod ? prod.nombre : 'Producto borrado')} · ${esc(v.tamano || '')}${v.cantidad > 1 ? ' x' + v.cantidad : ''}</div>
+            <div style="color:#64748b; font-size:11px">${f.toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' })} ${f.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })} · cobró ${fmt(v.total)}</div>
+          </div>
+          <div class="mono" style="color:#ec4899; white-space:nowrap">+${fmt(v.comision)}</div>
+        </div>`; }).join('')) : ''}
+      </div>`; })()}
       ${esAdmin ? (() => { const ci = calcularCapitalInsumos(); return `
       <div class="cliente card" style="${buscando ? 'animation:none;' : ''} justify-content:space-between; align-items:center">
         <div class="cliente-info">
@@ -2869,7 +3004,7 @@ function renderVentaRow(v) {
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
         <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}${v.tamano ? ` (${esc(v.tamano)})` : ''}</div>
-        <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr} · ${horaStr}</div>
+        <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
       </div>
       <div class="cliente-pago">
         <div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>
@@ -3301,7 +3436,7 @@ function renderDashboard() {
   // Por servicio mes actual
   const mesK = claveMes(new Date());
   const pagosM = state.pagosMes[mesK] || {};
-  const porServicio = Object.entries(SERVICIOS).map(([sk, info]) => {
+  const porServicio = serviciosActivos().map(([sk, info]) => {
     const s = state.data[sk];
     const cob = s.clientes.reduce((sum,c) => sum + (pagosM[sk+':'+c.id] ? c.pago : 0), 0);
     return { nombre: info.nombre, ganancia: Math.round((cob - s.precioReal)*100)/100, color: info.color };
@@ -3492,6 +3627,32 @@ function renderDashboard() {
     </div>`;
     })()}
 
+    ${(() => {
+      if (!COMISIONES_ACTIVAS) return '';
+      const pagos = (state.config.pagosComision || []).slice().sort((a, b) => b.fecha - a.fecha);
+      const cp = calcularComisionPendiente();
+      if (pagos.length === 0 && cp.total === 0) return '';
+      return `
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#ec4899">💸</span> Comisiones del vendedor</div>
+      <div class="resumen" style="padding:0; margin-bottom:12px">
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#ec4899">Pendiente</div>
+          <div class="resumen-value" style="color:#ec4899">${fmt(cp.total)}</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#94a3b8">Pagado (total)</div>
+          <div class="resumen-value">${fmt(pagos.reduce((s, p) => s + p.monto, 0))}</div>
+        </div>
+      </div>
+      ${pagos.slice(0, 8).map(p => `
+        <div style="display:flex; justify-content:space-between; font-size:13px; padding:6px 0; border-top:1px solid rgba(255,255,255,0.05)">
+          <span style="color:#94a3b8">Pago ${new Date(p.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${p.piezas} pza(s)</span>
+          <span class="mono">${fmt(p.monto)}</span>
+        </div>`).join('')}
+    </div>`;
+    })()}
+
     ${hayFlujoTienda ? `
     <div class="resumen" style="padding:0; margin-bottom:20px">
       <div class="resumen-card destacado">
@@ -3527,6 +3688,7 @@ function renderDashboard() {
           <div class="resumen-label" style="color:#64748b">Reinvertido (mes)</div>
           <div class="resumen-value">${fmt(flujoMesActual.costo)}</div>
           ${flujoMesActual.insumos > 0 ? `<div class="resumen-sub">📦 ${fmt(flujoMesActual.insumos)} para insumos</div>` : ''}
+          ${flujoMesActual.comisiones > 0 ? `<div class="resumen-sub">💸 ${fmt(flujoMesActual.comisiones)} en comisiones</div>` : ''}
         </div>
         <div class="resumen-card destacado" style="grid-column: span 2">
           <div class="resumen-label" style="color:#10b981">Ganancia neta (mes)</div>
