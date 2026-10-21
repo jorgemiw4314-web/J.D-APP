@@ -435,7 +435,9 @@ let state = {
     variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
-  formVenta: { cantidad: '' },
+  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' },
+  modalAbono: null,
+  formAbono: { monto: '' },
   scanner: null,
   modalVentasSemana: false,
   modalVentasHoy: false,
@@ -580,7 +582,17 @@ window.addEventListener('online', () => {
 function combinarVentas(localesArr, remotasArr, eliminadasCombinadas) {
   const porId = new Map();
   (remotasArr || []).forEach(v => porId.set(v.id, v));
-  (localesArr || []).forEach(v => porId.set(v.id, v)); // local gana si hay conflicto de contenido
+  (localesArr || []).forEach(v => {
+    const r = porId.get(v.id);
+    // Ventas a pagos: se juntan los abonos de ambos teléfonos (sin duplicar).
+    if (r && (r.abonos || v.abonos)) {
+      const ab = new Map();
+      (r.abonos || []).forEach(a => ab.set(a.id, a));
+      (v.abonos || []).forEach(a => ab.set(a.id, a));
+      v = { ...v, abonos: Array.from(ab.values()) };
+    }
+    porId.set(v.id, v); // local gana si hay conflicto de contenido
+  });
   if (eliminadasCombinadas) {
     Object.keys(eliminadasCombinadas).forEach(id => porId.delete(id));
   }
@@ -1184,14 +1196,105 @@ function obtenerInfoVenta(p, tamano) {
   }
   return { precioCosto: p.precioCosto, precioVenta: p.precioVenta, stock: p.stock };
 }
+// ============== FRASCO COMPLETO: PAGO COMPLETO O POR PAGOS ==============
+function setModoPagoVenta(modo) {
+  state.formVenta.modoPago = modo;
+  render();
+}
+function actualizarFormVentaCampo(campo, valor) {
+  state.formVenta[campo] = valor;
+  if (campo === 'anticipo') {
+    const el = document.getElementById('venta-saldo');
+    const p = state.productos.find(pp => pp.id === (state.modalVenta || {}).productoId);
+    if (el && p) {
+      const calc = calcularVentaPerfume(p, state.modalVenta.tamano, parseInt(state.formVenta.cantidad) || 1);
+      const total = calc ? calc.total : 0;
+      el.textContent = fmt(Math.max(0, total - (parseFloat(valor) || 0)));
+    }
+  }
+}
+function totalAbonado(v) { return Math.round((v.abonos || []).reduce((s, a) => s + a.monto, 0) * 100) / 100; }
+function saldoVenta(v) { return v.aPagos ? Math.max(0, Math.round((v.total - totalAbonado(v)) * 100) / 100) : 0; }
+function ventasPorCobrar() { return state.ventas.filter(v => v.aPagos && saldoVenta(v) > 0).sort((a, b) => a.fecha - b.fecha); }
+function abrirModalAbono(ventaId) {
+  state.modalAbono = ventaId;
+  state.formAbono = { monto: '' };
+  render();
+}
+function cerrarModalAbono() { state.modalAbono = null; render(); }
+function actualizarFormAbono(valor) { state.formAbono.monto = valor; }
+function registrarAbono() {
+  const v = state.ventas.find(vv => vv.id === state.modalAbono);
+  if (!v) return;
+  const saldo = saldoVenta(v);
+  const monto = Math.round((parseFloat(state.formAbono.monto) || 0) * 100) / 100;
+  if (monto <= 0) return;
+  if (monto > saldo) { alert('El abono no puede ser mayor al saldo pendiente (' + fmt(saldo) + ').'); return; }
+  if (!Array.isArray(v.abonos)) v.abonos = [];
+  v.abonos.push({ id: 'ab_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), monto, fecha: Date.now(), por: state.rol });
+  guardarLocal();
+  cerrarModalAbono();
+}
+function renderModalAbono() {
+  if (!state.modalAbono) return '';
+  const v = state.ventas.find(vv => vv.id === state.modalAbono);
+  if (!v) return '';
+  const p = state.productos.find(pp => pp.id === v.productoId);
+  const saldo = saldoVenta(v);
+  const abonos = (v.abonos || []).slice().sort((a, b) => b.fecha - a.fecha);
+  return `<div class="modal-overlay" data-action="cerrarModalAbono">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Abono: ${esc(p ? p.nombre : 'Producto')}</h3>
+        <button class="close-btn" data-action="cerrarModalAbono">✕</button>
+      </div>
+      <div class="modal-subtitle">${v.cliente ? esc(v.cliente) + ' · ' : ''}Total ${fmt(v.total)} · Pagado ${fmt(totalAbonado(v))}</div>
+      <div class="precio-real-row" style="margin-bottom:12px">
+        <span class="label">Saldo pendiente</span>
+        <span class="monto mono" style="color:#f59e0b">${fmt(saldo)}</span>
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>Monto del abono ($) <span class="required">*</span></label></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(state.formAbono.monto)}" placeholder="0.00" oninput="actualizarFormAbono(this.value)" />
+      </div>
+      <button class="guardar-btn" data-action="registrarAbono">✓ Registrar abono</button>
+      ${abonos.length ? `<div style="margin-top:14px; font-size:12px; color:#94a3b8">
+        ${abonos.map(a => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid rgba(148,163,184,0.12)"><span>${new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</span><span class="mono">${fmt(a.monto)}</span></div>`).join('')}
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+// Tarjeta "Por cobrar" de la Tienda: frascos vendidos a pagos con saldo pendiente.
+function renderPorCobrar() {
+  const lista = ventasPorCobrar();
+  if (!lista.length) return '';
+  const totalDeuda = lista.reduce((s, v) => s + saldoVenta(v), 0);
+  return `<div class="cliente" style="display:block; margin-bottom:12px; border:1px solid rgba(245,158,11,0.35)">
+    <div style="display:flex; justify-content:space-between; font-weight:700; color:#f59e0b; margin-bottom:8px">
+      <span>💳 Por cobrar (${lista.length})</span><span class="mono">${fmt(totalDeuda)}</span>
+    </div>
+    ${lista.map(v => {
+      const p = state.productos.find(pp => pp.id === v.productoId);
+      return `<div style="display:flex; align-items:center; gap:10px; padding:6px 0; border-top:1px solid rgba(148,163,184,0.12)">
+        <div class="cliente-info">
+          <div class="nombre" style="font-size:13px">${esc(v.cliente || 'Sin nombre')} · ${esc(p ? p.nombre : 'Producto')}</div>
+          <div class="cliente-notas">Pagado ${fmt(totalAbonado(v))} de ${fmt(v.total)}</div>
+        </div>
+        <div class="monto mono" style="color:#f59e0b">${fmt(saldoVenta(v))}</div>
+        <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalAbono" data-vid="${v.id}" title="Registrar abono">💵</button>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 function abrirModalVenta(productoId, tamano) {
   state.modalVenta = { productoId, tamano: tamano || null };
-  state.formVenta = { cantidad: '1' };
+  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '' };
   render();
 }
 function cerrarModalVenta() {
   state.modalVenta = null;
-  state.formVenta = { cantidad: '' };
+  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' };
   render();
 }
 function actualizarFormVenta(valor) {
@@ -1217,6 +1320,8 @@ function actualizarFormVenta(valor) {
   const btn = document.getElementById('btn-confirmar-venta');
   if (totalEl) totalEl.textContent = fmt(totalEstim);
   if (gananciaEl) gananciaEl.textContent = fmt(gananciaEstim);
+  const saldoEl = document.getElementById('venta-saldo');
+  if (saldoEl) saldoEl.textContent = fmt(Math.max(0, totalEstim - (parseFloat(state.formVenta.anticipo) || 0)));
   if (btn) btn.disabled = cant < 1 || (!sinLimite && cant > info.stock);
 }
 function registrarVenta(productoId, tamano) {
@@ -1253,6 +1358,15 @@ function registrarVenta(productoId, tamano) {
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
+  // Frasco completo "por pagos": se guarda quién lo debe y los abonos que
+  // lleva (el anticipo cuenta como el primer abono).
+  if (tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos') {
+    const anticipo = Math.round((parseFloat(state.formVenta.anticipo) || 0) * 100) / 100;
+    if (anticipo < 0 || anticipo > total) { alert('El anticipo no puede ser mayor al total.'); return; }
+    venta.aPagos = true;
+    venta.cliente = (state.formVenta.cliente || '').trim();
+    venta.abonos = anticipo > 0 ? [{ id: 'ab_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), monto: anticipo, fecha: Date.now(), por: state.rol }] : [];
+  }
   state.ventas.push(venta);
   // Si hay límite de stock, se descuenta del lugar correcto: el producto
   // general, o la presentación específica del perfume (p. ej. Frasco
@@ -1604,6 +1718,13 @@ function confirmarVentaScanner() {
 function elegirTamanoScanner(tamano) {
   if (!scannerPendiente) return;
   const { productoId } = scannerPendiente;
+  // Frasco completo: se pasa al modal de venta para poder elegir pago
+  // completo o por pagos.
+  if (tamano === 'Frasco completo') {
+    cerrarScanner();
+    abrirModalVenta(productoId, 'Frasco completo');
+    return;
+  }
   const p = state.productos.find(pp => pp.id === productoId);
   const statusEl = document.getElementById('scanner-status');
   const confirmarEl = document.getElementById('scanner-confirmar');
@@ -2292,7 +2413,7 @@ function render() {
   if (state.rol === 'vendedor') {
     state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
     const vista = renderTienda();
-    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada();
     bindEvents();
     return;
   }
@@ -2302,7 +2423,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada();
   bindEvents();
 }
 
@@ -2648,6 +2769,7 @@ function renderTienda() {
   // si no, cada letra que escribes vuelve a dibujar toda la pantalla y la
   // animación se reinicia una y otra vez, dando un efecto de parpadeo.
   let html = buscando ? '<div>' : '<div class="fade-in">';
+  html += renderPorCobrar();
 
   if (esAdmin) {
     const t = calcularTotalesTienda();
@@ -3005,11 +3127,13 @@ function renderVentaRow(v) {
       <div class="cliente-info">
         <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}${v.tamano ? ` (${esc(v.tamano)})` : ''}</div>
         <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
+        ${v.aPagos ? `<div class="cliente-notas" style="color:${saldoVenta(v) > 0 ? '#f59e0b' : '#10b981'}">💳 ${v.cliente ? esc(v.cliente) + ' · ' : ''}${saldoVenta(v) > 0 ? `Pagado ${fmt(totalAbonado(v))} · Debe ${fmt(saldoVenta(v))}` : 'Liquidado ✅'}</div>` : ''}
       </div>
       <div class="cliente-pago">
         <div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>
         ${esAdmin ? `<div style="font-size:11px; color:#10b981; margin-top:2px">+${fmt(v.ganancia)}</div>` : ''}
       </div>
+      ${v.aPagos && saldoVenta(v) > 0 ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${v.id}" title="Registrar abono">💵</button>` : ''}
       ${esAdmin ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
     </div>
   `;
@@ -3194,6 +3318,28 @@ function renderModalVenta() {
         <input class="input" type="number" inputmode="numeric" min="1" ${sinLimite ? '' : `max="${info.stock}"`} value="${esc(state.formVenta.cantidad)}" placeholder="1" oninput="actualizarFormVenta(this.value)" />
       </div>
 
+      ${tamano === 'Frasco completo' ? `
+      <div class="campo">
+        <div class="campo-label"><label>Forma de pago</label></div>
+        <div style="display:flex; gap:8px">
+          <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.modoPago === 'completo' ? '' : 'opacity:0.4'}" data-action="setModoPagoVenta" data-modo="completo">💵 Pago completo</button>
+          <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.modoPago === 'pagos' ? '' : 'opacity:0.4'}" data-action="setModoPagoVenta" data-modo="pagos">💳 Por pagos</button>
+        </div>
+      </div>
+      ${state.formVenta.modoPago === 'pagos' ? `
+      <div class="campo">
+        <div class="campo-label"><label>Cliente</label></div>
+        <input class="input" type="text" value="${esc(state.formVenta.cliente)}" placeholder="Nombre de quien lo debe" oninput="actualizarFormVentaCampo('cliente', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>Anticipo hoy ($)</label><span class="hint">Opcional</span></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(state.formVenta.anticipo)}" placeholder="0.00" oninput="actualizarFormVentaCampo('anticipo', this.value)" />
+      </div>
+      <div class="precio-real-row" style="margin-bottom:12px">
+        <span class="label">Saldo pendiente</span>
+        <span class="monto mono" id="venta-saldo" style="color:#f59e0b">${fmt(Math.max(0, totalEstim - (parseFloat(state.formVenta.anticipo) || 0)))}</span>
+      </div>` : ''}` : ''}
+
       <div class="precio-real-row" style="margin-bottom:${state.rol === 'admin' ? '12px' : '16px'}">
         <span class="label">Total a cobrar</span>
         <span class="monto mono" id="venta-total">${fmt(totalEstim)}</span>
@@ -3205,7 +3351,7 @@ function renderModalVenta() {
       </div>` : ''}
 
       <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || (!sinLimite && cant > info.stock) ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}" data-tam="${tamano || ''}">
-        ✓ Confirmar venta
+        ${tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos' ? '✓ Confirmar venta a pagos' : '✓ Confirmar venta'}
       </button>
     </div>
   </div>`;
@@ -4374,6 +4520,15 @@ function handleClick(e) {
       if (e.target === e.currentTarget) cerrarModalResumenMes();
       break;
     case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
+    case 'setModoPagoVenta': setModoPagoVenta(d.modo); break;
+    case 'abrirModalAbono':
+      e.stopPropagation();
+      abrirModalAbono(d.vid);
+      break;
+    case 'cerrarModalAbono':
+      if (e.target === e.currentTarget) cerrarModalAbono();
+      break;
+    case 'registrarAbono': registrarAbono(); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
     case 'abrirScannerAsignar': abrirScannerAsignar(); break;
     case 'cerrarScanner':
