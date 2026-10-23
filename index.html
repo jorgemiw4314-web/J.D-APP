@@ -1213,6 +1213,28 @@ function actualizarFormVentaCampo(campo, valor) {
     }
   }
 }
+// Para el corte, totales y gráficas: una venta "por pagos" solo cuenta el
+// dinero que ya se pagó, y cada abono cuenta el día en que se pagó. La venta
+// en sí sigue contando sus piezas (en su fecha) pero con $0; cada abono es un
+// movimiento aparte con su parte proporcional de ganancia.
+function ventasEfectivas() {
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const out = [];
+  state.ventas.forEach(v => {
+    if (!v.aPagos) { out.push(v); return; }
+    out.push({ ...v, total: 0, ganancia: 0, insumos: 0, comision: 0, pendienteReal: true });
+    (v.abonos || []).forEach(a => {
+      const prop = v.total > 0 ? a.monto / v.total : 0;
+      out.push({
+        ...v, id: v.id + '#' + a.id, ventaId: v.id, esAbono: true, aPagos: false, abonos: undefined,
+        cantidad: 0, total: a.monto, ganancia: r2((v.ganancia || 0) * prop),
+        insumos: r2((v.insumos || 0) * prop), comision: r2((v.comision || 0) * prop),
+        fecha: a.fecha, mes: claveMes(new Date(a.fecha))
+      });
+    });
+  });
+  return out;
+}
 function totalAbonado(v) { return Math.round((v.abonos || []).reduce((s, a) => s + a.monto, 0) * 100) / 100; }
 function saldoVenta(v) { return v.aPagos ? Math.max(0, Math.round((v.total - totalAbonado(v)) * 100) / 100) : 0; }
 function ventasPorCobrar() { return state.ventas.filter(v => v.aPagos && saldoVenta(v) > 0).sort((a, b) => a.fecha - b.fecha); }
@@ -1259,7 +1281,7 @@ function renderModalAbono() {
       </div>
       <button class="guardar-btn" data-action="registrarAbono">✓ Registrar abono</button>
       ${abonos.length ? `<div style="margin-top:14px; font-size:12px; color:#94a3b8">
-        ${abonos.map(a => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid rgba(148,163,184,0.12)"><span>${new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</span><span class="mono">${fmt(a.monto)}</span></div>`).join('')}
+        ${abonos.map(a => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid rgba(148,163,184,0.12)"><span>${new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${new Date(a.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span><span class="mono">${fmt(a.monto)}</span></div>`).join('')}
       </div>` : ''}
     </div>
   </div>`;
@@ -1387,7 +1409,7 @@ function registrarVenta(productoId, tamano) {
 function calcularTotalesTienda() {
   const mesActual = claveMes(new Date());
   let ganancia = 0, vendido = 0, piezas = 0;
-  state.ventas.forEach(v => {
+  ventasEfectivas().forEach(v => {
     if (v.mes === mesActual) {
       ganancia += v.ganancia;
       vendido += v.total;
@@ -1418,7 +1440,7 @@ function inicioDeSemana() {
 function calcularVentasPerfumesRango(desde, hasta, soloCategoria) {
   const idsFiltro = soloCategoria ? new Set(state.productos.filter(p => p.categoria === soloCategoria).map(p => p.id)) : null;
   let vendido = 0, piezas = 0;
-  state.ventas.forEach(v => {
+  ventasEfectivas().forEach(v => {
     if (v.fecha < desde || v.fecha > hasta) return;
     if (idsFiltro && !idsFiltro.has(v.productoId)) return;
     vendido += v.total;
@@ -1430,7 +1452,7 @@ function calcularVentasPerfumesRango(desde, hasta, soloCategoria) {
 // recientes primero — usada para el detalle de "Vendido esta semana/hoy".
 function listarVentasPerfumesRango(desde, hasta, soloCategoria) {
   const idsFiltro = soloCategoria ? new Set(state.productos.filter(p => p.categoria === soloCategoria).map(p => p.id)) : null;
-  return state.ventas
+  return ventasEfectivas()
     .filter(v => v.fecha >= desde && v.fecha <= hasta && (!idsFiltro || idsFiltro.has(v.productoId)))
     .sort((a, b) => b.fecha - a.fecha);
 }
@@ -1456,7 +1478,7 @@ function cerrarModalVentasHoy() {
 function listarVentasDia(fechaKey, soloCategoria) {
   const categoriaDe = {};
   if (soloCategoria) state.productos.forEach(p => { categoriaDe[p.id] = p.categoria === 'perfumes' ? 'perfumes' : 'general'; });
-  return state.ventas
+  return ventasEfectivas()
     .filter(v => {
       const dt = new Date(v.fecha);
       const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
@@ -1827,7 +1849,7 @@ function calcularVentasPorDia(soloCategoria) {
     const key = `${anio}-${String(mes+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     porDia[key] = { fecha: key, piezas: 0, vendido: 0, ganancia: 0 };
   }
-  state.ventas.forEach(v => {
+  ventasEfectivas().forEach(v => {
     if (v.mes !== mesK) return;
     if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return;
     const dt = new Date(v.fecha);
@@ -1855,7 +1877,7 @@ function calcularFlujoTiendaMensual() {
   for (let i = 11; i >= 0; i--) {
     const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     const key = claveMes(d);
-    const ventasMes = state.ventas.filter(v => v.mes === key);
+    const ventasMes = ventasEfectivas().filter(v => v.mes === key);
     const cobrado = ventasMes.reduce((s, v) => s + v.total, 0);
     const ganancia = ventasMes.reduce((s, v) => s + v.ganancia, 0);
     const insumos = ventasMes.reduce((s, v) => s + (v.insumos || 0), 0);
@@ -1895,7 +1917,7 @@ function calcularPiezasPorMes(soloCategoria) {
     const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     const key = claveMes(d);
     let piezas = 0, vendido = 0, ganancia = 0;
-    state.ventas.forEach(v => {
+    ventasEfectivas().forEach(v => {
       if (v.mes !== key) return;
       if (soloCategoria && categoriaDe[v.productoId] !== soloCategoria) return;
       piezas += v.cantidad;
@@ -2013,7 +2035,7 @@ function guardarMetaMes() {
 // Mismo flujo de dinero (cobrado / reinvertido / ganancia) pero separado por
 // categoría, para ver cómo le fue a Perfumes y a Productos por separado.
 function calcularFlujoPorCategoria(mesKey) {
-  const ventasMes = state.ventas.filter(v => v.mes === mesKey);
+  const ventasMes = ventasEfectivas().filter(v => v.mes === mesKey);
   const productosPorId = {};
   state.productos.forEach(p => { productosPorId[p.id] = p; });
 
@@ -3122,19 +3144,35 @@ function renderVentaRow(v) {
   const fechaStr = new Date(v.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
   const horaStr = new Date(v.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const esAdmin = state.rol === 'admin';
+  // En el corte, una venta a pagos viene como dos tipos de renglón:
+  // la venta (con $0 cobrado) y cada abono (con lo que se pagó ese día).
+  const real = (v.pendienteReal || v.esAbono) ? state.ventas.find(x => x.id === (v.ventaId || v.id)) : v;
+  const aPagos = !!(real && real.aPagos);
+  const saldo = aPagos ? saldoVenta(real) : 0;
+  const nombre = esc(p ? p.nombre : 'Producto eliminado') + (v.tamano ? ' (' + esc(v.tamano) + ')' : '');
+  const cliente = real && real.cliente ? esc(real.cliente) + ' · ' : '';
+  let notaPagos = '';
+  if (v.esAbono) {
+    notaPagos = `<div class="cliente-notas" style="color:#10b981">💵 Abono · ${cliente}${saldo > 0 ? 'Aún debe ' + fmt(saldo) : 'Liquidado ✅'}</div>`;
+  } else if (aPagos) {
+    notaPagos = `<div class="cliente-notas" style="color:${saldo > 0 ? '#f59e0b' : '#10b981'}">💳 ${cliente}${saldo > 0 ? `Pagado ${fmt(totalAbonado(real))} · Debe ${fmt(saldo)}` : 'Liquidado ✅'}</div>`;
+  }
+  const montoTxt = v.pendienteReal
+    ? `<div class="monto mono" style="color:#64748b">${fmt(real ? real.total : 0)}</div><div style="font-size:11px; color:#64748b; margin-top:2px">a pagos</div>`
+    : `<div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>${esAdmin ? `<div style="font-size:11px; color:#10b981; margin-top:2px">+${fmt(v.ganancia)}</div>` : ''}`;
+  const piezasTxt = v.esAbono ? '' : `${v.cantidad} pza(s) · `;
   return `
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
-        <div class="nombre">${esc(p ? p.nombre : 'Producto eliminado')}${v.tamano ? ` (${esc(v.tamano)})` : ''}</div>
-        <div class="cliente-notas">${v.cantidad} pza(s) · ${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
-        ${v.aPagos ? `<div class="cliente-notas" style="color:${saldoVenta(v) > 0 ? '#f59e0b' : '#10b981'}">💳 ${v.cliente ? esc(v.cliente) + ' · ' : ''}${saldoVenta(v) > 0 ? `Pagado ${fmt(totalAbonado(v))} · Debe ${fmt(saldoVenta(v))}` : 'Liquidado ✅'}</div>` : ''}
+        <div class="nombre">${nombre}</div>
+        <div class="cliente-notas">${piezasTxt}${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
+        ${notaPagos}
       </div>
       <div class="cliente-pago">
-        <div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>
-        ${esAdmin ? `<div style="font-size:11px; color:#10b981; margin-top:2px">+${fmt(v.ganancia)}</div>` : ''}
+        ${montoTxt}
       </div>
-      ${v.aPagos && saldoVenta(v) > 0 ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${v.id}" title="Registrar abono">💵</button>` : ''}
-      ${esAdmin ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
+      ${!v.esAbono && aPagos && saldo > 0 ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${real.id}" title="Registrar abono">💵</button>` : ''}
+      ${esAdmin && !v.esAbono ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
     </div>
   `;
 }
