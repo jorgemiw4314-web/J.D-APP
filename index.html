@@ -443,6 +443,8 @@ let state = {
   formAbono: { monto: '' },
   scanner: null,
   modalVentasSemana: false,
+  modalVentasMes: false,
+  semanaMesAbierta: null,
   modalVentasHoy: false,
   modalVentasDia: null,
   modalCierreMes: false,
@@ -1459,6 +1461,41 @@ function listarVentasPerfumesRango(desde, hasta, soloCategoria) {
     .filter(v => v.fecha >= desde && v.fecha <= hasta && (!idsFiltro || idsFiltro.has(v.productoId)))
     .sort((a, b) => b.fecha - a.fecha);
 }
+// Semanas (lunes a domingo) del mes en curso, hasta la semana de hoy. La
+// primera y la última se recortan a los días que sí son del mes.
+function semanasDelMes() {
+  const hoy = new Date();
+  const y = hoy.getFullYear(), m = hoy.getMonth();
+  const finMes = new Date(y, m + 1, 1).getTime() - 1;
+  const semanas = [];
+  let desde = new Date(y, m, 1, 0, 0, 0, 0);
+  while (desde.getTime() <= hoy.getTime()) {
+    const dia = desde.getDay(); // 0 = domingo
+    const hastaDomingo = dia === 0 ? 0 : 7 - dia;
+    let hasta = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate() + hastaDomingo, 23, 59, 59, 999);
+    if (hasta.getTime() > finMes) hasta = new Date(finMes);
+    semanas.push({
+      desde: desde.getTime(), hasta: hasta.getTime(),
+      actual: hoy.getTime() >= desde.getTime() && hoy.getTime() <= hasta.getTime()
+    });
+    desde = new Date(hasta.getTime() + 1);
+  }
+  return semanas;
+}
+function abrirModalVentasMes() {
+  state.modalVentasMes = true;
+  state.semanaMesAbierta = null;
+  render();
+}
+function cerrarModalVentasMes() {
+  state.modalVentasMes = false;
+  state.semanaMesAbierta = null;
+  render();
+}
+function toggleSemanaMes(desde) {
+  state.semanaMesAbierta = state.semanaMesAbierta === desde ? null : desde;
+  render();
+}
 function abrirModalVentasSemana() {
   state.modalVentasSemana = true;
   render();
@@ -2438,7 +2475,7 @@ function render() {
   if (state.rol === 'vendedor') {
     state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
     const vista = renderTienda();
-    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada() + renderModalAbono();
     bindEvents();
     return;
   }
@@ -2448,7 +2485,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada() + renderModalAbono();
   bindEvents();
 }
 
@@ -2804,9 +2841,10 @@ function renderTienda() {
           <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
           <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
         </div>
-        <div class="resumen-card">
+        <div class="resumen-card" data-action="abrirModalVentasMes" style="cursor:pointer">
           <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
           <div class="resumen-value">${fmt(t.vendido)}</div>
+          <div class="resumen-sub">toca para ver por semana</div>
         </div>
         <div class="resumen-card">
           <div class="resumen-label" style="color:#f59e0b">Piezas vendidas</div>
@@ -3416,6 +3454,44 @@ function renderModalVentasSemana() {
       ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas esta semana</div>' :
         ventas.map(v => renderVentaRow(v)).join('')
       }
+    </div>
+  </div>`;
+}
+
+// Detalle de "Vendido (mes)": lo vendido semana por semana (lunes a domingo).
+// Tocando una semana se despliegan las ventas de esa semana.
+function renderModalVentasMes() {
+  if (!state.modalVentasMes) return '';
+  const semanas = semanasDelMes().map(w => ({ ...w, ...calcularVentasPerfumesRango(w.desde, w.hasta) }));
+  const totalMes = semanas.reduce((a, w) => a + w.vendido, 0);
+  const piezasMes = semanas.reduce((a, w) => a + w.piezas, 0);
+  const corto = (t) => new Date(t).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  const mesNombre = new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+  const filas = semanas.map((w, i) => ({ w, num: i + 1 })).reverse().map(({ w, num }) => {
+    const abierta = state.semanaMesAbierta === w.desde;
+    const ventas = abierta ? listarVentasPerfumesRango(w.desde, w.hasta) : [];
+    return `<div style="margin-bottom:8px">
+      <div class="cliente" style="cursor:pointer; margin-bottom:0; ${w.actual ? 'border:1px solid rgba(6,182,212,0.4)' : ''}" data-action="toggleSemanaMes" data-desde="${w.desde}">
+        <div class="cliente-info">
+          <div class="nombre">Semana ${num}${w.actual ? ' · esta semana' : ''}</div>
+          <div class="cliente-notas">${corto(w.desde)} – ${corto(w.hasta)} · ${w.piezas} pza(s)</div>
+        </div>
+        <div class="cliente-pago">
+          <div class="monto mono" style="color:#06b6d4">${fmt(w.vendido)}</div>
+          <div style="font-size:11px; color:#64748b; margin-top:2px">${abierta ? '▲' : '▼'}</div>
+        </div>
+      </div>
+      ${abierta ? `<div style="padding:8px 0 0 10px">${ventas.length === 0 ? '<div class="vacio">Sin ventas esta semana</div>' : ventas.map(v => renderVentaRow(v)).join('')}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="modal-overlay" data-action="cerrarModalVentasMes">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Ventas de ${esc(mesNombre)}</h3>
+        <button class="close-btn" data-action="cerrarModalVentasMes">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#06b6d4">${piezasMes} pza(s) · ${fmt(totalMes)} en total</div>
+      ${filas}
     </div>
   </div>`;
 }
@@ -4535,6 +4611,11 @@ function handleClick(e) {
     case 'cerrarModalVentasSemana':
       if (e.target === e.currentTarget) cerrarModalVentasSemana();
       break;
+    case 'abrirModalVentasMes': abrirModalVentasMes(); break;
+    case 'cerrarModalVentasMes':
+      if (e.target === e.currentTarget) cerrarModalVentasMes();
+      break;
+    case 'toggleSemanaMes': toggleSemanaMes(Number(d.desde)); break;
     case 'abrirModalVentasHoy': abrirModalVentasHoy(); break;
     case 'cerrarModalVentasHoy':
       if (e.target === e.currentTarget) cerrarModalVentasHoy();

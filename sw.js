@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jd-ventas-v5';
+const CACHE_NAME = 'jd-ventas-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -25,17 +25,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: red primero, pero con límite de espera — SOLO para peticiones a
-// nuestra propia página. Todo lo que vaya hacia otro dominio (Firebase,
-// Firestore, gstatic.com, etc.) se deja pasar de largo sin tocar.
-// Antes, si los datos móviles estaban conectados pero lentos o trabados, la
-// app se quedaba en blanco esperando la red, porque la copia guardada solo se
-// usaba cuando la red FALLABA, no cuando tardaba. Ahora, si la red no responde
-// en 3 segundos y hay copia guardada, se abre la copia al instante y la red
-// sigue en segundo plano actualizando la copia para la próxima vez.
+// Fetch: copia guardada primero (abre al instante) y se actualiza en segundo
+// plano — SOLO para peticiones a nuestra propia página. Todo lo que vaya hacia
+// otro dominio (Firebase, Firestore, gstatic.com, etc.) se deja pasar de largo.
+// Si hay una copia guardada se muestra de inmediato, sin esperar a la red, y
+// mientras tanto se pide la versión nueva al servidor para dejarla lista la
+// próxima vez que abras la app. Si no hay copia (primera vez), se usa la red.
 // cache: 'no-cache' obliga a preguntarle al servidor si hay versión nueva,
 // en vez de usar la copia que el navegador guarda hasta 10 min.
-const ESPERA_RED_MS = 3000;
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
@@ -51,11 +48,6 @@ self.addEventListener('fetch', (event) => {
       (event.request.mode === 'navigate' ? await cache.match('./index.html') : undefined);
     if (!copia) return red; // primera vez sin copia: no queda más que esperar la red
     event.waitUntil(red.catch(() => {})); // deja terminar la actualización en segundo plano
-    try {
-      const espera = new Promise((resolve) => setTimeout(() => resolve(null), ESPERA_RED_MS));
-      const respuesta = await Promise.race([red, espera]);
-      if (respuesta) return respuesta;
-    } catch (e) { /* sin red: usamos la copia */ }
     return copia;
   })());
 });
