@@ -438,12 +438,16 @@ let state = {
     variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
-  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' },
+  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', telefono: '' },
   modalAbono: null,
-  formAbono: { monto: '' },
+  formAbono: { monto: '', telefono: '' },
   scanner: null,
   modalVentasSemana: false,
   modalVentasMes: false,
+  modalClientesFrascos: false,
+  clienteFrascoAbierto: null,
+  modalDatosCliente: null,
+  formDatosCliente: { cliente: '', telefono: '' },
   semanaMesAbierta: null,
   modalVentasHoy: false,
   modalVentasDia: null,
@@ -1240,12 +1244,212 @@ function ventasEfectivas() {
   });
   return out;
 }
+// WhatsApp: acepta 10 dígitos (se le agrega la lada de México, 52) o un número
+// con su lada. Devuelve '' si está vacío y null si no es válido.
+function normalizarWhatsApp(raw) {
+  const d = String(raw || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length === 10) return '52' + d;
+  if (d.length === 12 && d.startsWith('52')) return d;
+  if (d.length === 13 && d.startsWith('521')) return '52' + d.slice(3);
+  if (d.length >= 11 && d.length <= 15 && !d.startsWith('52')) return d;
+  return null;
+}
+function telefonoMostrar(t) { return t && t.length === 12 && t.startsWith('52') ? t.slice(2) : (t || ''); }
+function linkWhatsAppCobro(v) {
+  if (!v || !v.telefono) return '';
+  const p = state.productos.find(pp => pp.id === v.productoId);
+  const saldo = saldoVenta(v);
+  const texto = 'Hola' + (v.cliente ? ' ' + v.cliente : '') + ', te escribo de J.D Perfumes. ' +
+    (saldo > 0 ? 'Tu saldo pendiente de ' + (p ? p.nombre : 'tu perfume') + ' es de ' + fmt(saldo) + '. ' : '') + '¡Gracias!';
+  return 'https://wa.me/' + v.telefono + '?text=' + encodeURIComponent(texto);
+}
+function botonWhatsApp(v, extraStyle) {
+  const link = linkWhatsAppCobro(v);
+  if (!link) return '';
+  return `<a class="icon-btn" href="${esc(link)}" target="_blank" rel="noopener" title="Escribir por WhatsApp" style="display:flex; align-items:center; justify-content:center; text-decoration:none; background:rgba(34,197,94,0.15); color:#22c55e; flex-shrink:0; ${extraStyle || ''}">💬</a>`;
+}
+function actualizarFormAbonoTel(valor) { state.formAbono.telefono = valor; }
+function guardarTelefonoAbono() {
+  const v = state.ventas.find(vv => vv.id === state.modalAbono);
+  if (!v) return;
+  const tel = normalizarWhatsApp(state.formAbono.telefono);
+  if (tel === null) { alert('El número de WhatsApp no es válido. Escríbelo con 10 dígitos (ej. 9991234567).'); return; }
+  if (tel) v.telefono = tel; else delete v.telefono;
+  guardarLocal();
+  render();
+}
+// Resumen de Frascos completos: cuántos se han vendido y quiénes los compraron.
+// Un "cliente" es quien tiene nombre o WhatsApp guardado en la venta; los
+// frascos sin ninguno de los dos se cuentan aparte ("sin nombre de cliente").
+function clientesFrascos() {
+  const mesAct = claveMes(new Date());
+  const r = { frascos: 0, frascosMes: 0, aPagos: 0, sinNombre: 0, sinNombreVentas: [], clientes: [] };
+  const mapa = new Map();
+  state.ventas.filter(v => v.tamano === 'Frasco completo').sort((a, b) => a.fecha - b.fecha).forEach(v => {
+    const cant = v.cantidad || 1;
+    r.frascos += cant;
+    if (v.mes === mesAct) r.frascosMes += cant;
+    if (v.aPagos) r.aPagos += cant;
+    const nombre = (v.cliente || '').trim();
+    if (!nombre && !v.telefono) { r.sinNombre += cant; r.sinNombreVentas.push(v); return; }
+    const clave = nombre ? nombre.toLowerCase() : 'tel:' + v.telefono;
+    if (!mapa.has(clave)) mapa.set(clave, { clave, nombre: nombre || telefonoMostrar(v.telefono), telefono: '', frascos: 0, debe: 0, ultima: 0, compras: [] });
+    const c = mapa.get(clave);
+    c.frascos += cant;
+    c.debe += saldoVenta(v);
+    c.ultima = Math.max(c.ultima, v.fecha);
+    c.compras.push(v);
+    if (nombre) c.nombre = nombre;       // se queda el nombre de la compra más reciente
+    if (v.telefono) c.telefono = v.telefono;
+  });
+  r.clientes = Array.from(mapa.values()).sort((a, b) => b.ultima - a.ultima);
+  r.clientes.forEach(c => { c.debe = Math.round(c.debe * 100) / 100; });
+  return r;
+}
+// Poner o corregir el nombre y WhatsApp de una venta de frasco completo
+// (por ejemplo, las que se vendieron antes de que la app los guardara).
+function abrirModalDatosCliente(ventaId) {
+  const v = state.ventas.find(x => x.id === ventaId);
+  if (!v) return;
+  state.modalDatosCliente = ventaId;
+  state.formDatosCliente = { cliente: v.cliente || '', telefono: telefonoMostrar(v.telefono) };
+  render();
+}
+function cerrarModalDatosCliente() { state.modalDatosCliente = null; render(); }
+function actualizarFormDatosCliente(campo, valor) { state.formDatosCliente[campo] = valor; }
+function guardarDatosCliente() {
+  const v = state.ventas.find(x => x.id === state.modalDatosCliente);
+  if (!v) return;
+  const nombre = (state.formDatosCliente.cliente || '').trim();
+  const tel = normalizarWhatsApp(state.formDatosCliente.telefono);
+  if (tel === null) { alert('El número de WhatsApp no es válido. Escríbelo con 10 dígitos (ej. 9991234567).'); return; }
+  if (nombre) v.cliente = nombre; else delete v.cliente;
+  if (tel) v.telefono = tel; else delete v.telefono;
+  guardarLocal();
+  state.modalDatosCliente = null;
+  render();
+}
+function renderModalDatosCliente() {
+  if (!state.modalDatosCliente) return '';
+  const v = state.ventas.find(x => x.id === state.modalDatosCliente);
+  if (!v) return '';
+  const p = state.productos.find(pp => pp.id === v.productoId);
+  const fecha = new Date(v.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  const hora = new Date(v.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return `<div class="modal-overlay" data-action="cerrarModalDatosCliente">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Datos del cliente</h3>
+        <button class="close-btn" data-action="cerrarModalDatosCliente">✕</button>
+      </div>
+      <div class="modal-subtitle">${esc(p ? p.nombre : 'Producto')} · ${fecha} ${hora} · ${fmt(v.total)}</div>
+      <div class="campo">
+        <div class="campo-label"><label>Cliente</label></div>
+        <input class="input" type="text" value="${esc(state.formDatosCliente.cliente)}" placeholder="Nombre del cliente" oninput="actualizarFormDatosCliente('cliente', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>WhatsApp del cliente</label><span class="hint">Opcional</span></div>
+        <input class="input" type="tel" inputmode="tel" value="${esc(state.formDatosCliente.telefono)}" placeholder="10 dígitos, ej. 9991234567" oninput="actualizarFormDatosCliente('telefono', this.value)" />
+      </div>
+      <button class="guardar-btn" data-action="guardarDatosCliente">✓ Guardar</button>
+    </div>
+  </div>`;
+}
+function abrirModalClientesFrascos() { state.modalClientesFrascos = true; state.clienteFrascoAbierto = null; render(); }
+function cerrarModalClientesFrascos() { state.modalClientesFrascos = false; state.clienteFrascoAbierto = null; render(); }
+function toggleClienteFrasco(clave) { state.clienteFrascoAbierto = state.clienteFrascoAbierto === clave ? null : clave; render(); }
+function renderTarjetaClientesFrascos() {
+  const r = clientesFrascos();
+  if (r.frascos === 0) return '';
+  return `<div class="cliente" style="cursor:pointer; margin-bottom:12px" data-action="abrirModalClientesFrascos">
+    <div class="cliente-info">
+      <div class="nombre">👥 Clientes de frascos completos</div>
+      <div class="cliente-notas">${r.clientes.length} cliente(s) · ${r.frascos} frasco(s) vendido(s)</div>
+    </div>
+    <div class="cliente-pago"><div class="monto mono" style="color:#a855f7">›</div></div>
+  </div>`;
+}
+function renderModalClientesFrascos() {
+  if (!state.modalClientesFrascos) return '';
+  const r = clientesFrascos();
+  const fechaCorta = (t) => new Date(t).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+  const filas = r.clientes.map(c => {
+    const abierto = state.clienteFrascoAbierto === c.clave;
+    const compras = abierto ? c.compras.slice().sort((a, b) => b.fecha - a.fecha).map(v => {
+      const p = state.productos.find(pp => pp.id === v.productoId);
+      const saldo = saldoVenta(v);
+      const estado = v.aPagos
+        ? (saldo > 0 ? `<span style="color:#f59e0b">Debe ${fmt(saldo)}</span>` : '<span style="color:#10b981">Liquidado ✅</span>')
+        : '<span style="color:#10b981">De contado ✅</span>';
+      return `<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid rgba(148,163,184,0.12)">
+        <div style="flex:1; min-width:0">
+          <div style="font-size:13px">${esc(p ? p.nombre : 'Producto')}${(v.cantidad || 1) > 1 ? ' ×' + v.cantidad : ''}</div>
+          <div class="cliente-notas">${fechaCorta(v.fecha)} · ${fmt(v.total)} · ${estado}</div>
+        </div>
+        <button class="icon-btn" style="flex-shrink:0" data-action="abrirModalDatosCliente" data-vid="${v.id}" title="Editar cliente">✏️</button>
+        ${v.aPagos ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; flex-shrink:0" data-action="abrirModalAbono" data-vid="${v.id}" title="Ver pagos">${saldo > 0 ? '💵' : '📋'}</button>` : ''}
+      </div>`;
+    }).join('') : '';
+    return `<div style="margin-bottom:8px">
+      <div class="cliente" style="cursor:pointer; margin-bottom:0" data-action="toggleClienteFrasco" data-clave="${esc(c.clave)}">
+        <div class="cliente-info">
+          <div class="nombre">${esc(c.nombre)}</div>
+          <div class="cliente-notas">${c.frascos} frasco(s)${c.debe > 0 ? ' · <span style="color:#f59e0b">Debe ' + fmt(c.debe) + '</span>' : ''}</div>
+        </div>
+        <div class="cliente-pago"><div style="font-size:11px; color:#64748b">${abierto ? '▲' : '▼'}</div></div>
+      </div>
+      ${abierto ? `<div style="padding:8px 0 0 10px">
+        ${c.telefono
+          ? `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px; font-size:13px; color:#94a3b8">${botonWhatsApp({ telefono: c.telefono, cliente: c.nombre }, 'width:40px; height:40px')}<span class="mono">${esc(telefonoMostrar(c.telefono))}</span></div>`
+          : '<div class="cliente-notas" style="margin-bottom:6px">Sin WhatsApp guardado</div>'}
+        ${compras}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  const sinAbierto = state.clienteFrascoAbierto === '__sin__';
+  const sinBloque = r.sinNombre > 0 ? `<div style="margin-bottom:8px">
+      <div class="cliente" style="cursor:pointer; margin-bottom:0; border:1px dashed rgba(245,158,11,0.45)" data-action="toggleClienteFrasco" data-clave="__sin__">
+        <div class="cliente-info">
+          <div class="nombre">Sin nombre de cliente</div>
+          <div class="cliente-notas">${r.sinNombre} frasco(s) · toca para ponerles nombre</div>
+        </div>
+        <div class="cliente-pago"><div style="font-size:11px; color:#64748b">${sinAbierto ? '▲' : '▼'}</div></div>
+      </div>
+      ${sinAbierto ? `<div style="padding:8px 0 0 10px">
+        ${r.sinNombreVentas.slice().sort((a, b) => b.fecha - a.fecha).map(v => {
+          const p = state.productos.find(pp => pp.id === v.productoId);
+          const hora = new Date(v.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+          return `<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid rgba(148,163,184,0.12)">
+            <div style="flex:1; min-width:0">
+              <div style="font-size:13px">${esc(p ? p.nombre : 'Producto')}${(v.cantidad || 1) > 1 ? ' ×' + v.cantidad : ''}</div>
+              <div class="cliente-notas">${fechaCorta(v.fecha)} · ${hora} · ${fmt(v.total)}</div>
+            </div>
+            <button class="icon-btn" style="flex-shrink:0" data-action="abrirModalDatosCliente" data-vid="${v.id}" title="Poner nombre">✏️</button>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+    </div>` : '';
+  return `<div class="modal-overlay" data-action="cerrarModalClientesFrascos">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Clientes de frascos completos</h3>
+        <button class="close-btn" data-action="cerrarModalClientesFrascos">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#a855f7">${r.frascos} frasco(s) vendido(s) en total · ${r.frascosMes} este mes</div>
+      <div style="font-size:12px; color:#94a3b8; margin-bottom:12px">${r.clientes.length} cliente(s) · ${r.aPagos} vendido(s) a pagos${r.sinNombre > 0 ? ' · ' + r.sinNombre + ' sin nombre de cliente' : ''}</div>
+      ${sinBloque}
+      ${filas || (r.sinNombre > 0 ? '' : '<div class="vacio">Aún no hay clientes guardados</div>')}
+    </div>
+  </div>`;
+}
 function totalAbonado(v) { return Math.round((v.abonos || []).reduce((s, a) => s + a.monto, 0) * 100) / 100; }
 function saldoVenta(v) { return v.aPagos ? Math.max(0, Math.round((v.total - totalAbonado(v)) * 100) / 100) : 0; }
 function ventasPorCobrar() { return state.ventas.filter(v => v.aPagos && saldoVenta(v) > 0).sort((a, b) => a.fecha - b.fecha); }
 function abrirModalAbono(ventaId) {
   state.modalAbono = ventaId;
-  state.formAbono = { monto: '' };
+  const vv = state.ventas.find(x => x.id === ventaId);
+  state.formAbono = { monto: '', telefono: vv ? telefonoMostrar(vv.telefono) : '' };
   render();
 }
 function cerrarModalAbono() { state.modalAbono = null; render(); }
@@ -1278,13 +1482,21 @@ function renderModalAbono() {
       <div class="modal-subtitle">${v.cliente ? esc(v.cliente) + ' · ' : ''}Total ${fmt(v.total)} · Pagado ${fmt(totalAbonado(v))}</div>
       <div class="precio-real-row" style="margin-bottom:12px">
         <span class="label">Saldo pendiente</span>
-        <span class="monto mono" style="color:#f59e0b">${fmt(saldo)}</span>
+        <span class="monto mono" style="color:${saldo > 0 ? '#f59e0b' : '#10b981'}">${saldo > 0 ? fmt(saldo) : 'Liquidado ✅'}</span>
       </div>
       <div class="campo">
+        <div class="campo-label"><label>WhatsApp del cliente</label><span class="hint">Opcional</span></div>
+        <div style="display:flex; gap:8px; align-items:stretch">
+          <input class="input" style="flex:1; min-width:0" type="tel" inputmode="tel" value="${esc(state.formAbono.telefono)}" placeholder="10 dígitos" oninput="actualizarFormAbonoTel(this.value)" />
+          <button type="button" class="icon-btn" style="width:48px; flex-shrink:0" data-action="guardarTelefonoAbono" title="Guardar número">💾</button>
+          ${botonWhatsApp(v, 'width:48px')}
+        </div>
+      </div>
+      ${saldo > 0 ? `<div class="campo">
         <div class="campo-label"><label>Monto del abono ($) <span class="required">*</span></label></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(state.formAbono.monto)}" placeholder="0.00" oninput="actualizarFormAbono(this.value)" />
       </div>
-      <button class="guardar-btn" data-action="registrarAbono">✓ Registrar abono</button>
+      <button class="guardar-btn" data-action="registrarAbono">✓ Registrar abono</button>` : ''}
       ${abonos.length ? `<div style="margin-top:14px; font-size:12px; color:#94a3b8">
         ${abonos.map(a => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid rgba(148,163,184,0.12)"><span>${new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${new Date(a.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span><span class="mono">${fmt(a.monto)}</span></div>`).join('')}
       </div>` : ''}
@@ -1308,6 +1520,7 @@ function renderPorCobrar() {
           <div class="cliente-notas">Pagado ${fmt(totalAbonado(v))} de ${fmt(v.total)}</div>
         </div>
         <div class="monto mono" style="color:#f59e0b">${fmt(saldoVenta(v))}</div>
+        ${botonWhatsApp(v)}
         <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalAbono" data-vid="${v.id}" title="Registrar abono">💵</button>
       </div>`;
     }).join('')}
@@ -1316,12 +1529,12 @@ function renderPorCobrar() {
 
 function abrirModalVenta(productoId, tamano) {
   state.modalVenta = { productoId, tamano: tamano || null };
-  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '' };
+  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '', telefono: '' };
   render();
 }
 function cerrarModalVenta() {
   state.modalVenta = null;
-  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' };
+  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', telefono: '' };
   render();
 }
 function actualizarFormVenta(valor) {
@@ -1387,11 +1600,19 @@ function registrarVenta(productoId, tamano) {
   };
   // Frasco completo "por pagos": se guarda quién lo debe y los abonos que
   // lleva (el anticipo cuenta como el primer abono).
+  if (tamano === 'Frasco completo') {
+    // Cliente y WhatsApp (opcionales) se guardan en pago completo y por pagos,
+    // para poder ver después quién ha comprado frascos completos.
+    const nombre = (state.formVenta.cliente || '').trim();
+    const tel = normalizarWhatsApp(state.formVenta.telefono);
+    if (tel === null) { alert('El número de WhatsApp no es válido. Escríbelo con 10 dígitos (ej. 9991234567).'); return; }
+    if (nombre) venta.cliente = nombre;
+    if (tel) venta.telefono = tel;
+  }
   if (tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos') {
     const anticipo = Math.round((parseFloat(state.formVenta.anticipo) || 0) * 100) / 100;
     if (anticipo < 0 || anticipo > total) { alert('El anticipo no puede ser mayor al total.'); return; }
     venta.aPagos = true;
-    venta.cliente = (state.formVenta.cliente || '').trim();
     venta.abonos = anticipo > 0 ? [{ id: 'ab_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), monto: anticipo, fecha: Date.now(), por: state.rol }] : [];
   }
   state.ventas.push(venta);
@@ -2485,7 +2706,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada() + renderModalAbono();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada() + renderModalClientesFrascos() + renderModalDatosCliente() + renderModalAbono();
   bindEvents();
 }
 
@@ -2832,6 +3053,7 @@ function renderTienda() {
   // animación se reinicia una y otra vez, dando un efecto de parpadeo.
   let html = buscando ? '<div>' : '<div class="fade-in">';
   html += renderPorCobrar();
+  if (esAdmin) html += renderTarjetaClientesFrascos();
 
   if (esAdmin) {
     const t = calcularTotalesTienda();
@@ -3195,6 +3417,8 @@ function renderVentaRow(v) {
   let notaPagos = '';
   if (v.esAbono) {
     notaPagos = `<div class="cliente-notas" style="color:#10b981">💵 Abono · ${cliente}${saldo > 0 ? 'Aún debe ' + fmt(saldo) : 'Liquidado ✅'}</div>`;
+  } else if (!aPagos && real && real.cliente) {
+    notaPagos = `<div class="cliente-notas">👤 ${esc(real.cliente)}</div>`;
   } else if (aPagos) {
     notaPagos = `<div class="cliente-notas" style="color:${saldo > 0 ? '#f59e0b' : '#10b981'}">💳 ${cliente}${saldo > 0 ? `Pagado ${fmt(totalAbonado(real))} · Debe ${fmt(saldo)}` : 'Liquidado ✅'}</div>`;
   }
@@ -3206,13 +3430,13 @@ function renderVentaRow(v) {
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
         <div class="nombre">${nombre}</div>
-        <div class="cliente-notas">${piezasTxt}${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
+        <div class="cliente-notas">${piezasTxt}${fechaStr} · ${horaStr}</div>
         ${notaPagos}
       </div>
       <div class="cliente-pago">
         ${montoTxt}
       </div>
-      ${!v.esAbono && aPagos && saldo > 0 ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${real.id}" title="Registrar abono">💵</button>` : ''}
+      ${!v.esAbono && aPagos ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${real.id}" title="${saldo > 0 ? 'Registrar abono' : 'Ver pagos y datos del cliente'}">${saldo > 0 ? '💵' : '📋'}</button>` : ''}
       ${esAdmin && !v.esAbono ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
     </div>
   `;
@@ -3405,11 +3629,15 @@ function renderModalVenta() {
           <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.modoPago === 'pagos' ? '' : 'opacity:0.4'}" data-action="setModoPagoVenta" data-modo="pagos">💳 Por pagos</button>
         </div>
       </div>
-      ${state.formVenta.modoPago === 'pagos' ? `
       <div class="campo">
-        <div class="campo-label"><label>Cliente</label></div>
-        <input class="input" type="text" value="${esc(state.formVenta.cliente)}" placeholder="Nombre de quien lo debe" oninput="actualizarFormVentaCampo('cliente', this.value)" />
+        <div class="campo-label"><label>Cliente</label>${state.formVenta.modoPago === 'completo' ? '<span class="hint">Opcional</span>' : ''}</div>
+        <input class="input" type="text" value="${esc(state.formVenta.cliente)}" placeholder="${state.formVenta.modoPago === 'pagos' ? 'Nombre de quien lo debe' : 'Nombre del cliente'}" oninput="actualizarFormVentaCampo('cliente', this.value)" />
       </div>
+      <div class="campo">
+        <div class="campo-label"><label>WhatsApp del cliente</label><span class="hint">Opcional</span></div>
+        <input class="input" type="tel" inputmode="tel" value="${esc(state.formVenta.telefono)}" placeholder="10 dígitos, ej. 9991234567" oninput="actualizarFormVentaCampo('telefono', this.value)" />
+      </div>
+      ${state.formVenta.modoPago === 'pagos' ? `
       <div class="campo">
         <div class="campo-label"><label>Anticipo hoy ($)</label><span class="hint">Opcional</span></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(state.formVenta.anticipo)}" placeholder="0.00" oninput="actualizarFormVentaCampo('anticipo', this.value)" />
@@ -4651,6 +4879,17 @@ function handleClick(e) {
       if (e.target === e.currentTarget) cerrarModalAbono();
       break;
     case 'registrarAbono': registrarAbono(); break;
+    case 'guardarTelefonoAbono': guardarTelefonoAbono(); break;
+    case 'abrirModalClientesFrascos': abrirModalClientesFrascos(); break;
+    case 'cerrarModalClientesFrascos':
+      if (e.target === e.currentTarget) cerrarModalClientesFrascos();
+      break;
+    case 'toggleClienteFrasco': toggleClienteFrasco(d.clave); break;
+    case 'abrirModalDatosCliente': abrirModalDatosCliente(d.vid); break;
+    case 'cerrarModalDatosCliente':
+      if (e.target === e.currentTarget) cerrarModalDatosCliente();
+      break;
+    case 'guardarDatosCliente': guardarDatosCliente(); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
     case 'abrirScannerAsignar': abrirScannerAsignar(); break;
     case 'cerrarScanner':
