@@ -447,6 +447,8 @@ let state = {
   modalClientesFrascos: false,
   clienteFrascoAbierto: null,
   modalDatosCliente: null,
+  modalEditarVenta: null,
+  formEditarVenta: { productoId: '', tamano: '', cantidad: '', total: '', totalManual: false },
   formDatosCliente: { cliente: '', telefono: '' },
   semanaMesAbierta: null,
   modalVentasHoy: false,
@@ -1185,7 +1187,11 @@ function eliminarVenta(ventaId) {
   if (!confirm('¿Eliminar esta venta? Es para corregir un cobro por error o duplicado. Esta acción no se puede deshacer.')) return;
   const p = state.productos.find(pp => pp.id === venta.productoId);
   if (p && !venta.tamano && p.stock != null) {
-    p.stock += venta.cantidad; // se regresan las piezas al stock (solo aplica a productos generales)
+    p.stock += venta.cantidad; // se regresan las piezas al stock de un producto general
+  } else if (p && venta.tamano) {
+    // Perfumes: se regresa a la presentación (p. ej. Frasco completo) que lleva conteo de piezas
+    const pres = (p.variantes || []).find(vv => vv.tamano === venta.tamano);
+    if (pres && typeof pres.stock === 'number') pres.stock += venta.cantidad;
   }
   state.ventas = state.ventas.filter(v => v.id !== ventaId);
   // Dejamos marcada esta venta como borrada (no solo la quitamos del arreglo)
@@ -1353,6 +1359,152 @@ function renderModalDatosCliente() {
         <input class="input" type="tel" inputmode="tel" value="${esc(state.formDatosCliente.telefono)}" placeholder="10 dígitos, ej. 9991234567" oninput="actualizarFormDatosCliente('telefono', this.value)" />
       </div>
       <button class="guardar-btn" data-action="guardarDatosCliente">✓ Guardar</button>
+    </div>
+  </div>`;
+}
+// ============== EDITAR UNA VENTA (cambiar de perfume / presentación) ==============
+// Conserva el id, la fecha, el cliente, el WhatsApp y los abonos de la venta.
+// Es como borrarla y registrarla de nuevo en el lugar correcto, pero sin perder
+// nada de eso: se regresa el stock de donde salió, se descuenta del nuevo
+// lugar y la ganancia se recalcula con el costo del perfume elegido.
+function esVentaEditable(v) { return !!v && TAMANOS_PERFUME.includes(v.tamano); }
+function totalSugeridoEditarVenta(venta, f) {
+  const cant = parseInt(f.cantidad) || 0;
+  // Si no cambió la presentación ni las piezas, se respeta lo que ya se cobró.
+  if (f.tamano === venta.tamano && cant === venta.cantidad) return venta.total;
+  const p = state.productos.find(pp => pp.id === f.productoId);
+  const pres = p ? (p.variantes || []).find(vv => vv.tamano === f.tamano) : null;
+  return pres ? Math.round(pres.precioVenta * cant * 100) / 100 : 0;
+}
+function abrirModalEditarVenta(ventaId) {
+  if (state.rol !== 'admin') return;
+  const v = state.ventas.find(x => x.id === ventaId);
+  if (!esVentaEditable(v)) return;
+  state.modalEditarVenta = ventaId;
+  state.formEditarVenta = { productoId: v.productoId, tamano: v.tamano, cantidad: String(v.cantidad), total: String(v.total), totalManual: false };
+  render();
+}
+function cerrarModalEditarVenta() { state.modalEditarVenta = null; render(); }
+function cambiarEditarVenta(campo, valor) {
+  const venta = state.ventas.find(x => x.id === state.modalEditarVenta);
+  if (!venta) return;
+  const f = state.formEditarVenta;
+  f[campo] = valor;
+  if (campo === 'productoId') {
+    const p = state.productos.find(pp => pp.id === valor);
+    const disp = p ? (p.variantes || []).filter(v => TAMANOS_PERFUME.includes(v.tamano) && v.precioVenta > 0) : [];
+    if (!disp.some(v => v.tamano === f.tamano)) f.tamano = disp.length ? disp[0].tamano : '';
+  }
+  if (!f.totalManual) f.total = String(totalSugeridoEditarVenta(venta, f));
+  render();
+}
+function actualizarEditarVentaCantidad(valor) {
+  const venta = state.ventas.find(x => x.id === state.modalEditarVenta);
+  if (!venta) return;
+  const f = state.formEditarVenta;
+  f.cantidad = valor;
+  if (!f.totalManual) {
+    f.total = String(totalSugeridoEditarVenta(venta, f));
+    const el = document.getElementById('editar-total');
+    if (el) el.value = f.total;
+  }
+}
+function actualizarEditarVentaTotal(valor) {
+  state.formEditarVenta.total = valor;
+  state.formEditarVenta.totalManual = true;
+}
+function guardarEditarVenta() {
+  if (state.rol !== 'admin') return;
+  const idx = state.ventas.findIndex(x => x.id === state.modalEditarVenta);
+  if (idx < 0) return;
+  const venta = state.ventas[idx];
+  const f = state.formEditarVenta;
+  const pNuevo = state.productos.find(pp => pp.id === f.productoId);
+  const pViejo = state.productos.find(pp => pp.id === venta.productoId);
+  const cant = parseInt(f.cantidad) || 0;
+  const total = Math.round((parseFloat(f.total) || 0) * 100) / 100;
+  const varNueva = pNuevo ? (pNuevo.variantes || []).find(vv => vv.tamano === f.tamano) : null;
+  if (!pNuevo || !varNueva) { alert('Elige el perfume y la presentación.'); return; }
+  if (cant < 1) { alert('Las piezas deben ser 1 o más.'); return; }
+  if (total <= 0) { alert('El total cobrado debe ser mayor a 0.'); return; }
+  if (venta.aPagos) {
+    if (f.tamano !== 'Frasco completo') { alert('Una venta a pagos solo puede ser de Frasco completo.'); return; }
+    if (total < totalAbonado(venta)) { alert('El total no puede ser menor a lo que ya pagó el cliente (' + fmt(totalAbonado(venta)) + ').'); return; }
+  }
+  // La venta tiene que caer dentro del frasco actual del perfume al que se pasa;
+  // si no, no contaría para recuperar su costo.
+  const inicioCiclo = pNuevo.cicloInicio || pNuevo.creado || 0;
+  if (venta.fecha < inicioCiclo) {
+    alert('Esa venta es anterior al frasco actual de ese perfume, así que no se puede pasar ahí sin cambiar su fecha. Bórrala y regístrala de nuevo.');
+    return;
+  }
+  // Stock: se regresan las piezas de donde salieron y se revisa el nuevo lugar.
+  const varVieja = pViejo ? (pViejo.variantes || []).find(vv => vv.tamano === venta.tamano) : null;
+  const stockAntes = varVieja && typeof varVieja.stock === 'number' ? varVieja.stock : null;
+  if (stockAntes !== null) varVieja.stock += venta.cantidad;
+  if (typeof varNueva.stock === 'number' && cant > varNueva.stock) {
+    if (stockAntes !== null) varVieja.stock = stockAntes; // se deshace
+    alert('No hay piezas suficientes en el stock de esa presentación (quedan ' + varNueva.stock + ').');
+    return;
+  }
+  if (typeof varNueva.stock === 'number') varNueva.stock -= cant;
+  // Se saca la venta un momento para que no cuente dos veces al recalcular.
+  state.ventas.splice(idx, 1);
+  const insumos = Math.round(Math.min(total, costoInsumos(f.tamano) * cant, calcularCapitalInsumos().faltante) * 100) / 100;
+  const comision = Math.min(total, venta.comision || 0);
+  const { ingresoAcumulado } = calcularCicloPerfume(pNuevo);
+  const costoRestante = Math.max(0, (pNuevo.precioCosto || 0) - ingresoAcumulado);
+  venta.productoId = pNuevo.id;
+  venta.tamano = f.tamano;
+  venta.cantidad = cant;
+  venta.total = total;
+  venta.insumos = insumos;
+  venta.comision = comision;
+  venta.ganancia = Math.round(Math.max(0, total - insumos - comision - costoRestante) * 100) / 100;
+  state.ventas.splice(idx, 0, venta);
+  guardarLocal();
+  state.modalEditarVenta = null;
+  render();
+}
+function renderModalEditarVenta() {
+  if (!state.modalEditarVenta) return '';
+  const venta = state.ventas.find(x => x.id === state.modalEditarVenta);
+  if (!venta) return '';
+  const f = state.formEditarVenta;
+  const perfumes = state.productos.filter(pp => pp.categoria === 'perfumes').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const pSel = state.productos.find(pp => pp.id === f.productoId);
+  const variantes = pSel ? (pSel.variantes || []).filter(v => TAMANOS_PERFUME.includes(v.tamano) && (v.precioVenta > 0 || (pSel.id === venta.productoId && v.tamano === venta.tamano))) : [];
+  const fecha = new Date(venta.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+  const hora = new Date(venta.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  return `<div class="modal-overlay" data-action="cerrarModalEditarVenta">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Editar venta</h3>
+        <button class="close-btn" data-action="cerrarModalEditarVenta">✕</button>
+      </div>
+      <div class="modal-subtitle">${fecha} ${hora}${venta.cliente ? ' · ' + esc(venta.cliente) : ''}</div>
+      <div class="campo">
+        <div class="campo-label"><label>Perfume</label></div>
+        <select class="input" onchange="cambiarEditarVenta('productoId', this.value)">
+          ${perfumes.map(pp => `<option value="${esc(pp.id)}" ${pp.id === f.productoId ? 'selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>Presentación</label></div>
+        <select class="input" onchange="cambiarEditarVenta('tamano', this.value)">
+          ${variantes.map(v => `<option value="${esc(v.tamano)}" ${v.tamano === f.tamano ? 'selected' : ''}>${esc(v.tamano)} · ${fmt(v.precioVenta)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>Piezas</label></div>
+        <input class="input" type="number" inputmode="numeric" min="1" value="${esc(f.cantidad)}" oninput="actualizarEditarVentaCantidad(this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>Total cobrado ($)</label><span class="hint">Se conserva lo cobrado, salvo que cambies presentación o piezas</span></div>
+        <input class="input" id="editar-total" type="number" inputmode="decimal" value="${esc(f.total)}" oninput="actualizarEditarVentaTotal(this.value)" />
+      </div>
+      <div style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.4">La fecha, el cliente y los abonos se conservan. El stock y la ganancia se recalculan con el perfume que elijas.</div>
+      <button class="guardar-btn" data-action="guardarEditarVenta">✓ Guardar cambios</button>
     </div>
   </div>`;
 }
@@ -2706,7 +2858,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada() + renderModalClientesFrascos() + renderModalDatosCliente() + renderModalAbono();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada() + renderModalClientesFrascos() + renderModalDatosCliente() + renderModalEditarVenta() + renderModalAbono();
   bindEvents();
 }
 
@@ -3437,6 +3589,7 @@ function renderVentaRow(v) {
         ${montoTxt}
       </div>
       ${!v.esAbono && aPagos ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${real.id}" title="${saldo > 0 ? 'Registrar abono' : 'Ver pagos y datos del cliente'}">${saldo > 0 ? '💵' : '📋'}</button>` : ''}
+      ${esAdmin && !v.esAbono && esVentaEditable(real) ? `<button class="icon-btn" style="margin-left:6px; flex-shrink:0" data-action="abrirModalEditarVenta" data-vid="${real.id}" title="Editar venta">✏️</button>` : ''}
       ${esAdmin && !v.esAbono ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
     </div>
   `;
@@ -4890,6 +5043,14 @@ function handleClick(e) {
       if (e.target === e.currentTarget) cerrarModalDatosCliente();
       break;
     case 'guardarDatosCliente': guardarDatosCliente(); break;
+    case 'abrirModalEditarVenta':
+      e.stopPropagation();
+      abrirModalEditarVenta(d.vid);
+      break;
+    case 'cerrarModalEditarVenta':
+      if (e.target === e.currentTarget) cerrarModalEditarVenta();
+      break;
+    case 'guardarEditarVenta': guardarEditarVenta(); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
     case 'abrirScannerAsignar': abrirScannerAsignar(); break;
     case 'cerrarScanner':
