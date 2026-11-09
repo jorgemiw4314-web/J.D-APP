@@ -435,7 +435,7 @@ let state = {
     variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
-  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' },
+  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' },
   modalAbono: null,
   formAbono: { monto: '' },
   scanner: null,
@@ -1163,6 +1163,32 @@ function calcularDisponibleAcumulado() {
   return { ganancia: Math.round(ganancia * 100) / 100, retirado: Math.round(retirado * 100) / 100, disponible: Math.round((ganancia - retirado) * 100) / 100 };
 }
 
+// Frascos completos vendidos mes por mes (últimos 12 meses). Cuenta la venta
+// en el mes en que se registró, aunque esté a pagos y aún no se liquide.
+function calcularFrascosCompletosPorMes() {
+  const hoy = new Date();
+  const meses = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const key = claveMes(d);
+    const ventasMes = state.ventas.filter(v => v.tamano === 'Frasco completo' && v.mes === key);
+    meses.push({ mes: formatoMesCorto(key), claveMes: key, cantidad: ventasMes.reduce((s, v) => s + (v.cantidad || 0), 0) });
+  }
+  return meses;
+}
+// Detalle por perfume de los frascos completos vendidos en un mes.
+function calcularFrascosCompletosDetalle(mesKey) {
+  const porPerfume = {};
+  state.ventas.filter(v => v.tamano === 'Frasco completo' && v.mes === mesKey).forEach(v => {
+    const p = state.productos.find(pp => pp.id === v.productoId);
+    const nombre = p ? p.nombre : 'Perfume eliminado';
+    if (!porPerfume[nombre]) porPerfume[nombre] = { cantidad: 0, clientes: [] };
+    porPerfume[nombre].cantidad += (v.cantidad || 0);
+    if (v.cliente) porPerfume[nombre].clientes.push(v.cliente);
+  });
+  return Object.entries(porPerfume).map(([nombre, d]) => ({ nombre, cantidad: d.cantidad, clientes: d.clientes })).sort((a, b) => b.cantidad - a.cantidad);
+}
+
 function calcularGastosMes(mesKey) {
   const delMes = state.gastos.filter(g => g.mes === mesKey);
   return {
@@ -1352,6 +1378,33 @@ function renderModalAbono() {
     </div>
   </div>`;
 }
+// WhatsApp del cliente de una venta a pagos. 10 dígitos = número de México
+// (se le antepone 52); si ya trae lada de país (11 a 15 dígitos) se respeta.
+function normalizarWhatsApp(texto) {
+  const d = String(texto || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.length === 10) return '52' + d;
+  if (d.length >= 11 && d.length <= 15) return d;
+  return '';
+}
+// Abre el chat de WhatsApp con un recordatorio del saldo. Si la venta aún no
+// tiene número (ventas anteriores), lo pide y lo guarda.
+function abrirWhatsAppCobro(ventaId) {
+  const v = state.ventas.find(vv => vv.id === ventaId);
+  if (!v) return;
+  let num = v.whatsapp || '';
+  if (!num) {
+    const r = prompt('WhatsApp de ' + (v.cliente || 'el cliente') + ' (10 dígitos, o con lada del país):', '');
+    if (r === null) return;
+    num = normalizarWhatsApp(r);
+    if (!num) { alert('Escribe un número válido.'); return; }
+    v.whatsapp = num;
+    guardarLocal();
+  }
+  const p = state.productos.find(pp => pp.id === v.productoId);
+  const msg = 'Hola' + (v.cliente ? ' ' + v.cliente : '') + ', te escribo de JD Perfumes. Te recuerdo tu saldo pendiente de ' + fmt(saldoVenta(v)) + (p ? ' del frasco ' + p.nombre : '') + ' (llevas pagado ' + fmt(totalAbonado(v)) + ' de ' + fmt(v.total) + '). ¡Gracias!';
+  window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(msg), '_blank');
+}
 // Tarjeta "Por cobrar" de la Tienda: frascos vendidos a pagos con saldo pendiente.
 function renderPorCobrar() {
   const lista = ventasPorCobrar();
@@ -1369,6 +1422,7 @@ function renderPorCobrar() {
           <div class="cliente-notas">Pagado ${fmt(totalAbonado(v))} de ${fmt(v.total)}</div>
         </div>
         <div class="monto mono" style="color:#f59e0b">${fmt(saldoVenta(v))}</div>
+        <button class="icon-btn" style="background:rgba(37,211,102,0.15); color:#25d366" data-action="abrirWhatsAppCobro" data-vid="${v.id}" title="${v.whatsapp ? 'Mandar recordatorio por WhatsApp' : 'Agregar WhatsApp'}">💬</button>
         <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalAbono" data-vid="${v.id}" title="Registrar abono">💵</button>
       </div>`;
     }).join('')}
@@ -1377,12 +1431,12 @@ function renderPorCobrar() {
 
 function abrirModalVenta(productoId, tamano) {
   state.modalVenta = { productoId, tamano: tamano || null };
-  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '' };
+  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' };
   render();
 }
 function cerrarModalVenta() {
   state.modalVenta = null;
-  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' };
+  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' };
   render();
 }
 function actualizarFormVenta(valor) {
@@ -1448,11 +1502,18 @@ function registrarVenta(productoId, tamano) {
   };
   // Frasco completo "por pagos": se guarda quién lo debe y los abonos que
   // lleva (el anticipo cuenta como el primer abono).
+  if (tamano === 'Frasco completo') {
+    const clienteNombre = (state.formVenta.cliente || '').trim();
+    if (clienteNombre) venta.cliente = clienteNombre;
+  }
   if (tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos') {
     const anticipo = Math.round((parseFloat(state.formVenta.anticipo) || 0) * 100) / 100;
     if (anticipo < 0 || anticipo > total) { alert('El anticipo no puede ser mayor al total.'); return; }
+    const wa = normalizarWhatsApp(state.formVenta.whatsapp);
+    if ((state.formVenta.whatsapp || '').trim() && !wa) { alert('El número de WhatsApp no parece válido. Escribe 10 dígitos (o con lada del país), o déjalo vacío.'); return; }
     venta.aPagos = true;
     venta.cliente = (state.formVenta.cliente || '').trim();
+    if (wa) venta.whatsapp = wa;
     venta.abonos = anticipo > 0 ? [{ id: 'ab_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), monto: anticipo, fecha: Date.now(), por: state.rol }] : [];
   }
   state.ventas.push(venta);
@@ -3228,6 +3289,9 @@ function renderVentaRow(v) {
   } else if (aPagos) {
     notaPagos = `<div class="cliente-notas" style="color:${saldo > 0 ? '#f59e0b' : '#10b981'}">💳 ${cliente}${saldo > 0 ? `Pagado ${fmt(totalAbonado(real))} · Debe ${fmt(saldo)}` : 'Liquidado ✅'}</div>`;
   }
+  if (!notaPagos && !aPagos && real && real.cliente) {
+    notaPagos = `<div class="cliente-notas">👤 ${esc(real.cliente)}</div>`;
+  }
   const montoTxt = v.pendienteReal
     ? `<div class="monto mono" style="color:#64748b">${fmt(real ? real.total : 0)}</div><div style="font-size:11px; color:#64748b; margin-top:2px">a pagos</div>`
     : `<div class="monto mono" style="color:#06b6d4">${fmt(v.total)}</div>${esAdmin ? `<div style="font-size:11px; color:#10b981; margin-top:2px">+${fmt(v.ganancia)}</div>` : ''}`;
@@ -3464,10 +3528,14 @@ function renderModalVenta() {
           <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.modoPago === 'pagos' ? '' : 'opacity:0.4'}" data-action="setModoPagoVenta" data-modo="pagos">💳 Por pagos</button>
         </div>
       </div>
+      <div class="campo">
+        <div class="campo-label"><label>Cliente</label><span class="hint">Opcional</span></div>
+        <input class="input" type="text" value="${esc(state.formVenta.cliente)}" placeholder="${state.formVenta.modoPago === 'pagos' ? 'Nombre de quien lo debe' : 'Nombre de quien lo compró'}" oninput="actualizarFormVentaCampo('cliente', this.value)" />
+      </div>
       ${state.formVenta.modoPago === 'pagos' ? `
       <div class="campo">
-        <div class="campo-label"><label>Cliente</label></div>
-        <input class="input" type="text" value="${esc(state.formVenta.cliente)}" placeholder="Nombre de quien lo debe" oninput="actualizarFormVentaCampo('cliente', this.value)" />
+        <div class="campo-label"><label>WhatsApp del cliente</label><span class="hint">Opcional</span></div>
+        <input class="input" type="tel" inputmode="tel" value="${esc(state.formVenta.whatsapp)}" placeholder="10 dígitos, ej. 9991234567" oninput="actualizarFormVentaCampo('whatsapp', this.value)" />
       </div>
       <div class="campo">
         <div class="campo-label"><label>Anticipo hoy ($)</label><span class="hint">Opcional</span></div>
@@ -3861,6 +3929,36 @@ function renderDashboard() {
       })()}
       ` : ''}
     </div>
+
+    ${(() => {
+      const fcMeses = calcularFrascosCompletosPorMes();
+      const fcActual = fcMeses[fcMeses.length - 1];
+      const fcDetalle = calcularFrascosCompletosDetalle(mesK);
+      const fcTotal = fcMeses.reduce((s, m) => s + m.cantidad, 0);
+      return `
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#a855f7">🍾</span> Frascos completos vendidos</div>
+      <div class="resumen" style="padding:0">
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#a855f7">Este mes</div>
+          <div class="resumen-value">${fcActual.cantidad} pza(s)</div>
+        </div>
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#94a3b8">Últimos 12 meses</div>
+          <div class="resumen-value">${fcTotal} pza(s)</div>
+        </div>
+      </div>
+      ${fcDetalle.length ? `<div style="margin-top:12px; font-size:13px; color:#94a3b8">
+        ${fcDetalle.map(f => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid rgba(148,163,184,0.12)"><span>${esc(f.nombre)}</span><span class="mono">${f.cantidad}</span></div>${f.clientes.length ? `<div class="cliente-notas" style="white-space:normal">👤 ${f.clientes.map(c => esc(c)).join(', ')}</div>` : ''}`).join('')}
+      </div>` : '<div class="vacio">Sin frascos completos vendidos este mes</div>'}
+      <div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(148,163,184,0.1)">
+        <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:6px">Por mes</div>
+        ${fcMeses.slice().reverse().map(m => `<div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0; color:${m.cantidad > 0 ? '#f1f5f9' : '#475569'}"><span>${esc(m.mes)}</span><span class="mono">${m.cantidad}</span></div>`).join('')}
+      </div>
+      <div class="cliente-notas" style="margin-top:10px; white-space:normal">Cuenta la venta en el mes en que se registró, aunque sea a pagos.</div>
+    </div>
+      `;
+    })()}
 
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#a855f7">🌸</span> Capital invertido en perfumes</div>
@@ -4718,6 +4816,10 @@ function handleClick(e) {
     case 'abrirModalAbono':
       e.stopPropagation();
       abrirModalAbono(d.vid);
+      break;
+    case 'abrirWhatsAppCobro':
+      e.stopPropagation();
+      abrirWhatsAppCobro(d.vid);
       break;
     case 'cerrarModalAbono':
       if (e.target === e.currentTarget) cerrarModalAbono();
