@@ -1181,13 +1181,28 @@ function calcularCajaPorMes() {
     const gastos = calcularGastosMes(key).total;
     const comision = redondear(pagosCom.filter(c => delMes(c.fecha)).reduce((a, c) => a + (c.monto || 0), 0));
     const salidas = comprasPerfumes + retirosGanancia + insumos + gastos + comision;
+    const caja = redondear(m.cobrado - salidas);
+    // De lo que hay en caja, cuánto es ganancia tuya (ganancia real del mes menos
+    // lo que sacaste de ella) y cuánto es dinero para reinvertir. Aproximado,
+    // porque la ganancia se calcula venta por venta.
+    const gananciaEnCaja = redondear((m.ganancia || 0) - gastos - retirosGanancia);
     return {
       mes: m.mes, claveMes: key, cobrado: m.cobrado,
       comprasPerfumes, retirosGanancia, insumos, gastos, comision,
-      caja: redondear(m.cobrado - salidas),
+      caja, gananciaEnCaja, paraReinvertir: redondear(caja - gananciaEnCaja),
       hayMovimiento: m.cobrado > 0 || salidas > 0
     };
   });
+}
+function renderSeparacionCaja(m) {
+  const col = (n) => n >= 0 ? '#10b981' : '#ef4444';
+  const fila = (txt, val) => `<div style="display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:13px; color:#cbd5e1"><span>${txt}</span><span class="mono" style="color:${col(val)}; white-space:nowrap">${fmt(val)}</span></div>`;
+  return `<div style="margin-top:10px; padding:10px 12px; border-radius:12px; background:rgba(251,191,36,0.06); border:1px solid rgba(251,191,36,0.2)">
+    <div style="font-size:12px; font-weight:700; color:#fbbf24; margin-bottom:4px">De lo que hay en caja</div>
+    ${fila('Tu ganancia', m.gananciaEnCaja)}
+    ${fila('Para reinvertir (frascos, insumos)', m.paraReinvertir)}
+    <div class="cliente-notas" style="white-space:normal; margin-top:4px">Aproximado: la ganancia se calcula venta por venta.</div>
+  </div>`;
 }
 function renderLineasCaja(m, mostrarCeros) {
   const fila = (txt, val, color) => `<div style="display:flex; justify-content:space-between; gap:12px; padding:3px 0; font-size:13px; color:#94a3b8"><span>${txt}</span><span class="mono" style="color:${color}; white-space:nowrap">${val}</span></div>`;
@@ -3850,7 +3865,60 @@ function renderModalScanner() {
   </div>`;
 }
 
+// ============== DASHBOARD COMPACTO ==============
+// Para que el Dashboard no sea un scroll larguísimo: las tarjetas se muestran
+// como acordeón (cerradas, solo el título) y las más usadas suben al inicio.
+const DASH_ORDEN = ['Caja del mes', 'Retiros / Reinversión', 'Gastos / Compras varias', 'Meta del mes', 'Frascos completos vendidos'];
+const DASH_ABIERTAS = ['Caja del mes'];
+function toggleDash(key, abiertoDefecto) {
+  const actual = state.expandido[key] !== undefined ? state.expandido[key] : abiertoDefecto;
+  state.expandido[key] = !actual;
+  render();
+}
+function acordeonarDashboard(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html;
+  const raiz = t.content.firstElementChild;
+  if (!raiz) return html;
+  const tituloDe = (card) => { const ti = card.querySelector(':scope > .dashboard-title'); return ti ? ti.textContent.replace(/\s+/g, ' ').trim() : ''; };
+  // Subir las tarjetas más usadas justo debajo del primer resumen
+  let ancla = raiz.querySelector(':scope > .resumen');
+  const tarjetas0 = Array.from(raiz.querySelectorAll(':scope > .dashboard-card'));
+  if (ancla) {
+    DASH_ORDEN.forEach(prefijo => {
+      const c = tarjetas0.find(x => tituloDe(x).includes(prefijo));
+      if (c) { ancla.after(c); ancla = c; }
+    });
+  }
+  // Convertir cada tarjeta en acordeón (salvo las que ya tienen su propio click)
+  Array.from(raiz.querySelectorAll(':scope > .dashboard-card')).forEach(card => {
+    const ti = card.querySelector(':scope > .dashboard-title');
+    if (!ti || card.hasAttribute('data-action') || ti.hasAttribute('data-action')) return;
+    const nombre = tituloDe(card);
+    const key = 'dash_' + nombre.replace(/[^A-Za-z0-9ÁÉÍÓÚáéíóúñÑ]+/g, '_').slice(0, 40);
+    const defecto = DASH_ABIERTAS.some(pf => nombre.includes(pf));
+    const abierto = state.expandido[key] !== undefined ? state.expandido[key] : defecto;
+    ti.setAttribute('data-action', 'toggleDash');
+    ti.setAttribute('data-key', key);
+    ti.setAttribute('data-def', defecto ? '1' : '0');
+    ti.style.cursor = 'pointer';
+    if (!abierto) ti.style.marginBottom = '0';
+    const flecha = document.createElement('span');
+    flecha.setAttribute('style', 'margin-left:auto; font-size:13px; color:#64748b');
+    flecha.textContent = abierto ? '▼' : '▶';
+    ti.appendChild(flecha);
+    const cuerpo = document.createElement('div');
+    if (!abierto) cuerpo.style.display = 'none';
+    while (ti.nextSibling) cuerpo.appendChild(ti.nextSibling);
+    card.appendChild(cuerpo);
+  });
+  return t.innerHTML;
+}
 function renderDashboard() {
+  return acordeonarDashboard(renderDashboardBase());
+}
+
+function renderDashboardBase() {
   const datos = calcularDatosMensuales();
   const conDatos = datos.filter(m => m.ganancia !== 0);
   const totalAnual = conDatos.reduce((s,m)=>s+m.ganancia,0);
@@ -4302,6 +4370,7 @@ function renderDashboard() {
         </div>
       </div>
       <div style="margin-top:12px">${renderLineasCaja(cajaActual, true)}</div>
+      ${renderSeparacionCaja(cajaActual)}
       ${cajaPrevios.length ? `
       <div style="margin-top:14px; padding-top:8px; border-top:1px solid rgba(148,163,184,0.1)">
         <div style="font-size:13px; font-weight:700; color:#94a3b8; margin:6px 0">Meses anteriores</div>
@@ -4312,7 +4381,7 @@ function renderDashboard() {
           <div data-action="toggleExp" data-key="caja_${m.claveMes}" style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; font-size:14px; cursor:pointer; color:#f1f5f9">
             <span>${abierto ? '▼' : '▶'} ${esc(m.mes)}</span><span class="mono" style="color:${colorCaja(m.caja)}">${fmt(m.caja)}</span>
           </div>
-          ${abierto ? `<div style="padding:0 0 10px 18px">${renderLineasCaja(m, false)}</div>` : ''}
+          ${abierto ? `<div style="padding:0 0 10px 18px">${renderLineasCaja(m, false)}${renderSeparacionCaja(m)}</div>` : ''}
         </div>`;
         }).join('')}
       </div>` : ''}
@@ -4967,6 +5036,9 @@ function handleClick(e) {
     case 'editarClienteVenta':
       e.stopPropagation();
       editarClienteVenta(d.vid);
+      break;
+    case 'toggleDash':
+      toggleDash(d.key, d.def === '1');
       break;
     case 'cerrarModalAbono':
       if (e.target === e.currentTarget) cerrarModalAbono();
