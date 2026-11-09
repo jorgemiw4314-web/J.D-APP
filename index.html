@@ -3999,16 +3999,6 @@ function renderDashboardBase() {
     </div>
 
     <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#10b981">📈</span> Ganancia mensual</div>
-      ${renderLineChart(datos)}
-    </div>
-
-    <div class="dashboard-card">
-      <div class="dashboard-title"><span style="color:#06b6d4">📊</span> Cobrado vs Costo (6 meses)</div>
-      ${renderBarChart(datos.slice(-6))}
-    </div>
-
-    <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#f59e0b">🗓️</span> Ventas por día (tienda, este mes)</div>
       ${totalPiezasMes === 0 ? '<div class="vacio">Aún no hay ventas de tienda este mes</div>' : `
       <div class="resumen-card destacado" style="margin-bottom:14px; cursor:pointer" data-action="abrirModalVentasDia" data-fecha="${ventasHoy.fecha}">
@@ -4017,7 +4007,6 @@ function renderDashboardBase() {
         <div class="resumen-sub">${fmt(ventasHoy.vendido)} · +${fmt(ventasHoy.ganancia)} ganancia</div>
         <div class="resumen-sub" style="color:#f59e0b">toca para ver el detalle</div>
       </div>
-      ${renderBarChartDias(ventasPorDia)}
       <div style="text-align:right; font-size:12px; color:#64748b; margin-top:10px; padding-top:10px; border-top:1px solid rgba(148,163,184,0.1)">
         Total del mes: <span style="color:#f1f5f9; font-weight:700">${totalPiezasMes} pza(s) · ${fmt(totalVendidoMes)}</span>
       </div>
