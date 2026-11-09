@@ -1387,6 +1387,30 @@ function normalizarWhatsApp(texto) {
   if (d.length >= 11 && d.length <= 15) return d;
   return '';
 }
+// Corrige el nombre del cliente (y el WhatsApp si es venta a pagos) de una
+// venta de Frasco completo ya registrada. Solo el Admin.
+function editarClienteVenta(ventaId) {
+  if (state.rol !== 'admin') return;
+  const v = state.ventas.find(x => x.id === ventaId);
+  if (!v) return;
+  const r = prompt('Cliente que compró este frasco (déjalo vacío para quitar el nombre):', v.cliente || '');
+  if (r === null) return;
+  const nombre = r.trim();
+  if (nombre) v.cliente = nombre; else delete v.cliente;
+  if (v.aPagos) {
+    const w = prompt('WhatsApp del cliente (10 dígitos, o con lada del país; vacío para quitarlo):', v.whatsapp || '');
+    if (w !== null) {
+      if (!w.trim()) {
+        delete v.whatsapp;
+      } else {
+        const n = normalizarWhatsApp(w);
+        if (n) v.whatsapp = n; else alert('El número no parece válido; se dejó el que tenía.');
+      }
+    }
+  }
+  guardarLocal();
+  render();
+}
 // Abre el chat de WhatsApp con un recordatorio del saldo. Si la venta aún no
 // tiene número (ventas anteriores), lo pide y lo guarda.
 function abrirWhatsAppCobro(ventaId) {
@@ -1422,6 +1446,7 @@ function renderPorCobrar() {
           <div class="cliente-notas">Pagado ${fmt(totalAbonado(v))} de ${fmt(v.total)}</div>
         </div>
         <div class="monto mono" style="color:#f59e0b">${fmt(saldoVenta(v))}</div>
+        ${state.rol === 'admin' ? `<button class="icon-btn" data-action="editarClienteVenta" data-vid="${v.id}" title="Editar cliente">✎</button>` : ''}
         <button class="icon-btn" style="background:rgba(37,211,102,0.15); color:#25d366" data-action="abrirWhatsAppCobro" data-vid="${v.id}" title="${v.whatsapp ? 'Mandar recordatorio por WhatsApp' : 'Agregar WhatsApp'}">💬</button>
         <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalAbono" data-vid="${v.id}" title="Registrar abono">💵</button>
       </div>`;
@@ -3306,6 +3331,7 @@ function renderVentaRow(v) {
       <div class="cliente-pago">
         ${montoTxt}
       </div>
+      ${esAdmin && real && real.tamano === 'Frasco completo' && !v.esAbono ? `<button class="icon-btn" style="margin-left:6px; flex-shrink:0" data-action="editarClienteVenta" data-vid="${real.id}" title="Editar cliente">✎</button>` : ''}
       ${!v.esAbono && aPagos && saldo > 0 ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${real.id}" title="Registrar abono">💵</button>` : ''}
       ${esAdmin && !v.esAbono ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
     </div>
@@ -3933,8 +3959,9 @@ function renderDashboard() {
     ${(() => {
       const fcMeses = calcularFrascosCompletosPorMes();
       const fcActual = fcMeses[fcMeses.length - 1];
-      const fcDetalle = calcularFrascosCompletosDetalle(mesK);
       const fcTotal = fcMeses.reduce((s, m) => s + m.cantidad, 0);
+      // Solo se listan los meses con ventas (y el mes actual, aunque esté en 0).
+      const fcFilas = fcMeses.slice().reverse().filter((m, i) => i === 0 || m.cantidad > 0);
       return `
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#a855f7">🍾</span> Frascos completos vendidos</div>
@@ -3948,14 +3975,22 @@ function renderDashboard() {
           <div class="resumen-value">${fcTotal} pza(s)</div>
         </div>
       </div>
-      ${fcDetalle.length ? `<div style="margin-top:12px; font-size:13px; color:#94a3b8">
-        ${fcDetalle.map(f => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid rgba(148,163,184,0.12)"><span>${esc(f.nombre)}</span><span class="mono">${f.cantidad}</span></div>${f.clientes.length ? `<div class="cliente-notas" style="white-space:normal">👤 ${f.clientes.map(c => esc(c)).join(', ')}</div>` : ''}`).join('')}
-      </div>` : '<div class="vacio">Sin frascos completos vendidos este mes</div>'}
-      <div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(148,163,184,0.1)">
-        <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:6px">Por mes</div>
-        ${fcMeses.slice().reverse().map(m => `<div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0; color:${m.cantidad > 0 ? '#f1f5f9' : '#475569'}"><span>${esc(m.mes)}</span><span class="mono">${m.cantidad}</span></div>`).join('')}
+      <div style="margin-top:12px">
+        ${fcFilas.map(m => {
+          const hay = m.cantidad > 0;
+          const abierto = hay && !!state.expandido['fc_' + m.claveMes];
+          const det = abierto ? calcularFrascosCompletosDetalle(m.claveMes) : [];
+          return `
+        <div style="border-top:1px solid rgba(148,163,184,0.12)">
+          <div ${hay ? `data-action="toggleExp" data-key="fc_${m.claveMes}"` : ''} style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; font-size:14px; cursor:${hay ? 'pointer' : 'default'}; color:${hay ? '#f1f5f9' : '#64748b'}">
+            <span>${hay ? (abierto ? '▼' : '▶') : '·'} ${esc(m.mes)}</span><span class="mono">${m.cantidad}</span>
+          </div>
+          ${abierto ? `<div style="padding:0 0 10px 18px; font-size:13px; color:#94a3b8">
+            ${det.map(f => `<div style="display:flex; justify-content:space-between; padding:3px 0"><span>${esc(f.nombre)}</span><span class="mono">${f.cantidad}</span></div>${f.clientes.length ? `<div class="cliente-notas" style="white-space:normal">👤 ${f.clientes.map(c => esc(c)).join(', ')}</div>` : ''}`).join('')}
+          </div>` : ''}
+        </div>`;
+        }).join('')}
       </div>
-      <div class="cliente-notas" style="margin-top:10px; white-space:normal">Cuenta la venta en el mes en que se registró, aunque sea a pagos.</div>
     </div>
       `;
     })()}
@@ -4820,6 +4855,10 @@ function handleClick(e) {
     case 'abrirWhatsAppCobro':
       e.stopPropagation();
       abrirWhatsAppCobro(d.vid);
+      break;
+    case 'editarClienteVenta':
+      e.stopPropagation();
+      editarClienteVenta(d.vid);
       break;
     case 'cerrarModalAbono':
       if (e.target === e.currentTarget) cerrarModalAbono();
