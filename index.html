@@ -450,7 +450,7 @@ let state = {
   modalGasto: false,
   formGasto: { descripcion: '', monto: '' },
   modalRetiro: false,
-  formRetiro: { descripcion: '', monto: '' },
+  formRetiro: { descripcion: '', monto: '', origen: 'recuperado' },
   modalVentaPersonalizada: null, // productoId del perfume, o null si está cerrado
   formVentaPersonalizada: { descripcion: '', monto: '' }
 };
@@ -1109,7 +1109,7 @@ function obtenerRetiros() {
 }
 function abrirModalRetiro() {
   if (state.rol !== 'admin') return;
-  state.formRetiro = { descripcion: '', monto: '' };
+  state.formRetiro = { descripcion: '', monto: '', origen: 'recuperado' };
   state.modalRetiro = true;
   render();
 }
@@ -1129,6 +1129,7 @@ function guardarRetiro() {
     id: 'r_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     descripcion,
     monto: Math.round(monto * 100) / 100,
+    origen: state.formRetiro.origen === 'ganancia' ? 'ganancia' : 'recuperado',
     fecha: Date.now(),
     mes: claveMes(new Date())
   }];
@@ -1144,8 +1145,11 @@ function eliminarRetiro(id) {
 }
 function calcularRetirosMes(mesKey) {
   const delMes = obtenerRetiros().filter(r => r.mes === mesKey);
+  const suma = (arr) => Math.round(arr.reduce((s, r) => s + r.monto, 0) * 100) / 100;
   return {
-    total: Math.round(delMes.reduce((s, r) => s + r.monto, 0) * 100) / 100,
+    total: suma(delMes),
+    deRecuperado: suma(delMes.filter(r => r.origen === 'recuperado')),
+    deGanancia: suma(delMes.filter(r => r.origen !== 'recuperado')),
     lista: delMes.sort((a, b) => b.fecha - a.fecha)
   };
 }
@@ -1155,7 +1159,7 @@ function calcularDisponibleAcumulado() {
   const meses = calcularGananciaRealPorMes();
   const claves = new Set(meses.map(m => m.claveMes));
   const ganancia = meses.reduce((s, m) => s + m.gananciaReal, 0);
-  const retirado = obtenerRetiros().filter(r => claves.has(r.mes)).reduce((s, r) => s + r.monto, 0);
+  const retirado = obtenerRetiros().filter(r => claves.has(r.mes) && r.origen !== 'recuperado').reduce((s, r) => s + r.monto, 0);
   return { ganancia: Math.round(ganancia * 100) / 100, retirado: Math.round(retirado * 100) / 100, disponible: Math.round((ganancia - retirado) * 100) / 100 };
 }
 
@@ -2145,10 +2149,15 @@ function calcularCapitalPerfumes() {
     const { ingresoAcumulado } = calcularCicloPerfume(p);
     recuperado += Math.min(ingresoAcumulado, costo);
   });
-  const faltante = Math.max(0, invertido - recuperado);
+  // Lo que sacaste de lo recuperado (p. ej. para comprar perfumes nuevos) ya
+  // no está disponible como recuperado: se resta, sin bajar de 0.
+  const retirosRecuperado = obtenerRetiros().filter(r => r.origen === 'recuperado').reduce((s, r) => s + r.monto, 0);
+  const recuperadoNeto = Math.max(0, recuperado - retirosRecuperado);
+  const faltante = Math.max(0, invertido - recuperadoNeto);
   return {
     invertido: Math.round(invertido * 100) / 100,
-    recuperado: Math.round(recuperado * 100) / 100,
+    recuperado: Math.round(recuperadoNeto * 100) / 100,
+    retirado: Math.round(Math.min(recuperado, retirosRecuperado) * 100) / 100,
     faltante: Math.round(faltante * 100) / 100
   };
 }
@@ -3278,6 +3287,13 @@ function renderModalRetiro() {
         <div class="campo-label"><label>¿Cuánto sacaste? ($)</label></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormRetiro('monto', this.value)" />
       </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿De dónde sale este dinero?</label></div>
+        <select class="input" onchange="actualizarFormRetiro('origen', this.value)">
+          <option value="recuperado" ${f.origen !== 'ganancia' ? 'selected' : ''}>De lo recuperado (reinversión en perfumes)</option>
+          <option value="ganancia" ${f.origen === 'ganancia' ? 'selected' : ''}>De mi ganancia</option>
+        </select>
+      </div>
       <button class="guardar-btn" onclick="guardarRetiro()">✓ Guardar retiro</button>
     </div>
   </div>`;
@@ -3857,6 +3873,7 @@ function renderDashboard() {
         <div class="resumen-card">
           <div class="resumen-label" style="color:#10b981">Recuperado</div>
           <div class="resumen-value" style="color:#10b981">${fmt(capitalPerfumes.recuperado)}</div>
+          ${capitalPerfumes.retirado > 0 ? `<div class="resumen-sub">Ya sin ${fmt(capitalPerfumes.retirado)} de retiros</div>` : ''}
         </div>
         <div class="resumen-card destacado" style="grid-column: span 2">
           <div class="resumen-label" style="color:#fbbf24">Falta por recuperar</div>
@@ -4019,18 +4036,18 @@ function renderDashboard() {
       const retirosMes = calcularRetirosMes(mesK);
       const gastosMesR = calcularGastosMes(mesK);
       const gananciaRealR = Math.round((flujoMesActual.ganancia - gastosMesR.total) * 100) / 100;
-      const quedaMes = Math.round((gananciaRealR - retirosMes.total) * 100) / 100;
+      const quedaMes = Math.round((gananciaRealR - retirosMes.deGanancia) * 100) / 100;
       const acum = calcularDisponibleAcumulado();
       return `
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#38bdf8">💼</span> Retiros / Reinversión (este mes)</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Dinero que sacas de tu ganancia (por ejemplo, para comprar perfumes nuevos). No cambia tu ganancia ni tus ventas: solo se resta de lo que te queda, para que el corte cuadre. No registres aquí lo que ya anotaste como gasto.</p>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Dinero que sacas para comprar perfumes nuevos u otros usos. Si sale de lo recuperado, se quita de Recuperado en Capital invertido; si sale de tu ganancia, se resta de Te queda. No cambia tus ventas. No registres aquí lo que ya anotaste como gasto.</p>
       ${retirosMes.lista.length === 0 ? '<div class="vacio">Sin retiros registrados este mes</div>' :
         retirosMes.lista.map(r => `
         <div class="cliente" style="margin-bottom:8px">
           <div class="cliente-info">
             <div class="nombre">${esc(r.descripcion)}</div>
-            <div class="cliente-notas">${new Date(r.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</div>
+            <div class="cliente-notas">${new Date(r.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${r.origen === 'recuperado' ? 'de lo recuperado' : 'de la ganancia'}</div>
           </div>
           <div class="monto mono" style="color:#38bdf8">-${fmt(r.monto)}</div>
           <button class="icon-btn delete" data-action="eliminarRetiro" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
@@ -4044,15 +4061,19 @@ function renderDashboard() {
         <div class="resumen-card">
           <div class="resumen-label" style="color:#38bdf8">Retirado del mes</div>
           <div class="resumen-value" style="color:#38bdf8">-${fmt(retirosMes.total)}</div>
+          ${retirosMes.total > 0 ? `<div class="resumen-sub">${fmt(retirosMes.deRecuperado)} de recuperado · ${fmt(retirosMes.deGanancia)} de ganancia</div>` : ''}
         </div>
         <div class="resumen-card destacado">
           <div class="resumen-label" style="color:#10b981">Te queda del mes</div>
           <div class="resumen-value" style="color:${quedaMes >= 0 ? '#10b981' : '#ef4444'}">${fmt(quedaMes)}</div>
-          <div class="resumen-sub">Ganancia real menos retiros</div>
+          <div class="resumen-sub">Ganancia real menos lo que sacaste de ella</div>
         </div>
       </div>
-      <div class="cliente-notas" style="margin-top:12px">
-        Acumulado (últimos 12 meses): ganancia real ${fmt(acum.ganancia)} − retiros ${fmt(acum.retirado)} = <b style="color:${acum.disponible >= 0 ? '#10b981' : '#ef4444'}">${fmt(acum.disponible)}</b>
+      <div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(148,163,184,0.1); font-size:12px; color:#94a3b8; line-height:1.6">
+        <div style="font-weight:700; margin-bottom:4px">Acumulado (últimos 12 meses)</div>
+        <div>Ganancia real: ${fmt(acum.ganancia)}</div>
+        <div>Retiros: -${fmt(acum.retirado)}</div>
+        <div style="font-weight:700; color:${acum.disponible >= 0 ? '#10b981' : '#ef4444'}">Te queda: ${fmt(acum.disponible)}</div>
       </div>
     </div>
       `;
