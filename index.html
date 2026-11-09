@@ -17,10 +17,7 @@
 <link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
 <title>J.D Ventas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Las fuentes cargan sin bloquear la app: si el internet del celular está lento, la app abre igual con la letra del sistema -->
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<noscript><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
 <script type="module">
   // Conexión a Firebase / Firestore: guarda una copia de los datos en la nube
@@ -438,19 +435,11 @@ let state = {
     variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
-  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', telefono: '' },
+  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' },
   modalAbono: null,
-  formAbono: { monto: '', telefono: '' },
+  formAbono: { monto: '' },
   scanner: null,
   modalVentasSemana: false,
-  modalVentasMes: false,
-  modalClientesFrascos: false,
-  clienteFrascoAbierto: null,
-  modalDatosCliente: null,
-  modalEditarVenta: null,
-  formEditarVenta: { productoId: '', tamano: '', cantidad: '', total: '', totalManual: false },
-  formDatosCliente: { cliente: '', telefono: '' },
-  semanaMesAbierta: null,
   modalVentasHoy: false,
   modalVentasDia: null,
   modalCierreMes: false,
@@ -460,6 +449,8 @@ let state = {
   busquedaProductos: '', // texto para filtrar Productos/Perfumes por nombre
   modalGasto: false,
   formGasto: { descripcion: '', monto: '' },
+  modalRetiro: false,
+  formRetiro: { descripcion: '', monto: '' },
   modalVentaPersonalizada: null, // productoId del perfume, o null si está cerrado
   formVentaPersonalizada: { descripcion: '', monto: '' }
 };
@@ -1108,6 +1099,66 @@ function eliminarGasto(id) {
   guardarLocal();
   render();
 }
+// ============== RETIROS / REINVERSIÓN ==============
+// Dinero que sacas de la ganancia (para comprar perfumes nuevos, uso personal,
+// etc.). NO cambia la ganancia ni las ventas: solo se resta del dinero que
+// "te queda" de la ganancia real, para que el corte cuadre. Se guarda dentro
+// de config.retiros para que se respalde y sincronice igual que lo demás.
+function obtenerRetiros() {
+  return (state.config && Array.isArray(state.config.retiros)) ? state.config.retiros : [];
+}
+function abrirModalRetiro() {
+  if (state.rol !== 'admin') return;
+  state.formRetiro = { descripcion: '', monto: '' };
+  state.modalRetiro = true;
+  render();
+}
+function cerrarModalRetiro() {
+  state.modalRetiro = false;
+  render();
+}
+function actualizarFormRetiro(campo, valor) {
+  state.formRetiro[campo] = valor;
+}
+function guardarRetiro() {
+  if (state.rol !== 'admin') return;
+  const descripcion = state.formRetiro.descripcion.trim();
+  const monto = parseFloat(state.formRetiro.monto) || 0;
+  if (!descripcion || monto <= 0) return;
+  state.config.retiros = [...obtenerRetiros(), {
+    id: 'r_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+    descripcion,
+    monto: Math.round(monto * 100) / 100,
+    fecha: Date.now(),
+    mes: claveMes(new Date())
+  }];
+  guardarLocal();
+  cerrarModalRetiro();
+}
+function eliminarRetiro(id) {
+  if (state.rol !== 'admin') return;
+  if (!confirm('¿Eliminar este retiro?')) return;
+  state.config.retiros = obtenerRetiros().filter(r => r.id !== id);
+  guardarLocal();
+  render();
+}
+function calcularRetirosMes(mesKey) {
+  const delMes = obtenerRetiros().filter(r => r.mes === mesKey);
+  return {
+    total: Math.round(delMes.reduce((s, r) => s + r.monto, 0) * 100) / 100,
+    lista: delMes.sort((a, b) => b.fecha - a.fecha)
+  };
+}
+// Lo que te queda de la ganancia real de los últimos 12 meses después de
+// todos los retiros de esos mismos meses (arrastra lo de meses anteriores).
+function calcularDisponibleAcumulado() {
+  const meses = calcularGananciaRealPorMes();
+  const claves = new Set(meses.map(m => m.claveMes));
+  const ganancia = meses.reduce((s, m) => s + m.gananciaReal, 0);
+  const retirado = obtenerRetiros().filter(r => claves.has(r.mes)).reduce((s, r) => s + r.monto, 0);
+  return { ganancia: Math.round(ganancia * 100) / 100, retirado: Math.round(retirado * 100) / 100, disponible: Math.round((ganancia - retirado) * 100) / 100 };
+}
+
 function calcularGastosMes(mesKey) {
   const delMes = state.gastos.filter(g => g.mes === mesKey);
   return {
@@ -1187,11 +1238,7 @@ function eliminarVenta(ventaId) {
   if (!confirm('¿Eliminar esta venta? Es para corregir un cobro por error o duplicado. Esta acción no se puede deshacer.')) return;
   const p = state.productos.find(pp => pp.id === venta.productoId);
   if (p && !venta.tamano && p.stock != null) {
-    p.stock += venta.cantidad; // se regresan las piezas al stock de un producto general
-  } else if (p && venta.tamano) {
-    // Perfumes: se regresa a la presentación (p. ej. Frasco completo) que lleva conteo de piezas
-    const pres = (p.variantes || []).find(vv => vv.tamano === venta.tamano);
-    if (pres && typeof pres.stock === 'number') pres.stock += venta.cantidad;
+    p.stock += venta.cantidad; // se regresan las piezas al stock (solo aplica a productos generales)
   }
   state.ventas = state.ventas.filter(v => v.id !== ventaId);
   // Dejamos marcada esta venta como borrada (no solo la quitamos del arreglo)
@@ -1250,358 +1297,12 @@ function ventasEfectivas() {
   });
   return out;
 }
-// WhatsApp: acepta 10 dígitos (se le agrega la lada de México, 52) o un número
-// con su lada. Devuelve '' si está vacío y null si no es válido.
-function normalizarWhatsApp(raw) {
-  const d = String(raw || '').replace(/\D/g, '');
-  if (!d) return '';
-  if (d.length === 10) return '52' + d;
-  if (d.length === 12 && d.startsWith('52')) return d;
-  if (d.length === 13 && d.startsWith('521')) return '52' + d.slice(3);
-  if (d.length >= 11 && d.length <= 15 && !d.startsWith('52')) return d;
-  return null;
-}
-function telefonoMostrar(t) { return t && t.length === 12 && t.startsWith('52') ? t.slice(2) : (t || ''); }
-function linkWhatsAppCobro(v) {
-  if (!v || !v.telefono) return '';
-  const p = state.productos.find(pp => pp.id === v.productoId);
-  const saldo = saldoVenta(v);
-  const texto = 'Hola' + (v.cliente ? ' ' + v.cliente : '') + ', te escribo de J.D Perfumes. ' +
-    (saldo > 0 ? 'Tu saldo pendiente de ' + (p ? p.nombre : 'tu perfume') + ' es de ' + fmt(saldo) + '. ' : '') + '¡Gracias!';
-  return 'https://wa.me/' + v.telefono + '?text=' + encodeURIComponent(texto);
-}
-function botonWhatsApp(v, extraStyle) {
-  const link = linkWhatsAppCobro(v);
-  if (!link) return '';
-  return `<a class="icon-btn" href="${esc(link)}" target="_blank" rel="noopener" title="Escribir por WhatsApp" style="display:flex; align-items:center; justify-content:center; text-decoration:none; background:rgba(34,197,94,0.15); color:#22c55e; flex-shrink:0; ${extraStyle || ''}">💬</a>`;
-}
-function actualizarFormAbonoTel(valor) { state.formAbono.telefono = valor; }
-function guardarTelefonoAbono() {
-  const v = state.ventas.find(vv => vv.id === state.modalAbono);
-  if (!v) return;
-  const tel = normalizarWhatsApp(state.formAbono.telefono);
-  if (tel === null) { alert('El número de WhatsApp no es válido. Escríbelo con 10 dígitos (ej. 9991234567).'); return; }
-  if (tel) v.telefono = tel; else delete v.telefono;
-  guardarLocal();
-  render();
-}
-// Resumen de Frascos completos: cuántos se han vendido y quiénes los compraron.
-// Un "cliente" es quien tiene nombre o WhatsApp guardado en la venta; los
-// frascos sin ninguno de los dos se cuentan aparte ("sin nombre de cliente").
-function clientesFrascos() {
-  const mesAct = claveMes(new Date());
-  const r = { frascos: 0, frascosMes: 0, aPagos: 0, sinNombre: 0, sinNombreVentas: [], clientes: [] };
-  const mapa = new Map();
-  state.ventas.filter(v => v.tamano === 'Frasco completo').sort((a, b) => a.fecha - b.fecha).forEach(v => {
-    const cant = v.cantidad || 1;
-    r.frascos += cant;
-    if (v.mes === mesAct) r.frascosMes += cant;
-    if (v.aPagos) r.aPagos += cant;
-    const nombre = (v.cliente || '').trim();
-    if (!nombre && !v.telefono) { r.sinNombre += cant; r.sinNombreVentas.push(v); return; }
-    const clave = nombre ? nombre.toLowerCase() : 'tel:' + v.telefono;
-    if (!mapa.has(clave)) mapa.set(clave, { clave, nombre: nombre || telefonoMostrar(v.telefono), telefono: '', frascos: 0, debe: 0, ultima: 0, compras: [] });
-    const c = mapa.get(clave);
-    c.frascos += cant;
-    c.debe += saldoVenta(v);
-    c.ultima = Math.max(c.ultima, v.fecha);
-    c.compras.push(v);
-    if (nombre) c.nombre = nombre;       // se queda el nombre de la compra más reciente
-    if (v.telefono) c.telefono = v.telefono;
-  });
-  r.clientes = Array.from(mapa.values()).sort((a, b) => b.ultima - a.ultima);
-  r.clientes.forEach(c => { c.debe = Math.round(c.debe * 100) / 100; });
-  return r;
-}
-// Poner o corregir el nombre y WhatsApp de una venta de frasco completo
-// (por ejemplo, las que se vendieron antes de que la app los guardara).
-function abrirModalDatosCliente(ventaId) {
-  const v = state.ventas.find(x => x.id === ventaId);
-  if (!v) return;
-  state.modalDatosCliente = ventaId;
-  state.formDatosCliente = { cliente: v.cliente || '', telefono: telefonoMostrar(v.telefono) };
-  render();
-}
-function cerrarModalDatosCliente() { state.modalDatosCliente = null; render(); }
-function actualizarFormDatosCliente(campo, valor) { state.formDatosCliente[campo] = valor; }
-function guardarDatosCliente() {
-  const v = state.ventas.find(x => x.id === state.modalDatosCliente);
-  if (!v) return;
-  const nombre = (state.formDatosCliente.cliente || '').trim();
-  const tel = normalizarWhatsApp(state.formDatosCliente.telefono);
-  if (tel === null) { alert('El número de WhatsApp no es válido. Escríbelo con 10 dígitos (ej. 9991234567).'); return; }
-  if (nombre) v.cliente = nombre; else delete v.cliente;
-  if (tel) v.telefono = tel; else delete v.telefono;
-  guardarLocal();
-  state.modalDatosCliente = null;
-  render();
-}
-function renderModalDatosCliente() {
-  if (!state.modalDatosCliente) return '';
-  const v = state.ventas.find(x => x.id === state.modalDatosCliente);
-  if (!v) return '';
-  const p = state.productos.find(pp => pp.id === v.productoId);
-  const fecha = new Date(v.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
-  const hora = new Date(v.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-  return `<div class="modal-overlay" data-action="cerrarModalDatosCliente">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Datos del cliente</h3>
-        <button class="close-btn" data-action="cerrarModalDatosCliente">✕</button>
-      </div>
-      <div class="modal-subtitle">${esc(p ? p.nombre : 'Producto')} · ${fecha} ${hora} · ${fmt(v.total)}</div>
-      <div class="campo">
-        <div class="campo-label"><label>Cliente</label></div>
-        <input class="input" type="text" value="${esc(state.formDatosCliente.cliente)}" placeholder="Nombre del cliente" oninput="actualizarFormDatosCliente('cliente', this.value)" />
-      </div>
-      <div class="campo">
-        <div class="campo-label"><label>WhatsApp del cliente</label><span class="hint">Opcional</span></div>
-        <input class="input" type="tel" inputmode="tel" value="${esc(state.formDatosCliente.telefono)}" placeholder="10 dígitos, ej. 9991234567" oninput="actualizarFormDatosCliente('telefono', this.value)" />
-      </div>
-      <button class="guardar-btn" data-action="guardarDatosCliente">✓ Guardar</button>
-    </div>
-  </div>`;
-}
-// ============== EDITAR UNA VENTA (cambiar de perfume / presentación) ==============
-// Conserva el id, la fecha, el cliente, el WhatsApp y los abonos de la venta.
-// Es como borrarla y registrarla de nuevo en el lugar correcto, pero sin perder
-// nada de eso: se regresa el stock de donde salió, se descuenta del nuevo
-// lugar y la ganancia se recalcula con el costo del perfume elegido.
-function esVentaEditable(v) { return !!v && TAMANOS_PERFUME.includes(v.tamano); }
-function totalSugeridoEditarVenta(venta, f) {
-  const cant = parseInt(f.cantidad) || 0;
-  // Si no cambió la presentación ni las piezas, se respeta lo que ya se cobró.
-  if (f.tamano === venta.tamano && cant === venta.cantidad) return venta.total;
-  const p = state.productos.find(pp => pp.id === f.productoId);
-  const pres = p ? (p.variantes || []).find(vv => vv.tamano === f.tamano) : null;
-  return pres ? Math.round(pres.precioVenta * cant * 100) / 100 : 0;
-}
-function abrirModalEditarVenta(ventaId) {
-  if (state.rol !== 'admin') return;
-  const v = state.ventas.find(x => x.id === ventaId);
-  if (!esVentaEditable(v)) return;
-  state.modalEditarVenta = ventaId;
-  state.formEditarVenta = { productoId: v.productoId, tamano: v.tamano, cantidad: String(v.cantidad), total: String(v.total), totalManual: false };
-  render();
-}
-function cerrarModalEditarVenta() { state.modalEditarVenta = null; render(); }
-function cambiarEditarVenta(campo, valor) {
-  const venta = state.ventas.find(x => x.id === state.modalEditarVenta);
-  if (!venta) return;
-  const f = state.formEditarVenta;
-  f[campo] = valor;
-  if (campo === 'productoId') {
-    const p = state.productos.find(pp => pp.id === valor);
-    const disp = p ? (p.variantes || []).filter(v => TAMANOS_PERFUME.includes(v.tamano) && v.precioVenta > 0) : [];
-    if (!disp.some(v => v.tamano === f.tamano)) f.tamano = disp.length ? disp[0].tamano : '';
-  }
-  if (!f.totalManual) f.total = String(totalSugeridoEditarVenta(venta, f));
-  render();
-}
-function actualizarEditarVentaCantidad(valor) {
-  const venta = state.ventas.find(x => x.id === state.modalEditarVenta);
-  if (!venta) return;
-  const f = state.formEditarVenta;
-  f.cantidad = valor;
-  if (!f.totalManual) {
-    f.total = String(totalSugeridoEditarVenta(venta, f));
-    const el = document.getElementById('editar-total');
-    if (el) el.value = f.total;
-  }
-}
-function actualizarEditarVentaTotal(valor) {
-  state.formEditarVenta.total = valor;
-  state.formEditarVenta.totalManual = true;
-}
-function guardarEditarVenta() {
-  if (state.rol !== 'admin') return;
-  const idx = state.ventas.findIndex(x => x.id === state.modalEditarVenta);
-  if (idx < 0) return;
-  const venta = state.ventas[idx];
-  const f = state.formEditarVenta;
-  const pNuevo = state.productos.find(pp => pp.id === f.productoId);
-  const pViejo = state.productos.find(pp => pp.id === venta.productoId);
-  const cant = parseInt(f.cantidad) || 0;
-  const total = Math.round((parseFloat(f.total) || 0) * 100) / 100;
-  const varNueva = pNuevo ? (pNuevo.variantes || []).find(vv => vv.tamano === f.tamano) : null;
-  if (!pNuevo || !varNueva) { alert('Elige el perfume y la presentación.'); return; }
-  if (cant < 1) { alert('Las piezas deben ser 1 o más.'); return; }
-  if (total <= 0) { alert('El total cobrado debe ser mayor a 0.'); return; }
-  if (venta.aPagos) {
-    if (f.tamano !== 'Frasco completo') { alert('Una venta a pagos solo puede ser de Frasco completo.'); return; }
-    if (total < totalAbonado(venta)) { alert('El total no puede ser menor a lo que ya pagó el cliente (' + fmt(totalAbonado(venta)) + ').'); return; }
-  }
-  // La venta tiene que caer dentro del frasco actual del perfume al que se pasa;
-  // si no, no contaría para recuperar su costo.
-  const inicioCiclo = pNuevo.cicloInicio || pNuevo.creado || 0;
-  if (venta.fecha < inicioCiclo) {
-    alert('Esa venta es anterior al frasco actual de ese perfume, así que no se puede pasar ahí sin cambiar su fecha. Bórrala y regístrala de nuevo.');
-    return;
-  }
-  // Stock: se regresan las piezas de donde salieron y se revisa el nuevo lugar.
-  const varVieja = pViejo ? (pViejo.variantes || []).find(vv => vv.tamano === venta.tamano) : null;
-  const stockAntes = varVieja && typeof varVieja.stock === 'number' ? varVieja.stock : null;
-  if (stockAntes !== null) varVieja.stock += venta.cantidad;
-  if (typeof varNueva.stock === 'number' && cant > varNueva.stock) {
-    if (stockAntes !== null) varVieja.stock = stockAntes; // se deshace
-    alert('No hay piezas suficientes en el stock de esa presentación (quedan ' + varNueva.stock + ').');
-    return;
-  }
-  if (typeof varNueva.stock === 'number') varNueva.stock -= cant;
-  // Se saca la venta un momento para que no cuente dos veces al recalcular.
-  state.ventas.splice(idx, 1);
-  const insumos = Math.round(Math.min(total, costoInsumos(f.tamano) * cant, calcularCapitalInsumos().faltante) * 100) / 100;
-  const comision = Math.min(total, venta.comision || 0);
-  const { ingresoAcumulado } = calcularCicloPerfume(pNuevo);
-  const costoRestante = Math.max(0, (pNuevo.precioCosto || 0) - ingresoAcumulado);
-  venta.productoId = pNuevo.id;
-  venta.tamano = f.tamano;
-  venta.cantidad = cant;
-  venta.total = total;
-  venta.insumos = insumos;
-  venta.comision = comision;
-  venta.ganancia = Math.round(Math.max(0, total - insumos - comision - costoRestante) * 100) / 100;
-  state.ventas.splice(idx, 0, venta);
-  guardarLocal();
-  state.modalEditarVenta = null;
-  render();
-}
-function renderModalEditarVenta() {
-  if (!state.modalEditarVenta) return '';
-  const venta = state.ventas.find(x => x.id === state.modalEditarVenta);
-  if (!venta) return '';
-  const f = state.formEditarVenta;
-  const perfumes = state.productos.filter(pp => pp.categoria === 'perfumes').sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-  const pSel = state.productos.find(pp => pp.id === f.productoId);
-  const variantes = pSel ? (pSel.variantes || []).filter(v => TAMANOS_PERFUME.includes(v.tamano) && (v.precioVenta > 0 || (pSel.id === venta.productoId && v.tamano === venta.tamano))) : [];
-  const fecha = new Date(venta.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
-  const hora = new Date(venta.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-  return `<div class="modal-overlay" data-action="cerrarModalEditarVenta">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Editar venta</h3>
-        <button class="close-btn" data-action="cerrarModalEditarVenta">✕</button>
-      </div>
-      <div class="modal-subtitle">${fecha} ${hora}${venta.cliente ? ' · ' + esc(venta.cliente) : ''}</div>
-      <div class="campo">
-        <div class="campo-label"><label>Perfume</label></div>
-        <select class="input" onchange="cambiarEditarVenta('productoId', this.value)">
-          ${perfumes.map(pp => `<option value="${esc(pp.id)}" ${pp.id === f.productoId ? 'selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="campo">
-        <div class="campo-label"><label>Presentación</label></div>
-        <select class="input" onchange="cambiarEditarVenta('tamano', this.value)">
-          ${variantes.map(v => `<option value="${esc(v.tamano)}" ${v.tamano === f.tamano ? 'selected' : ''}>${esc(v.tamano)} · ${fmt(v.precioVenta)}</option>`).join('')}
-        </select>
-      </div>
-      <div class="campo">
-        <div class="campo-label"><label>Piezas</label></div>
-        <input class="input" type="number" inputmode="numeric" min="1" value="${esc(f.cantidad)}" oninput="actualizarEditarVentaCantidad(this.value)" />
-      </div>
-      <div class="campo">
-        <div class="campo-label"><label>Total cobrado ($)</label><span class="hint">Se conserva lo cobrado, salvo que cambies presentación o piezas</span></div>
-        <input class="input" id="editar-total" type="number" inputmode="decimal" value="${esc(f.total)}" oninput="actualizarEditarVentaTotal(this.value)" />
-      </div>
-      <div style="font-size:12px; color:#94a3b8; margin-bottom:12px; line-height:1.4">La fecha, el cliente y los abonos se conservan. El stock y la ganancia se recalculan con el perfume que elijas.</div>
-      <button class="guardar-btn" data-action="guardarEditarVenta">✓ Guardar cambios</button>
-    </div>
-  </div>`;
-}
-function abrirModalClientesFrascos() { state.modalClientesFrascos = true; state.clienteFrascoAbierto = null; render(); }
-function cerrarModalClientesFrascos() { state.modalClientesFrascos = false; state.clienteFrascoAbierto = null; render(); }
-function toggleClienteFrasco(clave) { state.clienteFrascoAbierto = state.clienteFrascoAbierto === clave ? null : clave; render(); }
-function renderTarjetaClientesFrascos() {
-  const r = clientesFrascos();
-  if (r.frascos === 0) return '';
-  return `<div class="cliente" style="cursor:pointer; margin-bottom:12px" data-action="abrirModalClientesFrascos">
-    <div class="cliente-info">
-      <div class="nombre">👥 Clientes de frascos completos</div>
-      <div class="cliente-notas">${r.clientes.length} cliente(s) · ${r.frascos} frasco(s) vendido(s)</div>
-    </div>
-    <div class="cliente-pago"><div class="monto mono" style="color:#a855f7">›</div></div>
-  </div>`;
-}
-function renderModalClientesFrascos() {
-  if (!state.modalClientesFrascos) return '';
-  const r = clientesFrascos();
-  const fechaCorta = (t) => new Date(t).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
-  const filas = r.clientes.map(c => {
-    const abierto = state.clienteFrascoAbierto === c.clave;
-    const compras = abierto ? c.compras.slice().sort((a, b) => b.fecha - a.fecha).map(v => {
-      const p = state.productos.find(pp => pp.id === v.productoId);
-      const saldo = saldoVenta(v);
-      const estado = v.aPagos
-        ? (saldo > 0 ? `<span style="color:#f59e0b">Debe ${fmt(saldo)}</span>` : '<span style="color:#10b981">Liquidado ✅</span>')
-        : '<span style="color:#10b981">De contado ✅</span>';
-      return `<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid rgba(148,163,184,0.12)">
-        <div style="flex:1; min-width:0">
-          <div style="font-size:13px">${esc(p ? p.nombre : 'Producto')}${(v.cantidad || 1) > 1 ? ' ×' + v.cantidad : ''}</div>
-          <div class="cliente-notas">${fechaCorta(v.fecha)} · ${fmt(v.total)} · ${estado}</div>
-        </div>
-        <button class="icon-btn" style="flex-shrink:0" data-action="abrirModalDatosCliente" data-vid="${v.id}" title="Editar cliente">✏️</button>
-        ${v.aPagos ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; flex-shrink:0" data-action="abrirModalAbono" data-vid="${v.id}" title="Ver pagos">${saldo > 0 ? '💵' : '📋'}</button>` : ''}
-      </div>`;
-    }).join('') : '';
-    return `<div style="margin-bottom:8px">
-      <div class="cliente" style="cursor:pointer; margin-bottom:0" data-action="toggleClienteFrasco" data-clave="${esc(c.clave)}">
-        <div class="cliente-info">
-          <div class="nombre">${esc(c.nombre)}</div>
-          <div class="cliente-notas">${c.frascos} frasco(s)${c.debe > 0 ? ' · <span style="color:#f59e0b">Debe ' + fmt(c.debe) + '</span>' : ''}</div>
-        </div>
-        <div class="cliente-pago"><div style="font-size:11px; color:#64748b">${abierto ? '▲' : '▼'}</div></div>
-      </div>
-      ${abierto ? `<div style="padding:8px 0 0 10px">
-        ${c.telefono
-          ? `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px; font-size:13px; color:#94a3b8">${botonWhatsApp({ telefono: c.telefono, cliente: c.nombre }, 'width:40px; height:40px')}<span class="mono">${esc(telefonoMostrar(c.telefono))}</span></div>`
-          : '<div class="cliente-notas" style="margin-bottom:6px">Sin WhatsApp guardado</div>'}
-        ${compras}
-      </div>` : ''}
-    </div>`;
-  }).join('');
-  const sinAbierto = state.clienteFrascoAbierto === '__sin__';
-  const sinBloque = r.sinNombre > 0 ? `<div style="margin-bottom:8px">
-      <div class="cliente" style="cursor:pointer; margin-bottom:0; border:1px dashed rgba(245,158,11,0.45)" data-action="toggleClienteFrasco" data-clave="__sin__">
-        <div class="cliente-info">
-          <div class="nombre">Sin nombre de cliente</div>
-          <div class="cliente-notas">${r.sinNombre} frasco(s) · toca para ponerles nombre</div>
-        </div>
-        <div class="cliente-pago"><div style="font-size:11px; color:#64748b">${sinAbierto ? '▲' : '▼'}</div></div>
-      </div>
-      ${sinAbierto ? `<div style="padding:8px 0 0 10px">
-        ${r.sinNombreVentas.slice().sort((a, b) => b.fecha - a.fecha).map(v => {
-          const p = state.productos.find(pp => pp.id === v.productoId);
-          const hora = new Date(v.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-          return `<div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-top:1px solid rgba(148,163,184,0.12)">
-            <div style="flex:1; min-width:0">
-              <div style="font-size:13px">${esc(p ? p.nombre : 'Producto')}${(v.cantidad || 1) > 1 ? ' ×' + v.cantidad : ''}</div>
-              <div class="cliente-notas">${fechaCorta(v.fecha)} · ${hora} · ${fmt(v.total)}</div>
-            </div>
-            <button class="icon-btn" style="flex-shrink:0" data-action="abrirModalDatosCliente" data-vid="${v.id}" title="Poner nombre">✏️</button>
-          </div>`;
-        }).join('')}
-      </div>` : ''}
-    </div>` : '';
-  return `<div class="modal-overlay" data-action="cerrarModalClientesFrascos">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Clientes de frascos completos</h3>
-        <button class="close-btn" data-action="cerrarModalClientesFrascos">✕</button>
-      </div>
-      <div class="modal-subtitle" style="color:#a855f7">${r.frascos} frasco(s) vendido(s) en total · ${r.frascosMes} este mes</div>
-      <div style="font-size:12px; color:#94a3b8; margin-bottom:12px">${r.clientes.length} cliente(s) · ${r.aPagos} vendido(s) a pagos${r.sinNombre > 0 ? ' · ' + r.sinNombre + ' sin nombre de cliente' : ''}</div>
-      ${sinBloque}
-      ${filas || (r.sinNombre > 0 ? '' : '<div class="vacio">Aún no hay clientes guardados</div>')}
-    </div>
-  </div>`;
-}
 function totalAbonado(v) { return Math.round((v.abonos || []).reduce((s, a) => s + a.monto, 0) * 100) / 100; }
 function saldoVenta(v) { return v.aPagos ? Math.max(0, Math.round((v.total - totalAbonado(v)) * 100) / 100) : 0; }
 function ventasPorCobrar() { return state.ventas.filter(v => v.aPagos && saldoVenta(v) > 0).sort((a, b) => a.fecha - b.fecha); }
 function abrirModalAbono(ventaId) {
   state.modalAbono = ventaId;
-  const vv = state.ventas.find(x => x.id === ventaId);
-  state.formAbono = { monto: '', telefono: vv ? telefonoMostrar(vv.telefono) : '' };
+  state.formAbono = { monto: '' };
   render();
 }
 function cerrarModalAbono() { state.modalAbono = null; render(); }
@@ -1634,21 +1335,13 @@ function renderModalAbono() {
       <div class="modal-subtitle">${v.cliente ? esc(v.cliente) + ' · ' : ''}Total ${fmt(v.total)} · Pagado ${fmt(totalAbonado(v))}</div>
       <div class="precio-real-row" style="margin-bottom:12px">
         <span class="label">Saldo pendiente</span>
-        <span class="monto mono" style="color:${saldo > 0 ? '#f59e0b' : '#10b981'}">${saldo > 0 ? fmt(saldo) : 'Liquidado ✅'}</span>
+        <span class="monto mono" style="color:#f59e0b">${fmt(saldo)}</span>
       </div>
       <div class="campo">
-        <div class="campo-label"><label>WhatsApp del cliente</label><span class="hint">Opcional</span></div>
-        <div style="display:flex; gap:8px; align-items:stretch">
-          <input class="input" style="flex:1; min-width:0" type="tel" inputmode="tel" value="${esc(state.formAbono.telefono)}" placeholder="10 dígitos" oninput="actualizarFormAbonoTel(this.value)" />
-          <button type="button" class="icon-btn" style="width:48px; flex-shrink:0" data-action="guardarTelefonoAbono" title="Guardar número">💾</button>
-          ${botonWhatsApp(v, 'width:48px')}
-        </div>
-      </div>
-      ${saldo > 0 ? `<div class="campo">
         <div class="campo-label"><label>Monto del abono ($) <span class="required">*</span></label></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(state.formAbono.monto)}" placeholder="0.00" oninput="actualizarFormAbono(this.value)" />
       </div>
-      <button class="guardar-btn" data-action="registrarAbono">✓ Registrar abono</button>` : ''}
+      <button class="guardar-btn" data-action="registrarAbono">✓ Registrar abono</button>
       ${abonos.length ? `<div style="margin-top:14px; font-size:12px; color:#94a3b8">
         ${abonos.map(a => `<div style="display:flex; justify-content:space-between; padding:4px 0; border-top:1px solid rgba(148,163,184,0.12)"><span>${new Date(a.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${new Date(a.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span><span class="mono">${fmt(a.monto)}</span></div>`).join('')}
       </div>` : ''}
@@ -1672,7 +1365,6 @@ function renderPorCobrar() {
           <div class="cliente-notas">Pagado ${fmt(totalAbonado(v))} de ${fmt(v.total)}</div>
         </div>
         <div class="monto mono" style="color:#f59e0b">${fmt(saldoVenta(v))}</div>
-        ${botonWhatsApp(v)}
         <button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981" data-action="abrirModalAbono" data-vid="${v.id}" title="Registrar abono">💵</button>
       </div>`;
     }).join('')}
@@ -1681,12 +1373,12 @@ function renderPorCobrar() {
 
 function abrirModalVenta(productoId, tamano) {
   state.modalVenta = { productoId, tamano: tamano || null };
-  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '', telefono: '' };
+  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '' };
   render();
 }
 function cerrarModalVenta() {
   state.modalVenta = null;
-  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', telefono: '' };
+  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '' };
   render();
 }
 function actualizarFormVenta(valor) {
@@ -1752,19 +1444,11 @@ function registrarVenta(productoId, tamano) {
   };
   // Frasco completo "por pagos": se guarda quién lo debe y los abonos que
   // lleva (el anticipo cuenta como el primer abono).
-  if (tamano === 'Frasco completo') {
-    // Cliente y WhatsApp (opcionales) se guardan en pago completo y por pagos,
-    // para poder ver después quién ha comprado frascos completos.
-    const nombre = (state.formVenta.cliente || '').trim();
-    const tel = normalizarWhatsApp(state.formVenta.telefono);
-    if (tel === null) { alert('El número de WhatsApp no es válido. Escríbelo con 10 dígitos (ej. 9991234567).'); return; }
-    if (nombre) venta.cliente = nombre;
-    if (tel) venta.telefono = tel;
-  }
   if (tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos') {
     const anticipo = Math.round((parseFloat(state.formVenta.anticipo) || 0) * 100) / 100;
     if (anticipo < 0 || anticipo > total) { alert('El anticipo no puede ser mayor al total.'); return; }
     venta.aPagos = true;
+    venta.cliente = (state.formVenta.cliente || '').trim();
     venta.abonos = anticipo > 0 ? [{ id: 'ab_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), monto: anticipo, fecha: Date.now(), por: state.rol }] : [];
   }
   state.ventas.push(venta);
@@ -1833,41 +1517,6 @@ function listarVentasPerfumesRango(desde, hasta, soloCategoria) {
   return ventasEfectivas()
     .filter(v => v.fecha >= desde && v.fecha <= hasta && (!idsFiltro || idsFiltro.has(v.productoId)))
     .sort((a, b) => b.fecha - a.fecha);
-}
-// Semanas (lunes a domingo) del mes en curso, hasta la semana de hoy. La
-// primera y la última se recortan a los días que sí son del mes.
-function semanasDelMes() {
-  const hoy = new Date();
-  const y = hoy.getFullYear(), m = hoy.getMonth();
-  const finMes = new Date(y, m + 1, 1).getTime() - 1;
-  const semanas = [];
-  let desde = new Date(y, m, 1, 0, 0, 0, 0);
-  while (desde.getTime() <= hoy.getTime()) {
-    const dia = desde.getDay(); // 0 = domingo
-    const hastaDomingo = dia === 0 ? 0 : 7 - dia;
-    let hasta = new Date(desde.getFullYear(), desde.getMonth(), desde.getDate() + hastaDomingo, 23, 59, 59, 999);
-    if (hasta.getTime() > finMes) hasta = new Date(finMes);
-    semanas.push({
-      desde: desde.getTime(), hasta: hasta.getTime(),
-      actual: hoy.getTime() >= desde.getTime() && hoy.getTime() <= hasta.getTime()
-    });
-    desde = new Date(hasta.getTime() + 1);
-  }
-  return semanas;
-}
-function abrirModalVentasMes() {
-  state.modalVentasMes = true;
-  state.semanaMesAbierta = null;
-  render();
-}
-function cerrarModalVentasMes() {
-  state.modalVentasMes = false;
-  state.semanaMesAbierta = null;
-  render();
-}
-function toggleSemanaMes(desde) {
-  state.semanaMesAbierta = state.semanaMesAbierta === desde ? null : desde;
-  render();
 }
 function abrirModalVentasSemana() {
   state.modalVentasSemana = true;
@@ -2848,7 +2497,7 @@ function render() {
   if (state.rol === 'vendedor') {
     state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
     const vista = renderTienda();
-    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada() + renderModalAbono();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada();
     bindEvents();
     return;
   }
@@ -2858,7 +2507,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalVentaPersonalizada() + renderModalClientesFrascos() + renderModalDatosCliente() + renderModalEditarVenta() + renderModalAbono();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalRetiro() + renderModalVentaPersonalizada();
   bindEvents();
 }
 
@@ -3205,7 +2854,6 @@ function renderTienda() {
   // animación se reinicia una y otra vez, dando un efecto de parpadeo.
   let html = buscando ? '<div>' : '<div class="fade-in">';
   html += renderPorCobrar();
-  if (esAdmin) html += renderTarjetaClientesFrascos();
 
   if (esAdmin) {
     const t = calcularTotalesTienda();
@@ -3215,10 +2863,9 @@ function renderTienda() {
           <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
           <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
         </div>
-        <div class="resumen-card" data-action="abrirModalVentasMes" style="cursor:pointer">
+        <div class="resumen-card">
           <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
           <div class="resumen-value">${fmt(t.vendido)}</div>
-          <div class="resumen-sub">toca para ver por semana</div>
         </div>
         <div class="resumen-card">
           <div class="resumen-label" style="color:#f59e0b">Piezas vendidas</div>
@@ -3569,8 +3216,6 @@ function renderVentaRow(v) {
   let notaPagos = '';
   if (v.esAbono) {
     notaPagos = `<div class="cliente-notas" style="color:#10b981">💵 Abono · ${cliente}${saldo > 0 ? 'Aún debe ' + fmt(saldo) : 'Liquidado ✅'}</div>`;
-  } else if (!aPagos && real && real.cliente) {
-    notaPagos = `<div class="cliente-notas">👤 ${esc(real.cliente)}</div>`;
   } else if (aPagos) {
     notaPagos = `<div class="cliente-notas" style="color:${saldo > 0 ? '#f59e0b' : '#10b981'}">💳 ${cliente}${saldo > 0 ? `Pagado ${fmt(totalAbonado(real))} · Debe ${fmt(saldo)}` : 'Liquidado ✅'}</div>`;
   }
@@ -3582,14 +3227,13 @@ function renderVentaRow(v) {
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
         <div class="nombre">${nombre}</div>
-        <div class="cliente-notas">${piezasTxt}${fechaStr} · ${horaStr}</div>
+        <div class="cliente-notas">${piezasTxt}${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
         ${notaPagos}
       </div>
       <div class="cliente-pago">
         ${montoTxt}
       </div>
-      ${!v.esAbono && aPagos ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${real.id}" title="${saldo > 0 ? 'Registrar abono' : 'Ver pagos y datos del cliente'}">${saldo > 0 ? '💵' : '📋'}</button>` : ''}
-      ${esAdmin && !v.esAbono && esVentaEditable(real) ? `<button class="icon-btn" style="margin-left:6px; flex-shrink:0" data-action="abrirModalEditarVenta" data-vid="${real.id}" title="Editar venta">✏️</button>` : ''}
+      ${!v.esAbono && aPagos && saldo > 0 ? `<button class="icon-btn" style="background:rgba(16,185,129,0.12); color:#10b981; margin-left:6px; flex-shrink:0" data-action="abrirModalAbono" data-vid="${real.id}" title="Registrar abono">💵</button>` : ''}
       ${esAdmin && !v.esAbono ? `<button class="icon-btn delete" data-action="eliminarVenta" data-vid="${v.id}" style="margin-left:6px; flex-shrink:0">🗑</button>` : ''}
     </div>
   `;
@@ -3613,6 +3257,28 @@ function renderModalGasto() {
         <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormGasto('monto', this.value)" />
       </div>
       <button class="guardar-btn" onclick="guardarGasto()">✓ Guardar gasto</button>
+    </div>
+  </div>`;
+}
+
+function renderModalRetiro() {
+  if (!state.modalRetiro) return '';
+  const f = state.formRetiro;
+  return `<div class="modal-overlay" data-action="cerrarModalRetiro">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>+ Nuevo retiro</h3>
+        <button class="close-btn" data-action="cerrarModalRetiro">✕</button>
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Para qué sacaste el dinero?</label></div>
+        <input class="input" type="text" value="${esc(f.descripcion)}" placeholder="Ej. Compra de perfumes nuevos" oninput="actualizarFormRetiro('descripcion', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Cuánto sacaste? ($)</label></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormRetiro('monto', this.value)" />
+      </div>
+      <button class="guardar-btn" onclick="guardarRetiro()">✓ Guardar retiro</button>
     </div>
   </div>`;
 }
@@ -3782,15 +3448,11 @@ function renderModalVenta() {
           <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.modoPago === 'pagos' ? '' : 'opacity:0.4'}" data-action="setModoPagoVenta" data-modo="pagos">💳 Por pagos</button>
         </div>
       </div>
-      <div class="campo">
-        <div class="campo-label"><label>Cliente</label>${state.formVenta.modoPago === 'completo' ? '<span class="hint">Opcional</span>' : ''}</div>
-        <input class="input" type="text" value="${esc(state.formVenta.cliente)}" placeholder="${state.formVenta.modoPago === 'pagos' ? 'Nombre de quien lo debe' : 'Nombre del cliente'}" oninput="actualizarFormVentaCampo('cliente', this.value)" />
-      </div>
-      <div class="campo">
-        <div class="campo-label"><label>WhatsApp del cliente</label><span class="hint">Opcional</span></div>
-        <input class="input" type="tel" inputmode="tel" value="${esc(state.formVenta.telefono)}" placeholder="10 dígitos, ej. 9991234567" oninput="actualizarFormVentaCampo('telefono', this.value)" />
-      </div>
       ${state.formVenta.modoPago === 'pagos' ? `
+      <div class="campo">
+        <div class="campo-label"><label>Cliente</label></div>
+        <input class="input" type="text" value="${esc(state.formVenta.cliente)}" placeholder="Nombre de quien lo debe" oninput="actualizarFormVentaCampo('cliente', this.value)" />
+      </div>
       <div class="campo">
         <div class="campo-label"><label>Anticipo hoy ($)</label><span class="hint">Opcional</span></div>
         <input class="input" type="number" inputmode="decimal" value="${esc(state.formVenta.anticipo)}" placeholder="0.00" oninput="actualizarFormVentaCampo('anticipo', this.value)" />
@@ -3835,44 +3497,6 @@ function renderModalVentasSemana() {
       ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas esta semana</div>' :
         ventas.map(v => renderVentaRow(v)).join('')
       }
-    </div>
-  </div>`;
-}
-
-// Detalle de "Vendido (mes)": lo vendido semana por semana (lunes a domingo).
-// Tocando una semana se despliegan las ventas de esa semana.
-function renderModalVentasMes() {
-  if (!state.modalVentasMes) return '';
-  const semanas = semanasDelMes().map(w => ({ ...w, ...calcularVentasPerfumesRango(w.desde, w.hasta) }));
-  const totalMes = semanas.reduce((a, w) => a + w.vendido, 0);
-  const piezasMes = semanas.reduce((a, w) => a + w.piezas, 0);
-  const corto = (t) => new Date(t).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
-  const mesNombre = new Date().toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
-  const filas = semanas.map((w, i) => ({ w, num: i + 1 })).reverse().map(({ w, num }) => {
-    const abierta = state.semanaMesAbierta === w.desde;
-    const ventas = abierta ? listarVentasPerfumesRango(w.desde, w.hasta) : [];
-    return `<div style="margin-bottom:8px">
-      <div class="cliente" style="cursor:pointer; margin-bottom:0; ${w.actual ? 'border:1px solid rgba(6,182,212,0.4)' : ''}" data-action="toggleSemanaMes" data-desde="${w.desde}">
-        <div class="cliente-info">
-          <div class="nombre">Semana ${num}${w.actual ? ' · esta semana' : ''}</div>
-          <div class="cliente-notas">${corto(w.desde)} – ${corto(w.hasta)} · ${w.piezas} pza(s)</div>
-        </div>
-        <div class="cliente-pago">
-          <div class="monto mono" style="color:#06b6d4">${fmt(w.vendido)}</div>
-          <div style="font-size:11px; color:#64748b; margin-top:2px">${abierta ? '▲' : '▼'}</div>
-        </div>
-      </div>
-      ${abierta ? `<div style="padding:8px 0 0 10px">${ventas.length === 0 ? '<div class="vacio">Sin ventas esta semana</div>' : ventas.map(v => renderVentaRow(v)).join('')}</div>` : ''}
-    </div>`;
-  }).join('');
-  return `<div class="modal-overlay" data-action="cerrarModalVentasMes">
-    <div class="modal" onclick="event.stopPropagation()">
-      <div class="modal-header">
-        <h3>Ventas de ${esc(mesNombre)}</h3>
-        <button class="close-btn" data-action="cerrarModalVentasMes">✕</button>
-      </div>
-      <div class="modal-subtitle" style="color:#06b6d4">${piezasMes} pza(s) · ${fmt(totalMes)} en total</div>
-      ${filas}
     </div>
   </div>`;
 }
@@ -4386,6 +4010,49 @@ function renderDashboard() {
       <div style="margin-top:16px; padding-top:14px; border-top:1px solid rgba(148,163,184,0.1)">
         <div style="font-size:13px; font-weight:700; color:#94a3b8; margin-bottom:8px">Ganancia real por mes (últimos 12 meses)</div>
         ${renderBarChartMesesGananciaReal(calcularGananciaRealPorMes())}
+      </div>
+    </div>
+      `;
+    })()}
+
+    ${(() => {
+      const retirosMes = calcularRetirosMes(mesK);
+      const gastosMesR = calcularGastosMes(mesK);
+      const gananciaRealR = Math.round((flujoMesActual.ganancia - gastosMesR.total) * 100) / 100;
+      const quedaMes = Math.round((gananciaRealR - retirosMes.total) * 100) / 100;
+      const acum = calcularDisponibleAcumulado();
+      return `
+    <div class="dashboard-card">
+      <div class="dashboard-title"><span style="color:#38bdf8">💼</span> Retiros / Reinversión (este mes)</div>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Dinero que sacas de tu ganancia (por ejemplo, para comprar perfumes nuevos). No cambia tu ganancia ni tus ventas: solo se resta de lo que te queda, para que el corte cuadre. No registres aquí lo que ya anotaste como gasto.</p>
+      ${retirosMes.lista.length === 0 ? '<div class="vacio">Sin retiros registrados este mes</div>' :
+        retirosMes.lista.map(r => `
+        <div class="cliente" style="margin-bottom:8px">
+          <div class="cliente-info">
+            <div class="nombre">${esc(r.descripcion)}</div>
+            <div class="cliente-notas">${new Date(r.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</div>
+          </div>
+          <div class="monto mono" style="color:#38bdf8">-${fmt(r.monto)}</div>
+          <button class="icon-btn delete" data-action="eliminarRetiro" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
+        </div>
+        `).join('')
+      }
+      <button class="add-cliente-btn" style="background: rgba(56,189,248,0.1); color: #38bdf8; border: 1px dashed rgba(56,189,248,0.4)" data-action="abrirModalRetiro">
+        + Agregar retiro
+      </button>
+      <div class="resumen" style="padding:0; margin-top:14px">
+        <div class="resumen-card">
+          <div class="resumen-label" style="color:#38bdf8">Retirado del mes</div>
+          <div class="resumen-value" style="color:#38bdf8">-${fmt(retirosMes.total)}</div>
+        </div>
+        <div class="resumen-card destacado">
+          <div class="resumen-label" style="color:#10b981">Te queda del mes</div>
+          <div class="resumen-value" style="color:${quedaMes >= 0 ? '#10b981' : '#ef4444'}">${fmt(quedaMes)}</div>
+          <div class="resumen-sub">Ganancia real menos retiros</div>
+        </div>
+      </div>
+      <div class="cliente-notas" style="margin-top:12px">
+        Acumulado (últimos 12 meses): ganancia real ${fmt(acum.ganancia)} − retiros ${fmt(acum.retirado)} = <b style="color:${acum.disponible >= 0 ? '#10b981' : '#ef4444'}">${fmt(acum.disponible)}</b>
       </div>
     </div>
       `;
@@ -4954,6 +4621,14 @@ function handleClick(e) {
       e.stopPropagation();
       eliminarGasto(d.gid);
       break;
+    case 'abrirModalRetiro': abrirModalRetiro(); break;
+    case 'cerrarModalRetiro':
+      if (e.target === e.currentTarget) cerrarModalRetiro();
+      break;
+    case 'eliminarRetiro':
+      e.stopPropagation();
+      eliminarRetiro(d.rid);
+      break;
     case 'abrirModalVentaPersonalizada':
       e.stopPropagation();
       abrirModalVentaPersonalizada(d.pid);
@@ -4992,11 +4667,6 @@ function handleClick(e) {
     case 'cerrarModalVentasSemana':
       if (e.target === e.currentTarget) cerrarModalVentasSemana();
       break;
-    case 'abrirModalVentasMes': abrirModalVentasMes(); break;
-    case 'cerrarModalVentasMes':
-      if (e.target === e.currentTarget) cerrarModalVentasMes();
-      break;
-    case 'toggleSemanaMes': toggleSemanaMes(Number(d.desde)); break;
     case 'abrirModalVentasHoy': abrirModalVentasHoy(); break;
     case 'cerrarModalVentasHoy':
       if (e.target === e.currentTarget) cerrarModalVentasHoy();
@@ -5032,25 +4702,6 @@ function handleClick(e) {
       if (e.target === e.currentTarget) cerrarModalAbono();
       break;
     case 'registrarAbono': registrarAbono(); break;
-    case 'guardarTelefonoAbono': guardarTelefonoAbono(); break;
-    case 'abrirModalClientesFrascos': abrirModalClientesFrascos(); break;
-    case 'cerrarModalClientesFrascos':
-      if (e.target === e.currentTarget) cerrarModalClientesFrascos();
-      break;
-    case 'toggleClienteFrasco': toggleClienteFrasco(d.clave); break;
-    case 'abrirModalDatosCliente': abrirModalDatosCliente(d.vid); break;
-    case 'cerrarModalDatosCliente':
-      if (e.target === e.currentTarget) cerrarModalDatosCliente();
-      break;
-    case 'guardarDatosCliente': guardarDatosCliente(); break;
-    case 'abrirModalEditarVenta':
-      e.stopPropagation();
-      abrirModalEditarVenta(d.vid);
-      break;
-    case 'cerrarModalEditarVenta':
-      if (e.target === e.currentTarget) cerrarModalEditarVenta();
-      break;
-    case 'guardarEditarVenta': guardarEditarVenta(); break;
     case 'abrirScannerVenta': abrirScannerVenta(); break;
     case 'abrirScannerAsignar': abrirScannerAsignar(); break;
     case 'cerrarScanner':
