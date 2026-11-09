@@ -450,7 +450,7 @@ let state = {
   modalGasto: false,
   formGasto: { descripcion: '', monto: '' },
   modalRetiro: false,
-  formRetiro: { descripcion: '', monto: '', origen: 'recuperado' },
+  formRetiro: { descripcion: '', monto: '', origen: 'recuperado', mes: '' },
   modalVentaPersonalizada: null, // productoId del perfume, o null si está cerrado
   formVentaPersonalizada: { descripcion: '', monto: '' }
 };
@@ -1109,7 +1109,7 @@ function obtenerRetiros() {
 }
 function abrirModalRetiro() {
   if (state.rol !== 'admin') return;
-  state.formRetiro = { descripcion: '', monto: '', origen: 'recuperado' };
+  state.formRetiro = { descripcion: '', monto: '', origen: 'recuperado', mes: claveMes(new Date()) };
   state.modalRetiro = true;
   render();
 }
@@ -1125,13 +1125,22 @@ function guardarRetiro() {
   const descripcion = state.formRetiro.descripcion.trim();
   const monto = parseFloat(state.formRetiro.monto) || 0;
   if (!descripcion || monto <= 0) return;
+  // Mes al que pertenece el retiro (por defecto el actual). Si es un mes
+  // pasado, la fecha queda en el último día de ese mes.
+  const mesActualK = claveMes(new Date());
+  const mesRetiro = /^\d{4}-\d{2}$/.test(state.formRetiro.mes || '') ? state.formRetiro.mes : mesActualK;
+  let fechaRetiro = Date.now();
+  if (mesRetiro !== mesActualK) {
+    const pm = parseMes(mesRetiro);
+    fechaRetiro = new Date(pm.year, pm.month + 1, 0, 12, 0, 0).getTime();
+  }
   state.config.retiros = [...obtenerRetiros(), {
     id: 'r_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     descripcion,
     monto: Math.round(monto * 100) / 100,
     origen: state.formRetiro.origen === 'ganancia' ? 'ganancia' : 'recuperado',
-    fecha: Date.now(),
-    mes: claveMes(new Date())
+    fecha: fechaRetiro,
+    mes: mesRetiro
   }];
   guardarLocal();
   cerrarModalRetiro();
@@ -3416,6 +3425,12 @@ function renderModalRetiro() {
         <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormRetiro('monto', this.value)" />
       </div>
       <div class="campo">
+        <div class="campo-label"><label>¿A qué mes pertenece?</label></div>
+        <select class="input" onchange="actualizarFormRetiro('mes', this.value)">
+          ${(() => { const hoyM = new Date(); const sel = f.mes || claveMes(hoyM); let o = ''; for (let i = 0; i < 12; i++) { const k = claveMes(new Date(hoyM.getFullYear(), hoyM.getMonth() - i, 1)); o += `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(formatoMes(k))}${i === 0 ? ' (este mes)' : ''}</option>`; } return o; })()}
+        </select>
+      </div>
+      <div class="campo">
         <div class="campo-label"><label>¿De dónde sale este dinero?</label></div>
         <select class="input" onchange="actualizarFormRetiro('origen', this.value)">
           <option value="recuperado" ${f.origen !== 'ganancia' ? 'selected' : ''}>De lo recuperado (reinversión en perfumes)</option>
@@ -4228,6 +4243,26 @@ function renderDashboard() {
       <button class="add-cliente-btn" style="background: rgba(56,189,248,0.1); color: #38bdf8; border: 1px dashed rgba(56,189,248,0.4)" data-action="abrirModalRetiro">
         + Agregar retiro
       </button>
+      ${(() => {
+        const previos = obtenerRetiros().filter(r => r.mes !== mesK).sort((a, b) => b.fecha - a.fecha);
+        if (!previos.length) return '';
+        const abierto = !!state.expandido.retirosPrevios;
+        return `
+      <div style="margin-top:12px; border-top:1px solid rgba(148,163,184,0.12)">
+        <div data-action="toggleExp" data-key="retirosPrevios" style="display:flex; justify-content:space-between; padding:10px 0; font-size:13px; cursor:pointer; color:#94a3b8">
+          <span>${abierto ? '▼' : '▶'} Retiros de otros meses (${previos.length})</span>
+        </div>
+        ${abierto ? previos.map(r => `
+        <div class="cliente" style="margin-bottom:8px">
+          <div class="cliente-info">
+            <div class="nombre">${esc(r.descripcion)}</div>
+            <div class="cliente-notas">${esc(formatoMesCorto(r.mes))} · ${r.origen === 'recuperado' ? 'de lo recuperado' : 'de la ganancia'}</div>
+          </div>
+          <div class="monto mono" style="color:#38bdf8">-${fmt(r.monto)}</div>
+          <button class="icon-btn delete" data-action="eliminarRetiro" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
+        </div>`).join('') : ''}
+      </div>`;
+      })()}
       <div class="resumen" style="padding:0; margin-top:14px">
         <div class="resumen-card">
           <div class="resumen-label" style="color:#38bdf8">Retirado del mes</div>
