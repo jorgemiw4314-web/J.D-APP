@@ -2282,15 +2282,12 @@ function calcularCapitalPerfumes() {
     const { ingresoAcumulado } = calcularCicloPerfume(p);
     recuperado += Math.min(ingresoAcumulado, costo);
   });
-  // Lo que sacaste de lo recuperado (p. ej. para comprar perfumes nuevos) ya
-  // no está disponible como recuperado: se resta, sin bajar de 0.
-  const retirosRecuperado = obtenerRetiros().filter(r => r.origen === 'recuperado').reduce((s, r) => s + r.monto, 0);
-  const recuperadoNeto = Math.max(0, recuperado - retirosRecuperado);
-  const faltante = Math.max(0, invertido - recuperadoNeto);
+  // Recuperado = lo que las ventas ya han devuelto del costo de los frascos.
+  // Los retiros NO se restan aquí: ese dinero se lleva en "Caja del mes".
+  const faltante = Math.max(0, invertido - recuperado);
   return {
     invertido: Math.round(invertido * 100) / 100,
-    recuperado: Math.round(recuperadoNeto * 100) / 100,
-    retirado: Math.round(Math.min(recuperado, retirosRecuperado) * 100) / 100,
+    recuperado: Math.round(recuperado * 100) / 100,
     faltante: Math.round(faltante * 100) / 100
   };
 }
@@ -4059,7 +4056,6 @@ function renderDashboard() {
         <div class="resumen-card">
           <div class="resumen-label" style="color:#10b981">Recuperado</div>
           <div class="resumen-value" style="color:#10b981">${fmt(capitalPerfumes.recuperado)}</div>
-          ${capitalPerfumes.retirado > 0 ? `<div class="resumen-sub">Ya sin ${fmt(capitalPerfumes.retirado)} de retiros</div>` : ''}
         </div>
         <div class="resumen-card destacado" style="grid-column: span 2">
           <div class="resumen-label" style="color:#fbbf24">Falta por recuperar</div>
@@ -4227,7 +4223,7 @@ function renderDashboard() {
       return `
     <div class="dashboard-card">
       <div class="dashboard-title"><span style="color:#38bdf8">💼</span> Retiros / Reinversión (este mes)</div>
-      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Dinero que sacas para comprar perfumes nuevos u otros usos. Si sale de lo recuperado, se quita de Recuperado en Capital invertido; si sale de tu ganancia, se resta de Te queda. No cambia tus ventas. No registres aquí lo que ya anotaste como gasto.</p>
+      <p style="font-size:12px; color:#94a3b8; margin-bottom:12px">Dinero que sacas para comprar perfumes nuevos u otros usos. Se resta de la Caja del mes; si sale de tu ganancia, también de Te queda. No cambia tus ventas ni Recuperado. No registres aquí lo que ya anotaste como gasto.</p>
       ${retirosMes.lista.length === 0 ? '<div class="vacio">Sin retiros registrados este mes</div>' :
         retirosMes.lista.map(r => `
         <div class="cliente" style="margin-bottom:8px">
