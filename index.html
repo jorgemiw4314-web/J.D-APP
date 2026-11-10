@@ -449,8 +449,10 @@ let state = {
   busquedaProductos: '', // texto para filtrar Productos/Perfumes por nombre
   modalGasto: false,
   formGasto: { descripcion: '', monto: '' },
+  modalInsumo: false,
+  formInsumo: { descripcion: '', monto: '', fecha: '', fueraCaja: false },
   modalRetiro: false,
-  formRetiro: { descripcion: '', monto: '', origen: 'recuperado', mes: '' },
+  formRetiro: { descripcion: '', monto: '', origen: 'recuperado', mes: '', fueraCaja: false },
   modalVentaPersonalizada: null, // productoId del perfume, o null si está cerrado
   formVentaPersonalizada: { descripcion: '', monto: '' }
 };
@@ -1109,7 +1111,7 @@ function obtenerRetiros() {
 }
 function abrirModalRetiro() {
   if (state.rol !== 'admin') return;
-  state.formRetiro = { descripcion: '', monto: '', origen: 'recuperado', mes: claveMes(new Date()) };
+  state.formRetiro = { descripcion: '', monto: '', origen: 'recuperado', mes: claveMes(new Date()), fueraCaja: false };
   state.modalRetiro = true;
   render();
 }
@@ -1139,6 +1141,7 @@ function guardarRetiro() {
     descripcion,
     monto: Math.round(monto * 100) / 100,
     origen: state.formRetiro.origen === 'ganancia' ? 'ganancia' : 'recuperado',
+    fueraCaja: !!state.formRetiro.fueraCaja,
     fecha: fechaRetiro,
     mes: mesRetiro
   }];
@@ -1149,6 +1152,15 @@ function eliminarRetiro(id) {
   if (state.rol !== 'admin') return;
   if (!confirm('¿Eliminar este retiro?')) return;
   state.config.retiros = obtenerRetiros().filter(r => r.id !== id);
+  guardarLocal();
+  render();
+}
+// Cambia un retiro entre "salió de la caja" y "pagado con otro dinero".
+function alternarFueraCaja(id) {
+  if (state.rol !== 'admin') return;
+  const r = obtenerRetiros().find(x => x.id === id);
+  if (!r) return;
+  r.fueraCaja = !r.fueraCaja;
   guardarLocal();
   render();
 }
@@ -1175,9 +1187,9 @@ function calcularCajaPorMes() {
   return calcularFlujoTiendaMensual().map(m => {
     const key = m.claveMes;
     const delMes = (ts) => claveMes(new Date(ts)) === key;
-    const comprasPerfumes = redondear(retiros.filter(r => r.mes === key && r.origen === 'recuperado').reduce((a, r) => a + r.monto, 0));
-    const retirosGanancia = redondear(retiros.filter(r => r.mes === key && r.origen !== 'recuperado').reduce((a, r) => a + r.monto, 0));
-    const insumos = redondear(compras.filter(c => delMes(c.fecha)).reduce((a, c) => a + (c.monto || 0), 0));
+    const comprasPerfumes = redondear(retiros.filter(r => r.mes === key && r.origen === 'recuperado' && !r.fueraCaja).reduce((a, r) => a + r.monto, 0));
+    const retirosGanancia = redondear(retiros.filter(r => r.mes === key && r.origen !== 'recuperado' && !r.fueraCaja).reduce((a, r) => a + r.monto, 0));
+    const insumos = redondear(compras.filter(c => delMes(c.fecha) && !c.fueraCaja).reduce((a, c) => a + (c.monto || 0), 0));
     const gastos = calcularGastosMes(key).total;
     const comision = redondear(pagosCom.filter(c => delMes(c.fecha)).reduce((a, c) => a + (c.monto || 0), 0));
     const salidas = comprasPerfumes + retirosGanancia + insumos + gastos + comision;
@@ -2519,20 +2531,52 @@ function cerrarSesion() {
 }
 // Insumos generales: registras cada compra (frasquitos, stickers, bolsas…)
 // y defines cuánto recupera cada decant vendido.
+function fechaHoyISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function agregarCompraInsumos() {
   if (state.rol !== 'admin') return;
-  const r = prompt('¿Cuánto pagaste por esta compra de insumos? (frasquitos, stickers, bolsas…)');
-  if (r === null) return;
-  const monto = parseFloat(r);
+  state.formInsumo = { descripcion: '', monto: '', fecha: fechaHoyISO(), fueraCaja: false };
+  state.modalInsumo = true;
+  render();
+}
+function cerrarModalInsumo() {
+  state.modalInsumo = false;
+  render();
+}
+function actualizarFormInsumo(campo, valor) {
+  state.formInsumo[campo] = valor;
+}
+function guardarCompraInsumo() {
+  if (state.rol !== 'admin') return;
+  const monto = parseFloat(state.formInsumo.monto);
   if (isNaN(monto) || monto <= 0) { alert('Escribe un monto válido.'); return; }
-  const descripcion = (prompt('¿Qué compraste? (opcional)', 'Insumos') || 'Insumos').trim();
+  const descripcion = (state.formInsumo.descripcion || '').trim() || 'Insumos';
+  // La fecha elegida decide en qué mes cuenta la compra (Caja del mes, etc.).
+  let fecha = Date.now();
+  const f = state.formInsumo.fecha;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(f || '')) {
+    const t = new Date(f + 'T12:00:00').getTime();
+    if (!isNaN(t) && t <= Date.now() + 86400000) fecha = t;
+  }
   if (!Array.isArray(state.config.comprasInsumos)) state.config.comprasInsumos = [];
   state.config.comprasInsumos.push({
     id: 'i_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
     descripcion,
     monto: Math.round(monto * 100) / 100,
-    fecha: Date.now()
+    fueraCaja: !!state.formInsumo.fueraCaja,
+    fecha
   });
+  guardarLocal();
+  state.modalInsumo = false;
+  render();
+}
+function alternarInsumoFueraCaja(id) {
+  if (state.rol !== 'admin') return;
+  const c = (state.config.comprasInsumos || []).find(x => x.id === id);
+  if (!c) return;
+  c.fueraCaja = !c.fueraCaja;
   guardarLocal();
   render();
 }
@@ -2661,7 +2705,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalRetiro() + renderModalVentaPersonalizada();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalRetiro() + renderModalInsumo() + renderModalVentaPersonalizada();
   bindEvents();
 }
 
@@ -3419,6 +3463,39 @@ function renderModalGasto() {
   </div>`;
 }
 
+function renderModalInsumo() {
+  if (!state.modalInsumo) return '';
+  const f = state.formInsumo;
+  return `<div class="modal-overlay" data-action="cerrarModalInsumo">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>+ Compra de insumos</h3>
+        <button class="close-btn" data-action="cerrarModalInsumo">✕</button>
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Qué compraste?</label><span class="hint">Opcional</span></div>
+        <input class="input" type="text" value="${esc(f.descripcion)}" placeholder="Ej. Stickers, jeringas, frasquitos" oninput="actualizarFormInsumo('descripcion', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Cuánto pagaste? ($)</label></div>
+        <input class="input" type="number" inputmode="decimal" value="${esc(f.monto)}" placeholder="0.00" oninput="actualizarFormInsumo('monto', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Qué día la compraste?</label></div>
+        <input class="input" type="date" value="${esc(f.fecha)}" max="${fechaHoyISO()}" onchange="actualizarFormInsumo('fecha', this.value)" oninput="actualizarFormInsumo('fecha', this.value)" />
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Salió del efectivo de la caja?</label></div>
+        <select class="input" onchange="actualizarFormInsumo('fueraCaja', this.value === '1')">
+          <option value="0" ${!f.fueraCaja ? 'selected' : ''}>Sí, salió del efectivo de la caja</option>
+          <option value="1" ${f.fueraCaja ? 'selected' : ''}>No, lo pagué con mi dinero (transferencia, mi cuenta)</option>
+        </select>
+      </div>
+      <button class="guardar-btn" onclick="guardarCompraInsumo()">✓ Guardar compra</button>
+    </div>
+  </div>`;
+}
+
 function renderModalRetiro() {
   if (!state.modalRetiro) return '';
   const f = state.formRetiro;
@@ -3447,6 +3524,13 @@ function renderModalRetiro() {
         <select class="input" onchange="actualizarFormRetiro('origen', this.value)">
           <option value="recuperado" ${f.origen !== 'ganancia' ? 'selected' : ''}>De lo recuperado (reinversión en perfumes)</option>
           <option value="ganancia" ${f.origen === 'ganancia' ? 'selected' : ''}>De mi ganancia</option>
+        </select>
+      </div>
+      <div class="campo">
+        <div class="campo-label"><label>¿Salió del efectivo de la caja?</label></div>
+        <select class="input" onchange="actualizarFormRetiro('fueraCaja', this.value === '1')">
+          <option value="0" ${!f.fueraCaja ? 'selected' : ''}>Sí, salió del efectivo de la caja</option>
+          <option value="1" ${f.fueraCaja ? 'selected' : ''}>No, lo pagué con otro dinero (transferencia, mi cuenta)</option>
         </select>
       </div>
       <button class="guardar-btn" onclick="guardarRetiro()">✓ Guardar retiro</button>
@@ -4144,8 +4228,8 @@ function renderDashboardBase() {
       </div>
       ${ci.compras.slice().sort((a, b) => b.fecha - a.fecha).map(c => `
         <div style="display:flex; justify-content:space-between; align-items:center; font-size:13px; padding:6px 0; border-top:1px solid rgba(255,255,255,0.05)">
-          <span style="color:#94a3b8">${esc(c.descripcion)} · ${new Date(c.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}</span>
-          <span style="display:flex; gap:10px; align-items:center"><span class="mono">${fmt(c.monto)}</span><span style="cursor:pointer; color:#ef4444" onclick="eliminarCompraInsumos('${c.id}')">✕</span></span>
+          <span style="color:#94a3b8">${esc(c.descripcion)} · ${new Date(c.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })}${c.fueraCaja ? ' · fuera de caja' : ''}</span>
+          <span style="display:flex; gap:10px; align-items:center"><span class="mono">${fmt(c.monto)}</span><span style="cursor:pointer" onclick="alternarInsumoFueraCaja('${c.id}')" title="${c.fueraCaja ? 'Marcar como salido de la caja' : 'Marcar como pagado con mi dinero'}">${c.fueraCaja ? '🏦' : '💵'}</span><span style="cursor:pointer; color:#ef4444" onclick="eliminarCompraInsumos('${c.id}')">✕</span></span>
         </div>`).join('')}
       `}
     </div>`;
@@ -4286,10 +4370,10 @@ function renderDashboardBase() {
         <div class="cliente" style="margin-bottom:8px">
           <div class="cliente-info">
             <div class="nombre">${esc(r.descripcion)}</div>
-            <div class="cliente-notas">${new Date(r.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${r.origen === 'recuperado' ? 'de lo recuperado' : 'de la ganancia'}</div>
+            <div class="cliente-notas">${new Date(r.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })} · ${r.origen === 'recuperado' ? 'de lo recuperado' : 'de la ganancia'}${r.fueraCaja ? ' · fuera de caja' : ''}</div>
           </div>
           <div class="monto mono" style="color:#38bdf8">-${fmt(r.monto)}</div>
-          <button class="icon-btn delete" data-action="eliminarRetiro" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
+          <button class="icon-btn" data-action="alternarFueraCaja" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0" title="${r.fueraCaja ? 'Marcar como salido de la caja' : 'Marcar como pagado fuera de caja'}">${r.fueraCaja ? '🏦' : '💵'}</button><button class="icon-btn delete" data-action="eliminarRetiro" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
         </div>
         `).join('')
       }
@@ -4309,10 +4393,10 @@ function renderDashboardBase() {
         <div class="cliente" style="margin-bottom:8px">
           <div class="cliente-info">
             <div class="nombre">${esc(r.descripcion)}</div>
-            <div class="cliente-notas">${esc(formatoMesCorto(r.mes))} · ${r.origen === 'recuperado' ? 'de lo recuperado' : 'de la ganancia'}</div>
+            <div class="cliente-notas">${esc(formatoMesCorto(r.mes))} · ${r.origen === 'recuperado' ? 'de lo recuperado' : 'de la ganancia'}${r.fueraCaja ? ' · fuera de caja' : ''}</div>
           </div>
           <div class="monto mono" style="color:#38bdf8">-${fmt(r.monto)}</div>
-          <button class="icon-btn delete" data-action="eliminarRetiro" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
+          <button class="icon-btn" data-action="alternarFueraCaja" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0" title="${r.fueraCaja ? 'Marcar como salido de la caja' : 'Marcar como pagado fuera de caja'}">${r.fueraCaja ? '🏦' : '💵'}</button><button class="icon-btn delete" data-action="eliminarRetiro" data-rid="${r.id}" style="margin-left:6px; flex-shrink:0">🗑</button>
         </div>`).join('') : ''}
       </div>`;
       })()}
@@ -4941,7 +5025,14 @@ function handleClick(e) {
       e.stopPropagation();
       eliminarGasto(d.gid);
       break;
+    case 'cerrarModalInsumo':
+      if (e.target === e.currentTarget) cerrarModalInsumo();
+      break;
     case 'abrirModalRetiro': abrirModalRetiro(); break;
+    case 'alternarFueraCaja':
+      e.stopPropagation();
+      alternarFueraCaja(d.rid);
+      break;
     case 'cerrarModalRetiro':
       if (e.target === e.currentTarget) cerrarModalRetiro();
       break;
