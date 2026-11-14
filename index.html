@@ -435,7 +435,7 @@ let state = {
     variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
-  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' },
+  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '', descuento: '', descuentoModo: 'pct' },
   modalAbono: null,
   formAbono: { monto: '' },
   scanner: null,
@@ -791,11 +791,35 @@ function calcularCicloPerfume(p) {
 // Calcula el total a cobrar y la ganancia real de una venta de perfume,
 // tomando en cuenta cuánto del costo del frasco ya se había recuperado antes
 // de esta venta (lo que falte por recuperar no cuenta como ganancia).
-function calcularVentaPerfume(p, tamano, cantidad) {
+// Descuento (%) escrito en el formulario de venta; siempre entre 0 y 100.
+// Puede escribirse como porcentaje (%) o como monto en pesos ($); aquí se
+// convierte siempre a porcentaje para que el resto del cálculo sea el mismo.
+// PROMO BUEN FIN: el descuento solo existe del 14 al 19 de noviembre de 2026
+// (ambos días incluidos, con la hora del dispositivo). El 20 desaparece solo.
+const PROMO_BUEN_FIN = { desde: new Date(2026, 10, 14, 0, 0, 0, 0).getTime(), hasta: new Date(2026, 10, 19, 23, 59, 59, 999).getTime(), pct: 15 };
+function promoActiva() {
+  const ahora = Date.now();
+  return ahora >= PROMO_BUEN_FIN.desde && ahora <= PROMO_BUEN_FIN.hasta;
+}
+function descuentoFormPct() {
+  if (!promoActiva()) return 0;
+  const d = parseFloat((state.formVenta || {}).descuento);
+  if (isNaN(d) || d <= 0) return 0;
+  if ((state.formVenta || {}).descuentoModo === 'monto') {
+    const mv = state.modalVenta;
+    const p = mv && state.productos.find(pp => pp.id === mv.productoId);
+    const info = p && obtenerInfoVenta(p, mv.tamano);
+    const base = info ? info.precioVenta * (parseInt(state.formVenta.cantidad) || 0) : 0;
+    return base > 0 ? Math.min(100, d / base * 100) : 0;
+  }
+  return Math.min(100, d);
+}
+function calcularVentaPerfume(p, tamano, cantidad, descuentoPct) {
   const v = (p.variantes || []).find(vv => vv.tamano === tamano);
   if (p.agotado || !v || v.agotado) return null; // no se puede vender un perfume o presentación agotada
   if (v.stock != null && cantidad > v.stock) return null; // no hay piezas suficientes en inventario
-  const total = Math.round(v.precioVenta * cantidad * 100) / 100;
+  const desc = Math.min(100, Math.max(0, parseFloat(descuentoPct) || 0));
+  const total = Math.round(v.precioVenta * cantidad * (1 - desc / 100) * 100) / 100;
   // Primero se aparta el costo de insumos de cada pieza (solo decants 5ml/10ml),
   // luego se recupera el costo del perfume, y lo que sobre es ganancia.
   // Nunca se aparta más de lo que falta por recuperar de las compras de insumos.
@@ -1367,13 +1391,26 @@ function setModoPagoVenta(modo) {
   state.formVenta.modoPago = modo;
   render();
 }
+function actualizarDescuentoVenta(valor) {
+  state.formVenta.descuento = valor;
+  actualizarFormVenta(state.formVenta.cantidad);
+}
+function fijarDescuentoVenta(valor) {
+  state.formVenta.descuento = String(valor);
+  render();
+}
+function setModoDescuentoVenta(modo) {
+  state.formVenta.descuentoModo = modo;
+  state.formVenta.descuento = '';
+  render();
+}
 function actualizarFormVentaCampo(campo, valor) {
   state.formVenta[campo] = valor;
   if (campo === 'anticipo') {
     const el = document.getElementById('venta-saldo');
     const p = state.productos.find(pp => pp.id === (state.modalVenta || {}).productoId);
     if (el && p) {
-      const calc = calcularVentaPerfume(p, state.modalVenta.tamano, parseInt(state.formVenta.cantidad) || 1);
+      const calc = calcularVentaPerfume(p, state.modalVenta.tamano, parseInt(state.formVenta.cantidad) || 1, descuentoFormPct());
       const total = calc ? calc.total : 0;
       el.textContent = fmt(Math.max(0, total - (parseFloat(valor) || 0)));
     }
@@ -1530,12 +1567,12 @@ function renderPorCobrar() {
 
 function abrirModalVenta(productoId, tamano) {
   state.modalVenta = { productoId, tamano: tamano || null };
-  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' };
+  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '', descuento: promoActiva() ? String(PROMO_BUEN_FIN.pct) : '', descuentoModo: 'pct' };
   render();
 }
 function cerrarModalVenta() {
   state.modalVenta = null;
-  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' };
+  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '', descuento: '', descuentoModo: 'pct' };
   render();
 }
 function actualizarFormVenta(valor) {
@@ -1549,12 +1586,12 @@ function actualizarFormVenta(valor) {
   const cant = parseInt(valor) || 0;
   let totalEstim, gananciaEstim;
   if (tamano) {
-    const calc = calcularVentaPerfume(p, tamano, cant || 0);
+    const calc = calcularVentaPerfume(p, tamano, cant || 0, descuentoFormPct());
     totalEstim = calc ? calc.total : 0;
     gananciaEstim = calc ? calc.ganancia : 0;
   } else {
-    totalEstim = info.precioVenta * cant;
-    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+    totalEstim = Math.round(info.precioVenta * cant * (1 - descuentoFormPct() / 100) * 100) / 100;
+    gananciaEstim = totalEstim - info.precioCosto * cant;
   }
   const totalEl = document.getElementById('venta-total');
   const gananciaEl = document.getElementById('venta-ganancia');
@@ -1576,15 +1613,15 @@ function registrarVenta(productoId, tamano) {
 
   let total, ganancia, insumos = 0, comision = 0;
   if (tamano) {
-    const calc = calcularVentaPerfume(p, tamano, cant);
+    const calc = calcularVentaPerfume(p, tamano, cant, descuentoFormPct());
     if (!calc) return;
     total = calc.total;
     ganancia = calc.ganancia;
     insumos = calc.insumos;
     comision = calc.comision;
   } else {
-    total = Math.round(info.precioVenta * cant * 100) / 100;
-    ganancia = Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100;
+    total = Math.round(info.precioVenta * cant * (1 - descuentoFormPct() / 100) * 100) / 100;
+    ganancia = Math.round((total - info.precioCosto * cant) * 100) / 100;
   }
   const venta = {
     id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
@@ -1599,6 +1636,13 @@ function registrarVenta(productoId, tamano) {
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
+  // Descuento aplicado (por ejemplo, el del Buen Fin): se guarda el % y el
+  // monto descontado para que el historial lo muestre.
+  const descPct = descuentoFormPct();
+  if (descPct > 0) {
+    venta.descuentoPct = descPct;
+    venta.descuentoMonto = Math.round((info.precioVenta * cant - total) * 100) / 100;
+  }
   // Frasco completo "por pagos": se guarda quién lo debe y los abonos que
   // lleva (el anticipo cuenta como el primer abono).
   if (tamano === 'Frasco completo') {
@@ -3428,6 +3472,7 @@ function renderVentaRow(v) {
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
         <div class="nombre">${nombre}</div>
+        ${real && real.descuentoPct ? `<div class="cliente-notas" style="color:#f59e0b">🏷️ ${Math.round(real.descuentoPct * 10) / 10}% de descuento (−${fmt(real.descuentoMonto || 0)})</div>` : ''}
         <div class="cliente-notas">${piezasTxt}${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
         ${notaPagos}
       </div>
@@ -3675,12 +3720,12 @@ function renderModalVenta() {
   const cant = parseInt(state.formVenta.cantidad) || 0;
   let totalEstim, gananciaEstim;
   if (tamano) {
-    const calc = calcularVentaPerfume(p, tamano, cant || 0);
+    const calc = calcularVentaPerfume(p, tamano, cant || 0, descuentoFormPct());
     totalEstim = calc ? calc.total : 0;
     gananciaEstim = calc ? calc.ganancia : 0;
   } else {
-    totalEstim = info.precioVenta * cant;
-    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
+    totalEstim = Math.round(info.precioVenta * cant * (1 - descuentoFormPct() / 100) * 100) / 100;
+    gananciaEstim = totalEstim - info.precioCosto * cant;
   }
   return `<div class="modal-overlay" data-action="cerrarModalVenta">
     <div class="modal" onclick="event.stopPropagation()">
@@ -3721,6 +3766,19 @@ function renderModalVenta() {
         <span class="monto mono" id="venta-saldo" style="color:#f59e0b">${fmt(Math.max(0, totalEstim - (parseFloat(state.formVenta.anticipo) || 0)))}</span>
       </div>` : ''}` : ''}
 
+      ${!promoActiva() ? '' : `<div class="campo">
+        <div class="modal-subtitle" style="color:#f59e0b; margin-bottom:8px">🎉 Promo Buen Fin activa hasta el 19 de nov (15% ya aplicado)</div>
+        <div class="campo-label"><label>Descuento</label><span class="hint">Opcional</span></div>
+        <div style="display:flex; gap:8px; margin-bottom:8px">
+          <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.descuentoModo !== 'monto' ? '' : 'opacity:0.4'}" onclick="setModoDescuentoVenta('pct')">% Porcentaje</button>
+          <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.descuentoModo === 'monto' ? '' : 'opacity:0.4'}" onclick="setModoDescuentoVenta('monto')">$ Monto</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center">
+          <input id="venta-descuento" class="input" style="flex:1" type="number" inputmode="decimal" min="0" value="${esc(state.formVenta.descuento)}" placeholder="${state.formVenta.descuentoModo === 'monto' ? 'Pesos a descontar, ej. 20' : 'Porcentaje, ej. 15'}" oninput="actualizarDescuentoVenta(this.value)" />
+          ${state.formVenta.descuentoModo === 'monto' ? '' : `<button type="button" class="guardar-btn" style="margin:0; width:auto; padding:0 14px; height:48px; ${descuentoFormPct() === 15 ? '' : 'opacity:0.5'}" onclick="fijarDescuentoVenta(15)">15%</button>`}
+          <button type="button" class="guardar-btn" style="margin:0; width:auto; padding:0 14px; height:48px; ${descuentoFormPct() === 0 ? 'opacity:0.4' : 'opacity:0.5'}" onclick="fijarDescuentoVenta('')">Quitar</button>
+        </div>
+      </div>`}
       <div class="precio-real-row" style="margin-bottom:${state.rol === 'admin' ? '12px' : '16px'}">
         <span class="label">Total a cobrar</span>
         <span class="monto mono" id="venta-total">${fmt(totalEstim)}</span>
