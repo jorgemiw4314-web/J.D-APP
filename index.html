@@ -435,11 +435,12 @@ let state = {
     variantes: { '5ml': { precioVenta: '' }, '10ml': { precioVenta: '' }, 'Frasco completo': { precioVenta: '' } }
   },
   modalVenta: null,
-  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '', descuento: '', descuentoModo: 'pct' },
+  formVenta: { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' },
   modalAbono: null,
   formAbono: { monto: '' },
   scanner: null,
   modalVentasSemana: false,
+  modalVentasMes: false,
   modalVentasHoy: false,
   modalVentasDia: null,
   modalCierreMes: false,
@@ -791,35 +792,11 @@ function calcularCicloPerfume(p) {
 // Calcula el total a cobrar y la ganancia real de una venta de perfume,
 // tomando en cuenta cuánto del costo del frasco ya se había recuperado antes
 // de esta venta (lo que falte por recuperar no cuenta como ganancia).
-// Descuento (%) escrito en el formulario de venta; siempre entre 0 y 100.
-// Puede escribirse como porcentaje (%) o como monto en pesos ($); aquí se
-// convierte siempre a porcentaje para que el resto del cálculo sea el mismo.
-// PROMO BUEN FIN: el descuento solo existe del 14 al 19 de noviembre de 2026
-// (ambos días incluidos, con la hora del dispositivo). El 20 desaparece solo.
-const PROMO_BUEN_FIN = { desde: new Date(2026, 10, 14, 0, 0, 0, 0).getTime(), hasta: new Date(2026, 10, 19, 23, 59, 59, 999).getTime(), pct: 15 };
-function promoActiva() {
-  const ahora = Date.now();
-  return ahora >= PROMO_BUEN_FIN.desde && ahora <= PROMO_BUEN_FIN.hasta;
-}
-function descuentoFormPct() {
-  if (!promoActiva()) return 0;
-  const d = parseFloat((state.formVenta || {}).descuento);
-  if (isNaN(d) || d <= 0) return 0;
-  if ((state.formVenta || {}).descuentoModo === 'monto') {
-    const mv = state.modalVenta;
-    const p = mv && state.productos.find(pp => pp.id === mv.productoId);
-    const info = p && obtenerInfoVenta(p, mv.tamano);
-    const base = info ? info.precioVenta * (parseInt(state.formVenta.cantidad) || 0) : 0;
-    return base > 0 ? Math.min(100, d / base * 100) : 0;
-  }
-  return Math.min(100, d);
-}
-function calcularVentaPerfume(p, tamano, cantidad, descuentoPct) {
+function calcularVentaPerfume(p, tamano, cantidad) {
   const v = (p.variantes || []).find(vv => vv.tamano === tamano);
   if (p.agotado || !v || v.agotado) return null; // no se puede vender un perfume o presentación agotada
   if (v.stock != null && cantidad > v.stock) return null; // no hay piezas suficientes en inventario
-  const desc = Math.min(100, Math.max(0, parseFloat(descuentoPct) || 0));
-  const total = Math.round(v.precioVenta * cantidad * (1 - desc / 100) * 100) / 100;
+  const total = Math.round(v.precioVenta * cantidad * 100) / 100;
   // Primero se aparta el costo de insumos de cada pieza (solo decants 5ml/10ml),
   // luego se recupera el costo del perfume, y lo que sobre es ganancia.
   // Nunca se aparta más de lo que falta por recuperar de las compras de insumos.
@@ -1391,26 +1368,13 @@ function setModoPagoVenta(modo) {
   state.formVenta.modoPago = modo;
   render();
 }
-function actualizarDescuentoVenta(valor) {
-  state.formVenta.descuento = valor;
-  actualizarFormVenta(state.formVenta.cantidad);
-}
-function fijarDescuentoVenta(valor) {
-  state.formVenta.descuento = String(valor);
-  render();
-}
-function setModoDescuentoVenta(modo) {
-  state.formVenta.descuentoModo = modo;
-  state.formVenta.descuento = '';
-  render();
-}
 function actualizarFormVentaCampo(campo, valor) {
   state.formVenta[campo] = valor;
   if (campo === 'anticipo') {
     const el = document.getElementById('venta-saldo');
     const p = state.productos.find(pp => pp.id === (state.modalVenta || {}).productoId);
     if (el && p) {
-      const calc = calcularVentaPerfume(p, state.modalVenta.tamano, parseInt(state.formVenta.cantidad) || 1, descuentoFormPct());
+      const calc = calcularVentaPerfume(p, state.modalVenta.tamano, parseInt(state.formVenta.cantidad) || 1);
       const total = calc ? calc.total : 0;
       el.textContent = fmt(Math.max(0, total - (parseFloat(valor) || 0)));
     }
@@ -1567,12 +1531,12 @@ function renderPorCobrar() {
 
 function abrirModalVenta(productoId, tamano) {
   state.modalVenta = { productoId, tamano: tamano || null };
-  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '', descuento: promoActiva() ? String(PROMO_BUEN_FIN.pct) : '', descuentoModo: 'pct' };
+  state.formVenta = { cantidad: '1', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' };
   render();
 }
 function cerrarModalVenta() {
   state.modalVenta = null;
-  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '', descuento: '', descuentoModo: 'pct' };
+  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' };
   render();
 }
 function actualizarFormVenta(valor) {
@@ -1586,12 +1550,12 @@ function actualizarFormVenta(valor) {
   const cant = parseInt(valor) || 0;
   let totalEstim, gananciaEstim;
   if (tamano) {
-    const calc = calcularVentaPerfume(p, tamano, cant || 0, descuentoFormPct());
+    const calc = calcularVentaPerfume(p, tamano, cant || 0);
     totalEstim = calc ? calc.total : 0;
     gananciaEstim = calc ? calc.ganancia : 0;
   } else {
-    totalEstim = Math.round(info.precioVenta * cant * (1 - descuentoFormPct() / 100) * 100) / 100;
-    gananciaEstim = totalEstim - info.precioCosto * cant;
+    totalEstim = info.precioVenta * cant;
+    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
   }
   const totalEl = document.getElementById('venta-total');
   const gananciaEl = document.getElementById('venta-ganancia');
@@ -1613,15 +1577,15 @@ function registrarVenta(productoId, tamano) {
 
   let total, ganancia, insumos = 0, comision = 0;
   if (tamano) {
-    const calc = calcularVentaPerfume(p, tamano, cant, descuentoFormPct());
+    const calc = calcularVentaPerfume(p, tamano, cant);
     if (!calc) return;
     total = calc.total;
     ganancia = calc.ganancia;
     insumos = calc.insumos;
     comision = calc.comision;
   } else {
-    total = Math.round(info.precioVenta * cant * (1 - descuentoFormPct() / 100) * 100) / 100;
-    ganancia = Math.round((total - info.precioCosto * cant) * 100) / 100;
+    total = Math.round(info.precioVenta * cant * 100) / 100;
+    ganancia = Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100;
   }
   const venta = {
     id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
@@ -1636,13 +1600,6 @@ function registrarVenta(productoId, tamano) {
     fecha: Date.now(),
     mes: claveMes(new Date())
   };
-  // Descuento aplicado (por ejemplo, el del Buen Fin): se guarda el % y el
-  // monto descontado para que el historial lo muestre.
-  const descPct = descuentoFormPct();
-  if (descPct > 0) {
-    venta.descuentoPct = descPct;
-    venta.descuentoMonto = Math.round((info.precioVenta * cant - total) * 100) / 100;
-  }
   // Frasco completo "por pagos": se guarda quién lo debe y los abonos que
   // lleva (el anticipo cuenta como el primer abono).
   if (tamano === 'Frasco completo') {
@@ -1725,6 +1682,56 @@ function listarVentasPerfumesRango(desde, hasta, soloCategoria) {
   return ventasEfectivas()
     .filter(v => v.fecha >= desde && v.fecha <= hasta && (!idsFiltro || idsFiltro.has(v.productoId)))
     .sort((a, b) => b.fecha - a.fecha);
+}
+// Ventas del mes en curso agrupadas por semana (lunes a domingo; la primera y
+// la última pueden ser parciales). Usa la misma fuente que "Vendido (mes)".
+function calcularSemanasDelMes() {
+  const hoy = new Date();
+  const anio = hoy.getFullYear(), mes = hoy.getMonth();
+  const mesK = claveMes(hoy);
+  const ultimoDia = new Date(anio, mes + 1, 0).getDate();
+  const nombreMes = new Date(anio, mes, 1).toLocaleDateString('es-MX', { month: 'short' }).replace('.', '');
+  const ventas = ventasEfectivas().filter(v => v.mes === mesK);
+  const redondear = (n) => Math.round(n * 100) / 100;
+  const semanas = [];
+  let dia = 1;
+  while (dia <= ultimoDia) {
+    const inicio = new Date(anio, mes, dia, 0, 0, 0, 0);
+    if (inicio.getTime() > hoy.getTime()) break; // semanas que aún no llegan
+    const dow = inicio.getDay(); // 0 = domingo
+    const finDia = Math.min(dia + (dow === 0 ? 0 : 7 - dow), ultimoDia);
+    const fin = new Date(anio, mes, finDia, 23, 59, 59, 999);
+    const lista = ventas.filter(v => v.fecha >= inicio.getTime() && v.fecha <= fin.getTime()).sort((a, b) => b.fecha - a.fecha);
+    semanas.push({
+      n: semanas.length + 1,
+      rango: dia === finDia ? `${dia} ${nombreMes}` : `${dia}–${finDia} ${nombreMes}`,
+      actual: hoy.getTime() <= fin.getTime(),
+      ventas: lista,
+      vendido: redondear(lista.reduce((a, v) => a + v.total, 0)),
+      piezas: lista.reduce((a, v) => a + v.cantidad, 0),
+      ganancia: redondear(lista.reduce((a, v) => a + (v.ganancia || 0), 0))
+    });
+    dia = finDia + 1;
+  }
+  return semanas;
+}
+function abrirModalVentasMes() {
+  state.modalVentasMes = true;
+  render();
+}
+function cerrarModalVentasMes() {
+  state.modalVentasMes = false;
+  render();
+}
+// Abre/cierra una semana sin volver a dibujar todo, para no perder el scroll.
+function toggleSemanaMes(i) {
+  const body = document.getElementById('vm-body-' + i);
+  const flecha = document.getElementById('vm-flecha-' + i);
+  if (!body) return;
+  const abrir = body.style.display === 'none';
+  body.style.display = abrir ? 'block' : 'none';
+  if (flecha) flecha.textContent = abrir ? '▼' : '▶';
+  state.expandido['vm_' + i] = abrir;
 }
 function abrirModalVentasSemana() {
   state.modalVentasSemana = true;
@@ -2739,7 +2746,7 @@ function render() {
   if (state.rol === 'vendedor') {
     state.vista = 'tienda'; // el Vendedor ya no ve Cobros (membresías/pagos de Internet), solo la Tienda
     const vista = renderTienda();
-    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasHoy() + renderModalVentaPersonalizada();
+    app.innerHTML = renderHeader() + vista + renderNavRecepcion() + renderModal() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasSemana() + renderModalVentasMes() + renderModalVentasHoy() + renderModalVentaPersonalizada();
     bindEvents();
     return;
   }
@@ -2749,7 +2756,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalRetiro() + renderModalInsumo() + renderModalVentaPersonalizada();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalRetiro() + renderModalInsumo() + renderModalVentaPersonalizada();
   bindEvents();
 }
 
@@ -3105,9 +3112,10 @@ function renderTienda() {
           <div class="resumen-label" style="color:#10b981">Ganancia tienda (mes)</div>
           <div class="resumen-value" style="color:#10b981">${fmt(t.ganancia)}</div>
         </div>
-        <div class="resumen-card">
+        <div class="resumen-card" data-action="abrirModalVentasMes" style="cursor:pointer">
           <div class="resumen-label" style="color:#06b6d4">Vendido (mes)</div>
           <div class="resumen-value">${fmt(t.vendido)}</div>
+          <div class="resumen-sub">toca para ver por semana</div>
         </div>
         <div class="resumen-card">
           <div class="resumen-label" style="color:#f59e0b">Piezas vendidas</div>
@@ -3472,7 +3480,6 @@ function renderVentaRow(v) {
     <div class="cliente" style="margin-bottom:8px">
       <div class="cliente-info">
         <div class="nombre">${nombre}</div>
-        ${real && real.descuentoPct ? `<div class="cliente-notas" style="color:#f59e0b">🏷️ ${Math.round(real.descuentoPct * 10) / 10}% de descuento (−${fmt(real.descuentoMonto || 0)})</div>` : ''}
         <div class="cliente-notas">${piezasTxt}${fechaStr} · ${horaStr}${esAdmin && v.vendidoPor ? ` · ${v.vendidoPor === 'vendedor' ? '<span style="color:#ec4899">Vendedor</span>' : 'Tú'}` : ''}</div>
         ${notaPagos}
       </div>
@@ -3720,12 +3727,12 @@ function renderModalVenta() {
   const cant = parseInt(state.formVenta.cantidad) || 0;
   let totalEstim, gananciaEstim;
   if (tamano) {
-    const calc = calcularVentaPerfume(p, tamano, cant || 0, descuentoFormPct());
+    const calc = calcularVentaPerfume(p, tamano, cant || 0);
     totalEstim = calc ? calc.total : 0;
     gananciaEstim = calc ? calc.ganancia : 0;
   } else {
-    totalEstim = Math.round(info.precioVenta * cant * (1 - descuentoFormPct() / 100) * 100) / 100;
-    gananciaEstim = totalEstim - info.precioCosto * cant;
+    totalEstim = info.precioVenta * cant;
+    gananciaEstim = (info.precioVenta - info.precioCosto) * cant;
   }
   return `<div class="modal-overlay" data-action="cerrarModalVenta">
     <div class="modal" onclick="event.stopPropagation()">
@@ -3766,19 +3773,6 @@ function renderModalVenta() {
         <span class="monto mono" id="venta-saldo" style="color:#f59e0b">${fmt(Math.max(0, totalEstim - (parseFloat(state.formVenta.anticipo) || 0)))}</span>
       </div>` : ''}` : ''}
 
-      ${!promoActiva() ? '' : `<div class="campo">
-        <div class="modal-subtitle" style="color:#f59e0b; margin-bottom:8px">🎉 Promo Buen Fin activa hasta el 19 de nov (15% ya aplicado)</div>
-        <div class="campo-label"><label>Descuento</label><span class="hint">Opcional</span></div>
-        <div style="display:flex; gap:8px; margin-bottom:8px">
-          <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.descuentoModo !== 'monto' ? '' : 'opacity:0.4'}" onclick="setModoDescuentoVenta('pct')">% Porcentaje</button>
-          <button type="button" class="guardar-btn" style="margin:0; flex:1; ${state.formVenta.descuentoModo === 'monto' ? '' : 'opacity:0.4'}" onclick="setModoDescuentoVenta('monto')">$ Monto</button>
-        </div>
-        <div style="display:flex; gap:8px; align-items:center">
-          <input id="venta-descuento" class="input" style="flex:1" type="number" inputmode="decimal" min="0" value="${esc(state.formVenta.descuento)}" placeholder="${state.formVenta.descuentoModo === 'monto' ? 'Pesos a descontar, ej. 20' : 'Porcentaje, ej. 15'}" oninput="actualizarDescuentoVenta(this.value)" />
-          ${state.formVenta.descuentoModo === 'monto' ? '' : `<button type="button" class="guardar-btn" style="margin:0; width:auto; padding:0 14px; height:48px; ${descuentoFormPct() === 15 ? '' : 'opacity:0.5'}" onclick="fijarDescuentoVenta(15)">15%</button>`}
-          <button type="button" class="guardar-btn" style="margin:0; width:auto; padding:0 14px; height:48px; ${descuentoFormPct() === 0 ? 'opacity:0.4' : 'opacity:0.5'}" onclick="fijarDescuentoVenta('')">Quitar</button>
-        </div>
-      </div>`}
       <div class="precio-real-row" style="margin-bottom:${state.rol === 'admin' ? '12px' : '16px'}">
         <span class="label">Total a cobrar</span>
         <span class="monto mono" id="venta-total">${fmt(totalEstim)}</span>
@@ -3814,6 +3808,43 @@ function renderModalVentasSemana() {
       ${ventas.length === 0 ? '<div class="vacio">Aún no hay ventas esta semana</div>' :
         ventas.map(v => renderVentaRow(v)).join('')
       }
+    </div>
+  </div>`;
+}
+
+function renderModalVentasMes() {
+  if (!state.modalVentasMes) return '';
+  const semanas = calcularSemanasDelMes();
+  const totVendido = Math.round(semanas.reduce((a, w) => a + w.vendido, 0) * 100) / 100;
+  const totPiezas = semanas.reduce((a, w) => a + w.piezas, 0);
+  const totGanancia = Math.round(semanas.reduce((a, w) => a + w.ganancia, 0) * 100) / 100;
+  const mesNombre = formatoMesCorto(claveMes(new Date()));
+  return `<div class="modal-overlay" data-action="cerrarModalVentasMes">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Ventas de ${esc(mesNombre)} por semana</h3>
+        <button class="close-btn" data-action="cerrarModalVentasMes">✕</button>
+      </div>
+      <div class="modal-subtitle" style="color:#06b6d4">${totPiezas} pza(s) · ${fmt(totVendido)} vendido · +${fmt(totGanancia)} ganancia</div>
+      ${semanas.slice().reverse().map(w => {
+        const abierto = !!state.expandido['vm_' + w.n];
+        return `
+      <div style="border-top:1px solid rgba(148,163,184,0.15)">
+        <div onclick="toggleSemanaMes(${w.n})" style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 0; cursor:pointer">
+          <div>
+            <div style="font-size:14px; font-weight:700; color:#f1f5f9"><span id="vm-flecha-${w.n}">${abierto ? '▼' : '▶'}</span> Semana ${w.n}${w.actual ? ' (actual)' : ''}</div>
+            <div class="cliente-notas" style="white-space:normal">${esc(w.rango)} · ${w.piezas} pza(s)</div>
+          </div>
+          <div style="text-align:right">
+            <div class="mono" style="font-size:15px; color:#06b6d4">${fmt(w.vendido)}</div>
+            <div class="cliente-notas">+${fmt(w.ganancia)}</div>
+          </div>
+        </div>
+        <div id="vm-body-${w.n}" style="display:${abierto ? 'block' : 'none'}; padding-bottom:8px">
+          ${w.ventas.length === 0 ? '<div class="vacio">Sin ventas esta semana</div>' : w.ventas.map(v => renderVentaRow(v)).join('')}
+        </div>
+      </div>`;
+      }).join('')}
     </div>
   </div>`;
 }
@@ -5135,6 +5166,10 @@ function handleClick(e) {
     case 'abrirModalVentasSemana': abrirModalVentasSemana(); break;
     case 'cerrarModalVentasSemana':
       if (e.target === e.currentTarget) cerrarModalVentasSemana();
+      break;
+    case 'abrirModalVentasMes': abrirModalVentasMes(); break;
+    case 'cerrarModalVentasMes':
+      if (e.target === e.currentTarget) cerrarModalVentasMes();
       break;
     case 'abrirModalVentasHoy': abrirModalVentasHoy(); break;
     case 'cerrarModalVentasHoy':
