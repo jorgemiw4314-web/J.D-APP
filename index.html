@@ -441,6 +441,9 @@ let state = {
   scanner: null,
   modalVentasSemana: false,
   modalVentasMes: false,
+  carrito: [], // venta al mismo cliente: [{ productoId, tamano, cantidad }] (solo en memoria)
+  modalCarrito: false,
+  clienteCarrito: '',
   modalVentasHoy: false,
   modalVentasDia: null,
   modalCierreMes: false,
@@ -1565,7 +1568,215 @@ function actualizarFormVenta(valor) {
   const saldoEl = document.getElementById('venta-saldo');
   if (saldoEl) saldoEl.textContent = fmt(Math.max(0, totalEstim - (parseFloat(state.formVenta.anticipo) || 0)));
   if (btn) btn.disabled = cant < 1 || (!sinLimite && cant > info.stock);
+  const btnCarrito = document.getElementById('btn-carrito');
+  if (btnCarrito) btnCarrito.disabled = cant < 1 || (!sinLimite && cant > info.stock);
 }
+// ============== CARRITO: VARIOS PRODUCTOS AL MISMO CLIENTE ==============
+// Se arma la lista (3 decants + 1 frasco, etc.), se ve el total y se cobra todo
+// junto; al cobrar se registra una venta normal por cada línea. Solo pago
+// completo: las ventas "por pagos" se siguen haciendo una por una.
+function cantidadEnCarrito(productoId, tamano) {
+  return state.carrito.filter(i => i.productoId === productoId && (i.tamano || null) === (tamano || null)).reduce((a, i) => a + i.cantidad, 0);
+}
+function precioUnitarioVenta(p, tamano) {
+  const info = obtenerInfoVenta(p, tamano);
+  return info ? (parseFloat(info.precioVenta) || 0) : 0;
+}
+function agregarAlCarrito(productoId, tamano) {
+  const p = state.productos.find(pp => pp.id === productoId);
+  if (!p) return;
+  const info = obtenerInfoVenta(p, tamano);
+  if (!info) return;
+  const cant = parseInt(state.formVenta.cantidad) || 0;
+  if (cant < 1) return;
+  const yaHay = cantidadEnCarrito(productoId, tamano);
+  if (info.stock !== null && cant + yaHay > info.stock) {
+    alert('Solo hay ' + info.stock + ' disponible(s) y ya tienes ' + yaHay + ' en el carrito.');
+    return;
+  }
+  if (tamano && !calcularVentaPerfume(p, tamano, 1)) { alert('Este perfume o presentación está agotado.'); return; }
+  const esPagos = tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos';
+  if (esPagos) {
+    // Frasco completo por pagos: se guarda con su anticipo, cliente y WhatsApp; no se junta con otras líneas.
+    const calc = calcularVentaPerfume(p, tamano, cant);
+    if (!calc) { alert('No hay piezas suficientes de este frasco.'); return; }
+    const anticipo = Math.round((parseFloat(state.formVenta.anticipo) || 0) * 100) / 100;
+    if (anticipo < 0 || anticipo > calc.total) { alert('El anticipo no puede ser mayor al total.'); return; }
+    const wa = normalizarWhatsApp(state.formVenta.whatsapp);
+    if ((state.formVenta.whatsapp || '').trim() && !wa) { alert('El número de WhatsApp no parece válido. Escribe 10 dígitos (o con lada del país), o déjalo vacío.'); return; }
+    state.carrito.push({ productoId, tamano, cantidad: cant, aPagos: true, anticipo, cliente: (state.formVenta.cliente || '').trim(), whatsapp: wa });
+  } else {
+    const linea = state.carrito.find(i => !i.aPagos && i.productoId === productoId && (i.tamano || null) === (tamano || null));
+    if (linea) linea.cantidad += cant; else state.carrito.push({ productoId, tamano: tamano || null, cantidad: cant });
+  }
+  state.modalVenta = null;
+  state.formVenta = { cantidad: '', modoPago: 'completo', anticipo: '', cliente: '', whatsapp: '' };
+  render();
+}
+function calcularCarrito() {
+  const items = [];
+  state.carrito.forEach((it, idx) => {
+    const p = state.productos.find(pp => pp.id === it.productoId);
+    if (!p) return;
+    const precio = precioUnitarioVenta(p, it.tamano);
+    const total = Math.round(precio * it.cantidad * 100) / 100;
+    const anticipo = it.aPagos ? Math.min(total, it.anticipo || 0) : 0;
+    items.push({ idx, nombre: p.nombre, tamano: it.tamano, cantidad: it.cantidad, precio, total, aPagos: !!it.aPagos, anticipo, saldo: it.aPagos ? Math.round((total - anticipo) * 100) / 100 : 0, cliente: it.cliente || '' });
+  });
+  const r2 = (n) => Math.round(n * 100) / 100;
+  return {
+    items,
+    piezas: items.reduce((a, i) => a + i.cantidad, 0),
+    total: r2(items.reduce((a, i) => a + i.total, 0)),
+    // Lo que se cobra hoy: lo de contado + los anticipos de las ventas por pagos.
+    cobrarHoy: r2(items.reduce((a, i) => a + (i.aPagos ? i.anticipo : i.total), 0)),
+    saldoPendiente: r2(items.reduce((a, i) => a + i.saldo, 0))
+  };
+}
+function abrirModalCarrito() { state.modalCarrito = true; render(); }
+function cerrarModalCarrito() { state.modalCarrito = false; render(); }
+function carritoCambiarCantidad(idx, delta) {
+  const it = state.carrito[idx];
+  if (!it) return;
+  const p = state.productos.find(pp => pp.id === it.productoId);
+  const info = p ? obtenerInfoVenta(p, it.tamano) : null;
+  const nueva = it.cantidad + delta;
+  if (nueva < 1) return;
+  if (info && info.stock !== null && nueva > info.stock) { alert('Solo hay ' + info.stock + ' disponible(s).'); return; }
+  it.cantidad = nueva;
+  render();
+}
+function carritoQuitar(idx) {
+  state.carrito.splice(idx, 1);
+  if (!state.carrito.length) state.modalCarrito = false;
+  render();
+}
+function vaciarCarrito() {
+  if (!state.carrito.length) return;
+  if (!confirm('¿Vaciar el carrito?')) return;
+  state.carrito = [];
+  state.clienteCarrito = '';
+  state.modalCarrito = false;
+  render();
+}
+function cobrarCarrito() {
+  if (!state.carrito.length) return;
+  // Se revisa todo antes de registrar nada, para no dejar una venta a medias.
+  for (const it of state.carrito) {
+    const p = state.productos.find(pp => pp.id === it.productoId);
+    if (!p) { alert('Un producto del carrito ya no existe. Quítalo para continuar.'); return; }
+    const info = obtenerInfoVenta(p, it.tamano);
+    if (!info) { alert(p.nombre + ' ya no tiene esa presentación. Quítalo del carrito.'); return; }
+    if (info.stock !== null && it.cantidad > info.stock) { alert('No hay suficiente de ' + p.nombre + (it.tamano ? ' (' + it.tamano + ')' : '') + '. Quedan ' + info.stock + '.'); return; }
+    if (it.tamano && !calcularVentaPerfume(p, it.tamano, it.cantidad)) { alert(p.nombre + ' (' + it.tamano + ') está agotado o sin piezas suficientes.'); return; }
+    if (it.aPagos) {
+      const calcP = calcularVentaPerfume(p, it.tamano, it.cantidad);
+      if ((it.anticipo || 0) > calcP.total) { alert('El anticipo de ' + p.nombre + ' es mayor al total. Quítalo y agrégalo de nuevo.'); return; }
+    }
+  }
+  const cliente = (state.clienteCarrito || '').trim();
+  state.carrito.forEach(it => {
+    const p = state.productos.find(pp => pp.id === it.productoId);
+    const info = obtenerInfoVenta(p, it.tamano);
+    const cant = it.cantidad;
+    let total, ganancia, insumos = 0, comision = 0;
+    if (it.tamano) {
+      // Cada línea se calcula con las ventas ya registradas, igual que si se hubieran hecho una por una.
+      const calc = calcularVentaPerfume(p, it.tamano, cant);
+      if (!calc) return;
+      total = calc.total; ganancia = calc.ganancia; insumos = calc.insumos; comision = calc.comision;
+    } else {
+      total = Math.round(info.precioVenta * cant * 100) / 100;
+      ganancia = Math.round((info.precioVenta - info.precioCosto) * cant * 100) / 100;
+    }
+    const venta = {
+      id: 'v_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+      productoId: it.productoId,
+      tamano: it.tamano || null,
+      cantidad: cant,
+      total, ganancia, insumos, comision,
+      vendidoPor: state.rol,
+      fecha: Date.now(),
+      mes: claveMes(new Date())
+    };
+    if (it.aPagos) {
+      venta.aPagos = true;
+      venta.cliente = it.cliente || cliente;
+      if (it.whatsapp) venta.whatsapp = it.whatsapp;
+      venta.abonos = (it.anticipo || 0) > 0 ? [{ id: 'ab_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), monto: it.anticipo, fecha: Date.now(), por: state.rol }] : [];
+    } else if (cliente) {
+      venta.cliente = cliente;
+    }
+    state.ventas.push(venta);
+    if (info.stock !== null) {
+      if (it.tamano) {
+        const v = (p.variantes || []).find(vv => vv.tamano === it.tamano);
+        if (v) v.stock -= cant;
+      } else {
+        p.stock -= cant;
+      }
+    }
+  });
+  state.carrito = [];
+  state.clienteCarrito = '';
+  state.modalCarrito = false;
+  guardarLocal();
+  render();
+}
+function renderCarritoBarra() {
+  if (!state.carrito.length || state.vista !== 'tienda' || state.modalCarrito) return '';
+  const c = calcularCarrito();
+  if (!c.items.length) return '';
+  return `<div data-action="abrirModalCarrito" style="position:fixed; left:16px; right:16px; bottom:104px; z-index:60; display:flex; justify-content:space-between; align-items:center; gap:10px; padding:14px 16px; border-radius:16px; background:linear-gradient(135deg,#0891b2,#06b6d4); color:#fff; font-weight:700; box-shadow:0 8px 24px rgba(0,0,0,0.45); cursor:pointer">
+    <span>🛒 Carrito · ${c.piezas} pza(s)</span>
+    <span class="mono">${fmt(c.cobrarHoy)} · Ver y cobrar ›</span>
+  </div>`;
+}
+function renderModalCarrito() {
+  if (!state.modalCarrito) return '';
+  const c = calcularCarrito();
+  return `<div class="modal-overlay" data-action="cerrarModalCarrito">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>🛒 Venta al mismo cliente</h3>
+        <button class="close-btn" data-action="cerrarModalCarrito">✕</button>
+      </div>
+      ${c.items.length === 0 ? '<div class="vacio">El carrito está vacío</div>' : c.items.map(i => `
+      <div style="padding:10px 0; border-top:1px solid rgba(148,163,184,0.15)">
+        <div style="display:flex; justify-content:space-between; gap:8px">
+          <div style="font-size:14px; font-weight:700; color:#f1f5f9">${esc(i.nombre)}${i.tamano ? ` (${esc(i.tamano)})` : ''}</div>
+          <div class="mono" style="color:#06b6d4">${fmt(i.total)}</div>
+        </div>
+        ${i.aPagos ? `<div style="font-size:12px; color:#f59e0b; margin-top:4px">💳 Por pagos · anticipo ${fmt(i.anticipo)} · saldo ${fmt(i.saldo)}${i.cliente ? ' · 👤 ' + esc(i.cliente) : ''}</div>` : ''}
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px">
+          <div class="cliente-notas">${fmt(i.precio)} c/u${i.aPagos ? ' · ' + i.cantidad + ' pza(s)' : ''}</div>
+          <div style="display:flex; align-items:center; gap:8px">
+            ${i.aPagos ? '' : `<button class="icon-btn" data-action="carritoMenos" data-i="${i.idx}">−</button>
+            <span class="mono" style="min-width:22px; text-align:center">${i.cantidad}</span>
+            <button class="icon-btn" data-action="carritoMas" data-i="${i.idx}">+</button>`}
+            <button class="icon-btn delete" data-action="carritoQuitar" data-i="${i.idx}">🗑</button>
+          </div>
+        </div>
+      </div>`).join('')}
+      <div class="campo" style="margin-top:12px">
+        <div class="campo-label"><label>Cliente</label><span class="hint">Opcional</span></div>
+        <input class="input" type="text" value="${esc(state.clienteCarrito)}" placeholder="Nombre de quien compra" oninput="state.clienteCarrito = this.value" />
+      </div>
+      ${c.saldoPendiente > 0 ? `<div class="precio-real-row" style="margin-bottom:8px">
+        <span class="label">Saldo pendiente (por pagos)</span>
+        <span class="monto mono" style="color:#f59e0b">${fmt(c.saldoPendiente)}</span>
+      </div>` : ''}
+      <div class="precio-real-row" style="margin-bottom:12px">
+        <span class="label">${c.saldoPendiente > 0 ? 'Cobrar hoy' : 'Total a cobrar'} (${c.piezas} pza(s))</span>
+        <span class="monto mono">${fmt(c.cobrarHoy)}</span>
+      </div>
+      <button class="guardar-btn" ${c.items.length ? '' : 'disabled'} data-action="cobrarCarrito">✓ Cobrar todo</button>
+      <button class="guardar-btn" style="background:rgba(148,163,184,0.12); color:#94a3b8" data-action="cerrarModalCarrito">+ Agregar más productos</button>
+      ${c.items.length ? '<div style="text-align:center; margin-top:10px"><span style="font-size:13px; color:#ef4444; cursor:pointer" data-action="vaciarCarrito">Vaciar carrito</span></div>' : ''}
+    </div>
+  </div>`;
+}
+
 function registrarVenta(productoId, tamano) {
   const p = state.productos.find(pp => pp.id === productoId);
   if (!p) return;
@@ -2756,7 +2967,7 @@ function render() {
   if (state.vista === 'inicio') vista = renderInicio();
   else if (state.vista === 'tienda') vista = renderTienda();
   else vista = renderDashboard();
-  app.innerHTML = renderHeader() + vista + renderNav() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalRetiro() + renderModalInsumo() + renderModalVentaPersonalizada();
+  app.innerHTML = renderHeader() + vista + renderNav() + renderCarritoBarra() + renderModal() + renderModalProducto() + renderModalVenta() + renderModalCarrito() + renderModalAbono() + renderModalScanner() + renderModalVentasDia() + renderModalVentasHoy() + renderModalVentasSemana() + renderModalVentasMes() + renderModalCierreMes() + renderModalComparativaMeses() + renderModalResumenMes() + renderModalGasto() + renderModalRetiro() + renderModalInsumo() + renderModalVentaPersonalizada();
   bindEvents();
 }
 
@@ -3786,6 +3997,7 @@ function renderModalVenta() {
       <button id="btn-confirmar-venta" class="guardar-btn" ${cant < 1 || (!sinLimite && cant > info.stock) ? 'disabled' : ''} data-action="registrarVenta" data-pid="${p.id}" data-tam="${tamano || ''}">
         ${tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos' ? '✓ Confirmar venta a pagos' : '✓ Confirmar venta'}
       </button>
+      <button id="btn-carrito" class="guardar-btn" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.4)" ${cant < 1 || (!sinLimite && cant > info.stock) ? 'disabled' : ''} data-action="agregarAlCarrito" data-pid="${p.id}" data-tam="${tamano || ''}">🛒 Agregar al carrito${tamano === 'Frasco completo' && state.formVenta.modoPago === 'pagos' ? ' (a pagos)' : ' (más productos al mismo cliente)'}</button>
     </div>
   </div>`;
 }
@@ -5197,6 +5409,16 @@ function handleClick(e) {
       if (e.target === e.currentTarget) cerrarModalResumenMes();
       break;
     case 'registrarVenta': registrarVenta(d.pid, d.tam || null); break;
+    case 'agregarAlCarrito': agregarAlCarrito(d.pid, d.tam || null); break;
+    case 'abrirModalCarrito': abrirModalCarrito(); break;
+    case 'cerrarModalCarrito':
+      if (e.target === e.currentTarget) cerrarModalCarrito();
+      break;
+    case 'carritoMas': carritoCambiarCantidad(parseInt(d.i), 1); break;
+    case 'carritoMenos': carritoCambiarCantidad(parseInt(d.i), -1); break;
+    case 'carritoQuitar': carritoQuitar(parseInt(d.i)); break;
+    case 'cobrarCarrito': cobrarCarrito(); break;
+    case 'vaciarCarrito': vaciarCarrito(); break;
     case 'setModoPagoVenta': setModoPagoVenta(d.modo); break;
     case 'abrirModalAbono':
       e.stopPropagation();
